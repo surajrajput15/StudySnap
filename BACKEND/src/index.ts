@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
-import { securityMiddleware, corsMiddleware, csrfProtection, getCsrfToken } from './middleware/security';
+import { securityMiddleware, corsMiddleware } from './middleware/security';
 import { apiLimiter } from './middleware/rateLimiter';
 import { env } from './config/env';
 
@@ -16,6 +16,7 @@ const app = express();
 
 app.use(securityMiddleware);
 app.use(corsMiddleware);
+app.use('/api/webhooks', webhooksRouter);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use('/api/', apiLimiter);
@@ -31,11 +32,6 @@ app.get('/api/health', (_req, res) => {
     timestamp: new Date().toISOString(),
     version: '1.0.0',
   });
-});
-
-app.get('/api/csrf-token', (_req, res) => {
-  const token = getCsrfToken(_req, res);
-  res.json({ success: true, csrfToken: token });
 });
 
 app.use('/api/notes', notesRouter);

@@ -5,7 +5,7 @@ import {
   Home, FileText, Mic, Sparkles, Calendar, Folder, Star,
   BarChart3, Settings, Info, LogOut, LogIn, X
 } from 'lucide-react';
-import { SignInButton, UserButton, useAuth, useUser } from '@clerk/nextjs';
+import { SignInButton, useAuth, useUser, useClerk } from '@clerk/nextjs';
 import { useStore } from '@/lib/store/useStore';
 
 interface MobileDrawerProps {
@@ -31,6 +31,7 @@ const DRAWER_ITEMS = [
 export default function MobileDrawer({ open, onClose, activeTab, onNavigate }: MobileDrawerProps) {
   const { isSignedIn, isLoaded } = useAuth();
   const { user } = useUser();
+  const { signOut } = useClerk();
   const { updateProfile } = useStore();
   const drawerRef = useRef<HTMLDivElement>(null);
 
@@ -128,7 +129,7 @@ export default function MobileDrawer({ open, onClose, activeTab, onNavigate }: M
 
         <div className="drawer-footer">
           {isSignedIn ? (
-            <button className="drawer-item drawer-item--danger" onClick={() => { onClose(); }}>
+            <button className="drawer-item drawer-item--danger" onClick={() => { onClose(); signOut(); }}>
               <LogOut size={20} />
               <span className="drawer-item-label">Logout</span>
             </button>

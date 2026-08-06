@@ -15,6 +15,14 @@ export default function AiHelper() {
   const { notes, activeNoteId } = useStore();
   const activeNote = notes.find(n => n.id === activeNoteId);
 
+  const friendlyError = (err: any) => {
+    const msg = err?.message || '';
+    if (msg.includes('session') || msg.includes('expired') || msg.includes('401')) {
+      return 'Your session has expired. Please sign in again.';
+    }
+    return 'SnapAI could not complete your request. Please try again.';
+  };
+
   const [activeSubTab, setActiveSubTab] = useState<'chat' | 'summarize' | 'mcq' | 'flashcard' | 'translate'>('chat');
 
   const [chatMessages, setChatMessages] = useState<any[]>([
@@ -55,7 +63,7 @@ export default function AiHelper() {
       if (data.success) setChatMessages([...updatedMessages, data.message]);
       else throw new Error(data.error);
     } catch (err: any) {
-      setChatMessages([...updatedMessages, { role: 'assistant', content: `Error: ${err.message || 'Failed to reach AI.'}` }]);
+      setChatMessages([...updatedMessages, { role: 'assistant', content: friendlyError(err) }]);
     } finally { setIsChatLoading(false); }
   };
 
@@ -67,7 +75,7 @@ export default function AiHelper() {
       const data = await apiFetch(API.ai.summarize, { method: 'POST', body: JSON.stringify({ title: activeNote.title, content: activeNote.content }), token: (await getToken()) ?? undefined });
       if (data.success) { setSummary(data.summary); confetti({ particleCount: 30, colors: ['#0061A4'] }); }
       else throw new Error(data.error);
-    } catch (err: any) { setSummary(`Error: ${err.message}`); }
+    } catch (err: any) { setSummary(friendlyError(err)); }
     finally { setIsSummarizing(false); }
   };
 
@@ -81,7 +89,7 @@ export default function AiHelper() {
       const data = await apiFetch(API.ai.mcqs, { method: 'POST', body: JSON.stringify({ title: activeNote.title, content: activeNote.content, type: 'mcq' }), token: (await getToken()) ?? undefined });
       if (data.success) { setMcqs(data.mcqs); confetti({ particleCount: 40, colors: ['#10B981', '#3B82F6'] }); }
       else throw new Error(data.error);
-    } catch (err: any) { alert(`Failed: ${err.message}`); }
+    } catch (err: any) { setMcqs([]); alert(friendlyError(err)); }
     finally { setIsMcqLoading(false); }
   };
 
@@ -94,7 +102,7 @@ export default function AiHelper() {
       const data = await apiFetch(API.ai.mcqs, { method: 'POST', body: JSON.stringify({ title: activeNote.title, content: activeNote.content, type: 'flashcard' }), token: (await getToken()) ?? undefined });
       if (data.success) { setFlashcards(data.flashcards); confetti({ particleCount: 40, colors: ['#EC4899'] }); }
       else throw new Error(data.error);
-    } catch (err: any) { alert(`Failed: ${err.message}`); }
+    } catch (err: any) { setFlashcards([]); alert(friendlyError(err)); }
     finally { setIsFlashcardLoading(false); }
   };
 
@@ -106,7 +114,7 @@ export default function AiHelper() {
       const data = await apiFetch(API.ai.translate, { method: 'POST', body: JSON.stringify({ content: activeNote.content, targetLanguage: lang }), token: (await getToken()) ?? undefined });
       if (data.success) { setTranslatedText(data.translatedText); confetti({ particleCount: 30, colors: ['#8B5CF6'] }); }
       else throw new Error(data.error);
-    } catch (err: any) { setTranslatedText(`Translation failed: ${err.message}`); }
+    } catch (err: any) { setTranslatedText(friendlyError(err)); }
     finally { setIsTranslating(false); }
   };
 

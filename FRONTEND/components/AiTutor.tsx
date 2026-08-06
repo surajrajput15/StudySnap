@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, memo } from 'react';
 import { useAuth } from '@clerk/nextjs';
 import { useStore } from '@/lib/store/useStore';
 import { API, apiFetch } from '@/lib/config';
@@ -29,6 +29,7 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   isStreaming?: boolean;
+  isError?: boolean;
 }
 
 type CodeLanguage = 'javascript' | 'typescript' | 'python' | 'java' | 'cpp' | 'c' | 'html' | 'css' | 'bash' | 'sql' | 'json' | 'xml' | 'rust' | 'go' | 'ruby' | 'php' | 'swift' | 'kotlin' | 'text';
@@ -56,7 +57,18 @@ function CodeBlock({ code, language: langProp }: { code: string; language?: stri
   const language = (langProp || detectLanguage(code)) as CodeLanguage;
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(code);
+    try {
+      await navigator.clipboard.writeText(code);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = code;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -65,7 +77,7 @@ function CodeBlock({ code, language: langProp }: { code: string; language?: stri
     <div className="tutor-code-block">
       <div className="tutor-code-header">
         <span className="tutor-code-lang">{language}</span>
-        <button className="tutor-code-copy" onClick={handleCopy}>
+        <button className="tutor-code-copy" onClick={handleCopy} aria-label={copied ? 'Copied to clipboard' : 'Copy code to clipboard'}>
           {copied ? <Check size={12} /> : <Copy size={12} />}
           {copied ? 'Copied' : 'Copy'}
         </button>
@@ -108,10 +120,57 @@ const TOOL_PROMPTS: Record<string, string> = {
   pdf: 'I have a PDF document. Please help me analyze, summarize, and extract key information from it.',
 };
 
+function MessageMarkdown({ content }: { content: string }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm, remarkMath]}
+      rehypePlugins={[rehypeKatex]}
+      components={{
+        code({ className, children, ...props }) {
+          const isInline = !className;
+          const codeStr = String(children).replace(/\n$/, '');
+          if (isInline) return <InlineCode>{children}</InlineCode>;
+          const language = className?.replace('language-', '') || '';
+          return <CodeBlock code={codeStr} language={language} />;
+        },
+        pre({ children }) { return <>{children}</>; },
+      }}
+    >
+      {content}
+    </ReactMarkdown>
+  );
+}
+
+const MessageItem = memo(function MessageItem({ msg, onRetry }: { msg: Message; onRetry?: () => void }) {
+  return (
+    <div className={`tutor-message tutor-message-${msg.role}`}>
+      <div className="tutor-message-avatar">
+        {msg.role === 'assistant' ? <Bot size={16} /> : <User size={16} />}
+      </div>
+      <div className="tutor-message-bubble">
+        {msg.role === 'assistant' && msg.isStreaming ? (
+          <div className="tutor-streaming">
+            <MessageMarkdown content={msg.content} />
+            <span className="tutor-cursor" />
+          </div>
+        ) : (
+          <MessageMarkdown content={msg.content} />
+        )}
+        {msg.isError && onRetry && (
+          <div className="tutor-retry-row">
+            <button type="button" className="tutor-retry-btn" onClick={onRetry}>
+              Retry
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+});
+
 export default function AiTutor({ onBack }: { onBack?: () => void }) {
   const { getToken, isSignedIn, isLoaded } = useAuth();
   const { activeAiTool, setActiveAiTool } = useStore();
-  const [sessionExpired, setSessionExpired] = useState(false);
   const [authTimedOut, setAuthTimedOut] = useState(false);
 
   useEffect(() => {
@@ -131,15 +190,20 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const isSendingRef = useRef(false);
+
+  const scrollToBottom = useCallback(() => {
+    requestAnimationFrame(() => {
+      if (chatContainerRef.current) {
+        chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+      }
+    });
+  }, []);
 
   useEffect(() => {
     document.body.classList.add('ai-active');
     return () => document.body.classList.remove('ai-active');
   }, []);
-
-  useEffect(() => {
-    if (isSignedIn) setSessionExpired(false);
-  }, [isSignedIn]);
 
   useEffect(() => {
     if (chatEndRef.current && !messages.some(m => m.isStreaming)) {
@@ -157,10 +221,16 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
 
     const onViewportChange = () => {
       const vpHeight = vv.height;
-      const delta = Math.max(0, initialHeight - vpHeight);
       const winDelta = Math.max(0, window.innerHeight - vpHeight);
-      const kbHeight = Math.max(delta, winDelta);
-      const isOpen = kbHeight > 100;
+      const isOpen = winDelta > 100;
+
+      if (isOpen) {
+        initialHeight = Math.max(initialHeight, vpHeight);
+      } else {
+        initialHeight = vpHeight;
+      }
+
+      const kbHeight = isOpen ? Math.max(0, initialHeight - vpHeight) : 0;
 
       root.style.setProperty('--viewport-height', `${vpHeight}px`);
       root.style.setProperty('--keyboard-h', `${kbHeight}px`);
@@ -181,7 +251,7 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
 
     const onFocusIn = () => {
       requestAnimationFrame(() => {
-        const kbHeight = Math.max(0, initialHeight - vv.height);
+        const kbHeight = Math.max(0, window.innerHeight - vv.height);
         if (kbHeight > 100) {
           scrollToBottom();
         }
@@ -213,15 +283,7 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
       root.style.removeProperty('--keyboard-h');
       root.style.removeProperty('--chat-pb');
     };
-  }, []);
-
-  const scrollToBottom = useCallback(() => {
-    requestAnimationFrame(() => {
-      if (chatContainerRef.current) {
-        chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
-      }
-    });
-  }, []);
+  }, [scrollToBottom]);
 
   const addStreamingMessage = useCallback((content: string) => {
     setMessages(prev => {
@@ -245,12 +307,93 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
     scrollToBottom();
   }, [scrollToBottom]);
 
-  const handleSend = async (text?: string) => {
+  const renderErrorBubble = useCallback((content: string) => {
+    addStreamingMessage('');
+    setTimeout(() => {
+      setMessages(prev => {
+        const last = prev[prev.length - 1];
+        if (last?.isStreaming) {
+          return [...prev.slice(0, -1), { role: 'assistant', content, isStreaming: false, isError: true }];
+        }
+        return prev;
+      });
+      isSendingRef.current = false;
+      setIsLoading(false);
+    }, 100);
+  }, [addStreamingMessage]);
+
+  const runAIChat = useCallback(async (contextMessages: { role: 'user' | 'assistant'; content: string }[]) => {
+    try {
+      const data = await apiFetch(API.ai.chat, {
+        method: 'POST',
+        body: JSON.stringify({ messages: contextMessages }),
+        token: (await getToken()) ?? undefined,
+        returnTo: 'ai',
+      });
+
+      if (data.success) {
+        const fullResponse = data.message?.content || data.response || data.text || JSON.stringify(data);
+        streamText(
+          fullResponse,
+          (chunk) => addStreamingMessage(chunk),
+          () => {
+            finalizeStreaming();
+            isSendingRef.current = false;
+            setIsLoading(false);
+          }
+        );
+      } else if (data.sessionExpired) {
+        addStreamingMessage('');
+        setTimeout(() => {
+          setMessages(prev => {
+            const last = prev[prev.length - 1];
+            if (last?.isStreaming) {
+              return [...prev.slice(0, -1), { role: 'assistant', content: '🔐 **Session Expired** — Your session has ended. Please sign in again to continue chatting with SnapAI.', isStreaming: false }];
+            }
+            return prev;
+          });
+          isSendingRef.current = false;
+          setIsLoading(false);
+        }, 100);
+      } else {
+        renderErrorBubble(data.error || 'Failed to get response');
+      }
+    } catch (err: any) {
+      if (err && (String(err?.message || '').includes('Authentication required') || String(err?.message || '').includes('401') || String(err?.message || '').includes('Invalid or expired session') || String(err?.message || '').includes('session has expired'))) {
+        isSendingRef.current = false;
+        setIsLoading(false);
+        return;
+      }
+
+      const msg = err?.message || 'The AI could not respond. Please try again.';
+      const isCorsError = msg.includes('CORS') || msg.includes('cross-origin');
+      const isTimeout = msg.includes('timeout') || msg.includes('timed out');
+
+      let userMessage: string;
+      if (isCorsError) {
+        userMessage = `🔴 **CORS Error** — Your frontend URL isn't allowed by the backend.\n\n` +
+          `**Fix:** Add \`${typeof window !== 'undefined' ? window.location.origin : 'your-frontend-url'}\` ` +
+          `to the \`allowedOrigins\` array in \`BACKEND/src/middleware/security.ts\`.\n\n` +
+          `_Error: ${msg}_`;
+      } else if (isTimeout) {
+        userMessage = `⏱️ **Request Timeout** — The AI took too long to respond.\n\n` +
+          `Try asking a shorter or simpler question. The AI model may be under load.\n\n` +
+          `_Error: ${msg}_`;
+      } else {
+        userMessage = `⚠️ **Error:** ${msg}\n\nPlease try again or rephrase your question.`;
+      }
+      renderErrorBubble(userMessage);
+    }
+  }, [addStreamingMessage, finalizeStreaming, getToken, renderErrorBubble]);
+
+  const handleSend = useCallback(async (text?: string) => {
     const msg = (text || input).trim();
-    if (!msg || isLoading) return;
+    if (!msg || isSendingRef.current) return;
+    isSendingRef.current = true;
 
     setInput('');
     setAttachedFile(null);
+    inputRef.current?.focus();
     const userMsg: Message = { role: 'user', content: msg };
     setMessages(prev => [...prev, userMsg]);
     setIsLoading(true);
@@ -260,76 +403,41 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
       role: m.role,
       content: m.content
     }));
+    runAIChat(contextMessages);
+  }, [input, messages, runAIChat, scrollToBottom]);
 
-    try {
-      const data = await apiFetch(API.ai.chat, {
-        method: 'POST',
-        body: JSON.stringify({ messages: contextMessages }),
-        token: (await getToken()) ?? undefined
-      });
-
-      if (data.success) {
-        const fullResponse = data.message?.content || data.response || data.text || JSON.stringify(data);
-
-        streamText(
-          fullResponse,
-          (chunk) => addStreamingMessage(chunk),
-          () => {
-            finalizeStreaming();
-            setIsLoading(false);
-          }
-        );
-      } else {
-        throw new Error(data.error || 'Failed to get response');
-      }
-    } catch (err: any) {
-      const msg = err?.message || 'Could not reach AI. Please try again.';
-      const isNetworkError = msg.includes('fetch') || msg.includes('NetworkError') || msg.includes('network') || msg.includes('ERR_CONNECTION');
-      const isCorsError = msg.includes('CORS') || msg.includes('cross-origin');
-      const isTimeout = msg.includes('timeout') || msg.includes('timed out');
-
-      let userMessage: string;
-      if (isNetworkError) {
-        userMessage = `🔴 **Connection Error** — The AI server is unreachable.\n\n` +
-          `Your browser tried to reach:\n\`\`\`\n${API.ai.chat}\n\`\`\`\n\n` +
-          `**Fixes:**\n` +
-          `1. Make sure the backend server is running on Render\n` +
-          `2. Set \`NEXT_PUBLIC_BACKEND_URL\` in Vercel to your Render backend URL\n` +
-          `3. Set \`FRONTEND_URL\` in Render to your Vercel frontend URL\n\n` +
-          `_Error: ${msg}_`;
-      } else if (isCorsError) {
-        userMessage = `🔴 **CORS Error** — Your frontend URL isn't allowed by the backend.\n\n` +
-          `**Fix:** Add \`${typeof window !== 'undefined' ? window.location.origin : 'your-frontend-url'}\` ` +
-          `to the \`allowedOrigins\` array in \`BACKEND/src/middleware/security.ts\`.\n\n` +
-          `_Error: ${msg}_`;
-      } else if (isTimeout) {
-        userMessage = `⏱️ **Request Timeout** — The AI took too long to respond.\n\n` +
-          `Try asking a shorter or simpler question. The Groq model may be under load.\n\n` +
-          `_Error: ${msg}_`;
-      } else if (msg.includes('Authentication required') || msg.includes('401') || msg.includes('Invalid or expired session')) {
-        setIsLoading(false);
-        setSessionExpired(true);
-        return;
-      } else {
-        userMessage = `⚠️ **Error:** ${msg}\n\nPlease try again or rephrase your question.`;
-      }
-
-      addStreamingMessage('');
-      setTimeout(() => {
-        setMessages(prev => {
-          const last = prev[prev.length - 1];
-          if (last?.isStreaming) {
-            return [...prev.slice(0, -1), { role: 'assistant', content: userMessage, isStreaming: false }];
-          }
-          return prev;
-        });
-        setIsLoading(false);
-      }, 100);
+  const retryLast = useCallback(() => {
+    if (isSendingRef.current) return;
+    const arr = messages;
+    let idx = -1;
+    for (let i = arr.length - 1; i >= 0; i--) {
+      if (arr[i].role === 'user') { idx = i; break; }
     }
-  };
+    if (idx === -1 || arr[arr.length - 1]?.isError !== true) return;
+
+    const prompt = arr[idx].content;
+    isSendingRef.current = true;
+    setIsLoading(true);
+    scrollToBottom();
+    setMessages(prev => [...prev.slice(0, idx), { role: 'user', content: prompt }]);
+    const ctx = arr.slice(0, idx).map(m => ({ role: m.role, content: m.content })).concat([{ role: 'user' as const, content: prompt }]);
+    runAIChat(ctx);
+  }, [messages, runAIChat, scrollToBottom]);
 
   const handleSendRef = useRef(handleSend);
-  handleSendRef.current = handleSend;
+  const retryLastRef = useRef(retryLast);
+
+  useEffect(() => {
+    handleSendRef.current = handleSend;
+  }, [handleSend]);
+
+  useEffect(() => {
+    retryLastRef.current = retryLast;
+  }, [retryLast]);
+
+  const handleRetry = useCallback(() => {
+    retryLastRef.current();
+  }, []);
 
   useEffect(() => {
     if (activeAiTool && TOOL_PROMPTS[activeAiTool]) {
@@ -348,13 +456,6 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
     const text = await file.text();
     setAttachedFile({ name: file.name, content: text.slice(0, 5000) });
     setShowAttachMenu(false);
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
   };
 
   const handleInputFocus = () => {
@@ -417,9 +518,9 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
             </div>
           </div>
         </div>
-      ) : isSignedIn && !sessionExpired ? (
+      ) : isSignedIn ? (
         <>
-          <div className="tutor-chat" ref={chatContainerRef}>
+          <div className="tutor-chat" ref={chatContainerRef} role="log" aria-live="polite" aria-busy={isLoading} aria-label="Chat with SnapAI Tutor">
             {!hasMessages && (
               <div className="tutor-chips">
                 {QUICK_CHIPS.map(chip => (
@@ -438,51 +539,11 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
             )}
 
             {messages.map((msg, idx) => (
-              <div key={idx} className={`tutor-message tutor-message-${msg.role}`}>
-                <div className="tutor-message-avatar">
-                  {msg.role === 'assistant' ? <Bot size={16} /> : <User size={16} />}
-                </div>
-                <div className="tutor-message-bubble">
-                  {msg.role === 'assistant' && msg.isStreaming ? (
-                    <div className="tutor-streaming">
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm, remarkMath]}
-                        rehypePlugins={[rehypeKatex]}
-                        components={{
-                          code({ className, children, ...props }) {
-                            const isInline = !className;
-                            const codeStr = String(children).replace(/\n$/, '');
-                            if (isInline) return <InlineCode>{children}</InlineCode>;
-                            const language = className?.replace('language-', '') || '';
-                            return <CodeBlock code={codeStr} language={language} />;
-                          },
-                          pre({ children }) { return <>{children}</>; },
-                        }}
-                      >
-                        {msg.content}
-                      </ReactMarkdown>
-                      <span className="tutor-cursor" />
-                    </div>
-                  ) : (
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm, remarkMath]}
-                      rehypePlugins={[rehypeKatex]}
-                      components={{
-                        code({ className, children, ...props }) {
-                          const isInline = !className;
-                          const codeStr = String(children).replace(/\n$/, '');
-                          if (isInline) return <InlineCode>{children}</InlineCode>;
-                          const language = className?.replace('language-', '') || '';
-                          return <CodeBlock code={codeStr} language={language} />;
-                        },
-                        pre({ children }) { return <>{children}</>; },
-                      }}
-                    >
-                      {msg.content}
-                    </ReactMarkdown>
-                  )}
-                </div>
-              </div>
+              <MessageItem
+                key={idx}
+                msg={msg}
+                onRetry={msg.isError && idx === messages.length - 1 ? handleRetry : undefined}
+              />
             ))}
             {isLoading && !messages[messages.length - 1]?.isStreaming && (
               <div className="tutor-message tutor-message-assistant">
@@ -490,7 +551,7 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
                   <Bot size={16} />
                 </div>
                 <div className="tutor-message-bubble">
-                  <div className="tutor-typing">
+                  <div className="tutor-typing" role="status" aria-live="polite" aria-label="SnapAI is typing">
                     <span className="tutor-typing-dot" />
                     <span className="tutor-typing-dot" />
                     <span className="tutor-typing-dot" />
@@ -512,11 +573,18 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
           )}
 
           <div className="tutor-input-area">
-            <div className="tutor-input-bar">
+            <form
+            className="tutor-input-bar"
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSend();
+            }}
+          >
               <button
+                type="button"
                 className="tutor-input-btn"
+                aria-label="Attach a file"
                 onClick={() => setShowAttachMenu(!showAttachMenu)}
-                title="Attach file"
               >
                 <Paperclip size={20} />
               </button>
@@ -526,18 +594,21 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
                   type="text"
                   className="tutor-input"
                   placeholder="Ask your AI tutor anything..."
+                  aria-label="Message the AI tutor"
                   value={input}
                   onChange={e => setInput(e.target.value)}
-                  onKeyDown={handleKeyDown}
                   onFocus={handleInputFocus}
                   disabled={isLoading}
                   autoCapitalize="off"
                   autoCorrect="off"
+                  autoComplete="off"
                 />
               </div>
               <button
+                type="button"
                 className="tutor-input-btn"
                 title="Voice input"
+                aria-label="Use voice input"
                 onClick={() => {
                   if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
                     const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
@@ -557,13 +628,14 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
                 <Mic size={20} />
               </button>
               <button
+                type="submit"
                 className="tutor-send-btn"
-                onClick={() => handleSend()}
+                aria-label="Send message"
                 disabled={!input.trim() || isLoading}
               >
                 {isLoading ? <Loader2 size={20} className="tutor-spin" /> : <Send size={20} />}
               </button>
-            </div>
+          </form>
 
             {showAttachMenu && (
               <div className="tutor-attach-menu">

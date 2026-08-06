@@ -7,23 +7,13 @@ function detectBackendURL(): string {
   if (isBrowser) {
     const host = window.location.hostname;
     if (host !== 'localhost' && host !== '127.0.0.1') {
-      const fallback = `https://${host.replace('frontend', 'api').replace('app', 'api')}`;
-      console.warn(`[config] NEXT_PUBLIC_BACKEND_URL not set — guessing backend at ${fallback}. Set this environment variable in Vercel.`);
-      return fallback;
+      return `https://${host.replace('frontend', 'api').replace('app', 'api')}`;
     }
   }
   return 'http://localhost:4000';
 }
 
 const BACKEND_URL = detectBackendURL();
-
-if (typeof window !== 'undefined' && BACKEND_URL.includes('localhost') && window.location.hostname !== 'localhost') {
-  console.error(
-    `[config] ⚠️ BACKEND_URL is "${BACKEND_URL}" but frontend is deployed at "${window.location.hostname}".\n` +
-    '  → Set NEXT_PUBLIC_BACKEND_URL in Vercel dashboard to your Render backend URL.\n' +
-    '  → Example: https://studysnap-api.onrender.com'
-  );
-}
 
 export const API = {
   base: BACKEND_URL,
@@ -49,10 +39,11 @@ export const API = {
 
 export async function apiFetch<T = any>(
   url: string,
-  options: RequestInit & { token?: string } = {}
+  options: RequestInit & { token?: string; returnTo?: string; timeoutMs?: number } = {}
 ): Promise<T> {
-  const { token, ...fetchOptions } = options;
-  const startTime = performance.now();
+  const { token, returnTo, timeoutMs = 25000, ...fetchOptions } = options;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const headers: Record<string, string> = {
@@ -60,33 +51,30 @@ export async function apiFetch<T = any>(
     };
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
-    console.log(`[apiFetch] → ${options.method || 'GET'} ${url}`);
-
     const res = await fetch(url, {
       headers: { ...headers, ...(fetchOptions.headers as Record<string, string> || {}) },
       ...fetchOptions,
+      signal: controller.signal,
     });
 
-    const duration = Math.round(performance.now() - startTime);
+    clearTimeout(timer);
+
+    if (res.status === 401) {
+      const event = new CustomEvent('studysnap:session-expired', { detail: { returnTo } });
+      window.dispatchEvent(event);
+      return { success: false, error: 'Your session has expired. Please sign in again.', sessionExpired: true } as T;
+    }
+
     const json = await res.json();
 
-    if (!res.ok) {
-      console.error(`[apiFetch] ✗ ${res.status} ${url} (${duration}ms):`, json);
-    } else {
-      console.log(`[apiFetch] ✓ ${url} (${duration}ms)`);
-    }
-
     return json;
-  } catch (error: any) {
-    const duration = Math.round(performance.now() - startTime);
-    const msg = error?.message || 'Unknown network error';
-    console.error(`[apiFetch] ✗ NETWORK ERROR ${url} (${duration}ms): ${msg}`);
-
-    if (url.includes('localhost') && typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
-      console.error('[apiFetch] ⚠️ Request to localhost from deployed frontend will always fail.');
-      console.error('[apiFetch] → Set NEXT_PUBLIC_BACKEND_URL in Vercel to production backend URL.');
+  } catch {
+    if (controller.signal.aborted) {
+      return { success: false, error: 'The request timed out. Please try again or make your question shorter.', _timedOut: true } as T;
     }
 
-    return { success: false, error: msg, _debug: { url, duration } } as T;
+    return { success: false, error: 'We could not reach the server. Please check your connection and try again.' } as T;
+  } finally {
+    clearTimeout(timer);
   }
 }

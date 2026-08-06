@@ -624,6 +624,79 @@ h1, h2, h3, h4, h5, h6 {
   animation: scaleIn 0.25s ease-out;
 }
 
+/* ─── Session Expired ─── */
+.session-expired-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+}
+.session-expired-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--error-container, #fce4ec);
+  color: var(--on-error-container, #b71c1c);
+  margin-bottom: 2px;
+}
+.session-expired-title {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--on-surface);
+  letter-spacing: -0.02em;
+}
+.session-expired-desc {
+  font-size: 14px;
+  color: var(--on-surface-variant);
+  line-height: 1.5;
+  max-width: 300px;
+}
+.session-expired-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  margin-top: 10px;
+}
+.session-expired-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 12px 20px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: var(--on-primary);
+  font-family: var(--font-title);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 18px rgba(0, 97, 164, 0.3);
+  transition: box-shadow var(--transition-fast), transform var(--transition-fast);
+}
+.session-expired-btn:hover { box-shadow: 0 6px 24px rgba(0, 97, 164, 0.4); transform: translateY(-1px); }
+.session-expired-btn:disabled { opacity: 0.7; cursor: not-allowed; transform: none; }
+.session-expired-dismiss {
+  width: 100%;
+  padding: 10px 20px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--on-surface-variant);
+  font-family: var(--font-title);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.session-expired-dismiss:hover { background: var(--surface-variant); }
+
 /* ─── Content Stagger ─── */
 .stagger > * {
   animation: fadeInUp 0.5s ease-out both;
@@ -2977,6 +3050,37 @@ h1, h2, h3, h4, h5, h6 {
 
 @keyframes blink {
   50% { opacity: 0; }
+}
+
+/* ─── Retry Button ─── */
+.tutor-retry-row {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--outline-variant);
+}
+.tutor-retry-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 100px;
+  border: 1.5px solid var(--primary);
+  background: transparent;
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.tutor-retry-btn:hover,
+.tutor-retry-btn:focus-visible {
+  background: var(--primary);
+  color: #fff;
+  outline: none;
+}
+.tutor-retry-btn:focus-visible {
+  box-shadow: 0 0 0 3px var(--primary-container);
 }
 
 /* ─── Typing Indicator ─── */
