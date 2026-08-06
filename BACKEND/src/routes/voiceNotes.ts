@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { authMiddleware } from '../middleware/auth';
 import { generateId } from '../utils/helpers';
+import { validate, voiceNoteSchema } from '../middleware/validate';
 
 const router = Router();
 let mockVoiceNotes: any[] = [];
@@ -13,18 +14,14 @@ router.get('/', (req: Request, res: Response) => {
   res.json({ success: true, voiceNotes: notes });
 });
 
-router.post('/', (req: Request, res: Response) => {
+router.post('/', validate(voiceNoteSchema), (req: Request, res: Response) => {
   const userId = (req as any).userId;
   const { id, noteId, audioUrl, duration, transcript } = req.body;
-
-  if (!noteId || !audioUrl) {
-    return res.status(400).json({ success: false, error: 'noteId and audioUrl required' });
-  }
 
   const newVoiceNote = {
     id: id || generateId(),
     userId,
-    noteId,
+    noteId: noteId || null,
     audioUrl,
     duration: duration || 0,
     transcript: transcript || null,

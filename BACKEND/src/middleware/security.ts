@@ -2,8 +2,35 @@ import helmet from 'helmet';
 import cors from 'cors';
 import { env } from '../config/env';
 
+const prodCSP = {
+  defaultSrc: ["'self'"],
+  scriptSrc: [
+    "'self'",
+    "'unsafe-inline'",
+    "'unsafe-eval'",
+    'https://*.clerk.accounts.dev',
+    'https://*.clerk.com',
+    'https://js.clerk.com',
+  ],
+  styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com', 'https://*.clerk.com'],
+  imgSrc: ["'self'", 'data:', 'blob:', 'https:', 'http:'],
+  fontSrc: ["'self'", 'data:', 'https://fonts.gstatic.com'],
+  connectSrc: [
+    "'self'",
+    'https://*.clerk.accounts.dev',
+    'https://*.clerk.com',
+    'https://*',
+    'http://localhost:4000',
+  ],
+  mediaSrc: ["'self'", 'blob:'],
+  objectSrc: ["'none'"],
+  baseUri: ["'self'"],
+  frameAncestors: ["'self'"],
+  formAction: ["'self'"],
+};
+
 export const securityMiddleware = helmet({
-  contentSecurityPolicy: env.isProd() ? undefined : false,
+  contentSecurityPolicy: env.isProd() ? { directives: prodCSP } : false,
   crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
 });
 

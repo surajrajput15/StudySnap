@@ -23,3 +23,11 @@ export const aiLimiter = rateLimit({
   legacyHeaders: false,
   message: { success: false, error: 'AI rate limit exceeded. Please wait a moment.' },
 });
+
+export const pinLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many PIN attempts. Please try again later.' },
+});

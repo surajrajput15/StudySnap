@@ -42,7 +42,7 @@ router.post('/chat', validate(aiChatSchema), async (req: Request, res: Response)
     res.json({ success: true, message: { role: 'assistant', content: reply }, _duration: duration });
   } catch (error: any) {
     logAIError('chat', req.userId, error);
-    res.status(error?.status || 500).json({
+    res.status(500).json({
       success: false,
       error: 'AI chat failed',
     });

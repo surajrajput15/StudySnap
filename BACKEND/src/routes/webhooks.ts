@@ -1,11 +1,8 @@
 import { Router, raw, Request, Response } from 'express';
 import { Webhook, WebhookVerificationError } from 'svix';
-import { authLimiter } from '../middleware/rateLimiter';
 import { env } from '../config/env';
 
 const router = Router();
-
-router.use(authLimiter);
 
 router.post('/clerk', raw({ type: 'application/json' }), async (req: Request, res: Response) => {
   if (!env.CLERK_WEBHOOK_SECRET) {

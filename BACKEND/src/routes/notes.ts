@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { eq, and, desc } from 'drizzle-orm';
 import { getDb, notes } from '../db';
 import { authMiddleware } from '../middleware/auth';
+import { pinLimiter } from '../middleware/rateLimiter';
 import { parseTags, generateId } from '../utils/helpers';
 import { hashPin, verifyPin } from '../utils/pin';
 import { validate, noteSchema, verifyPinSchema as verifyPinSchemaDef } from '../middleware/validate';
@@ -108,7 +109,7 @@ router.post('/', validate(noteSchema), async (req: Request, res: Response) => {
   }
 });
 
-router.post('/verify-pin', validate(verifyPinSchemaDef), async (req: Request, res: Response) => {
+router.post('/verify-pin', pinLimiter, validate(verifyPinSchemaDef), async (req: Request, res: Response) => {
   try {
     const userId = (req as any).userId;
     const { noteId, pin } = req.body;
@@ -151,7 +152,7 @@ router.delete('/', async (req: Request, res: Response) => {
     await invalidateUserCache(userId);
     res.json({ success: true });
   } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Failed to delete note' });
   }
 });
 
@@ -166,7 +167,7 @@ router.get('/categories', async (req: Request, res: Response) => {
     const dbCategories = await getDb().select().from(require('../db').categories).where(eq(require('../db').categories.userId, userId));
     res.json({ success: true, categories: [...DEFAULT_CATEGORIES, ...dbCategories] });
   } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: 'Failed to fetch categories' });
   }
 });
 

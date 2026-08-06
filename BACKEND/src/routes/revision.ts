@@ -36,14 +36,15 @@ router.post('/mark', validate(revisionSchema), (req: Request, res: Response) => 
   };
   mockRevisionLogs.push(log);
 
-  const existing = mockNotesRevision[noteId] || { revisionStreak: 0, lastRevisedAt: '', nextRevisionAt: '' };
-  mockNotesRevision[noteId] = {
+  const key = `${userId}:${noteId}`;
+  const existing = mockNotesRevision[key] || { revisionStreak: 0, lastRevisedAt: '', nextRevisionAt: '' };
+  mockNotesRevision[key] = {
     revisionStreak: existing.revisionStreak + 1,
     lastRevisedAt: now,
     nextRevisionAt: nextRev.toISOString(),
   };
 
-  res.json({ success: true, log, noteRevision: mockNotesRevision[noteId] });
+  res.json({ success: true, log, noteRevision: mockNotesRevision[key] });
 });
 
 router.get('/logs', (req: Request, res: Response) => {
@@ -53,8 +54,9 @@ router.get('/logs', (req: Request, res: Response) => {
 });
 
 router.get('/status/:noteId', (req: Request, res: Response) => {
+  const userId = (req as any).userId;
   const noteId = req.params.noteId as string;
-  const status = mockNotesRevision[noteId] || null;
+  const status = mockNotesRevision[`${userId}:${noteId}`] || null;
   res.json({ success: true, status });
 });
 

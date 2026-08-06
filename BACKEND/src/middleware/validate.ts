@@ -28,18 +28,26 @@ export const noteSchema = z.object({
 export const aiChatSchema = z.object({
   messages: z.array(z.object({
     role: z.enum(['user', 'assistant', 'system']),
-    content: z.string(),
-  })).min(1, 'At least one message required'),
+    content: z.string().max(20000),
+  })).min(1, 'At least one message required').max(100, 'Too many messages'),
 });
 
 export const aiContentSchema = z.object({
-  title: z.string().optional(),
-  content: z.string().min(1, 'Content required'),
+  title: z.string().max(500).optional(),
+  content: z.string().min(1, 'Content required').max(200000),
 });
 
 export const translateSchema = z.object({
-  content: z.string().min(1, 'Content required'),
+  content: z.string().min(1, 'Content required').max(20000),
   targetLanguage: z.enum(['hindi', 'english']).optional(),
+});
+
+export const voiceNoteSchema = z.object({
+  id: z.string().max(100).optional(),
+  noteId: z.string().max(200).optional(),
+  audioUrl: z.string().min(1).max(2048),
+  duration: z.number().int().min(0).max(86400).optional(),
+  transcript: z.string().max(50000).optional(),
 });
 
 export const revisionSchema = z.object({

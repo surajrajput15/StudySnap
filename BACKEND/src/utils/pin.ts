@@ -16,7 +16,9 @@ export function verifyPin(pin: string, stored: string): boolean {
     const [salt, hash] = stored.split(':');
     if (!salt || !hash) return false;
     const computed = crypto.pbkdf2Sync(pin, salt, ITERATIONS, KEY_LENGTH, DIGEST).toString('hex');
-    return computed === hash;
+    const a = Buffer.from(computed, 'hex');
+    const b = Buffer.from(hash, 'hex');
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
   } catch {
     return false;
   }

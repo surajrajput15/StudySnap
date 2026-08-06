@@ -14,6 +14,8 @@ import webhooksRouter from './routes/webhooks';
 
 const app = express();
 
+app.set('trust proxy', 1);
+
 app.use(securityMiddleware);
 app.use(corsMiddleware);
 app.use('/api/webhooks', webhooksRouter);
