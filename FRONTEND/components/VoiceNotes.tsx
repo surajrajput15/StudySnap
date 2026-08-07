@@ -4,10 +4,12 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useStore, VoiceNote } from '@/lib/store/useStore';
 import {
   Mic, Square, Play, Pause, Trash2, FileText, Volume2,
-  ArrowLeft, Check, X, Edit3, ChevronDown, ChevronUp
+  ArrowLeft, Check, X, Edit3, ChevronUp
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import EmptyState, { EmptyVoiceIllustration } from './EmptyState';
+import { SpeechRecognition, SpeechRecognitionEvent } from '@/lib/speech';
+import { formatShortDate } from '@/lib/utils';
 
 interface VoiceNotesProps {
   onBack: () => void;
@@ -30,7 +32,6 @@ interface AnimatedMicProps {
 }
 
 function AnimatedMic({ active, level = 0 }: AnimatedMicProps) {
-  const scale = active ? 0.85 + level * 0.25 : 1;
   const color = active ? '#EF4444' : 'var(--primary)';
 
   return (
@@ -42,12 +43,12 @@ function AnimatedMic({ active, level = 0 }: AnimatedMicProps) {
       {active && (
         <g>
           {[0, 1, 2, 3, 4].map((i) => (
-            <line key={i} x1={10 + i * 2} y1={28 - level * 12 * Math.sin((i * 1.2 + Date.now() * 0.005) % Math.PI)} x2={10 + i * 2} y2={28} stroke="#EF4444" strokeWidth="1.5" strokeLinecap="round" opacity={0.5 + level * 0.3}>
+            <line key={i} x1={10 + i * 2} y1={28 - level * 12 * Math.sin((i * 1.2) % Math.PI)} x2={10 + i * 2} y2={28} stroke="#EF4444" strokeWidth="1.5" strokeLinecap="round" opacity={0.5 + level * 0.3}>
               <animate attributeName="y1" values={`${28 - level * 12};${28 + level * 12};${28 - level * 12}`} dur={`${0.3 + i * 0.1}s`} repeatCount="indefinite" />
             </line>
           ))}
           {[0, 1, 2, 3, 4].map((i) => (
-            <line key={`r-${i}`} x1={50 + i * 2} y1={28 - level * 12 * Math.cos((i * 1.2 + Date.now() * 0.005) % Math.PI)} x2={50 + i * 2} y2={28} stroke="#EF4444" strokeWidth="1.5" strokeLinecap="round" opacity={0.5 + level * 0.3}>
+            <line key={`r-${i}`} x1={50 + i * 2} y1={28 - level * 12 * Math.cos((i * 1.2) % Math.PI)} x2={50 + i * 2} y2={28} stroke="#EF4444" strokeWidth="1.5" strokeLinecap="round" opacity={0.5 + level * 0.3}>
               <animate attributeName="y1" values={`${28 - level * 12};${28 + level * 12};${28 - level * 12}`} dur={`${0.4 + i * 0.08}s`} repeatCount="indefinite" />
             </line>
           ))}
@@ -105,7 +106,12 @@ function NoiseMeter({ level }: { level: number }) {
 }
 
 export default function VoiceNotes({ onBack, onLinkToNote }: VoiceNotesProps) {
-  const { voiceNotes, notes, addVoiceNote, deleteVoiceNote, updateNote, addNote } = useStore();
+  const voiceNotes = useStore((s) => s.voiceNotes);
+  const notes = useStore((s) => s.notes);
+  const addVoiceNote = useStore((s) => s.addVoiceNote);
+  const deleteVoiceNote = useStore((s) => s.deleteVoiceNote);
+  const updateNote = useStore((s) => s.updateNote);
+  const addNote = useStore((s) => s.addNote);
 
   const [isRecording, setIsRecording] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -117,7 +123,6 @@ export default function VoiceNotes({ onBack, onLinkToNote }: VoiceNotesProps) {
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
   const [playbackProgress, setPlaybackProgress] = useState(0);
-  const [playbackDuration, setPlaybackDuration] = useState(0);
 
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
@@ -126,9 +131,8 @@ export default function VoiceNotes({ onBack, onLinkToNote }: VoiceNotesProps) {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const durationTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
   const activeAudioRef = useRef<HTMLAudioElement | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animationRef = useRef<number>(0);
   const streamRef = useRef<MediaStream | null>(null);
@@ -136,13 +140,17 @@ export default function VoiceNotes({ onBack, onLinkToNote }: VoiceNotesProps) {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      if (SpeechRecognition) {
-        const rec = new SpeechRecognition();
+      const speechCtor = window as unknown as {
+        SpeechRecognition?: new () => SpeechRecognition;
+        webkitSpeechRecognition?: new () => SpeechRecognition;
+      };
+      const SpeechRecognitionCtor = speechCtor.SpeechRecognition || speechCtor.webkitSpeechRecognition;
+      if (SpeechRecognitionCtor) {
+        const rec = new SpeechRecognitionCtor();
         rec.continuous = true;
         rec.interimResults = true;
         rec.lang = 'en-IN';
-        rec.onresult = (event: any) => {
+        rec.onresult = (event: SpeechRecognitionEvent) => {
           let finalTranscript = '';
           for (let i = event.resultIndex; i < event.results.length; ++i) {
             if (event.results[i].isFinal) finalTranscript += event.results[i][0].transcript;
@@ -168,6 +176,11 @@ export default function VoiceNotes({ onBack, onLinkToNote }: VoiceNotesProps) {
       if (activeAudioRef.current) activeAudioRef.current.pause();
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
       if (audioContextRef.current) audioContextRef.current.close();
+      if (recognitionRef.current) recognitionRef.current.stop();
+      if (streamRef.current) streamRef.current.getTracks().forEach(track => track.stop());
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
+      }
     };
   }, []);
 
@@ -275,7 +288,6 @@ export default function VoiceNotes({ onBack, onLinkToNote }: VoiceNotesProps) {
       if (activeAudioRef.current) activeAudioRef.current.pause();
       const audio = new Audio(vn.audioUrl);
       audio.playbackRate = playbackSpeed;
-      audio.onloadedmetadata = () => setPlaybackDuration(vn.duration);
       audio.ontimeupdate = () => setPlaybackProgress(Math.floor(audio.currentTime));
       audio.onended = () => {
         setPlayingId(null);
@@ -449,7 +461,7 @@ export default function VoiceNotes({ onBack, onLinkToNote }: VoiceNotesProps) {
                       <div className="voice-recording-meta">
                         <span>{formatTime(vn.duration)}</span>
                         <span className="voice-meta-dot">·</span>
-                        <span>{new Date(vn.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
+                        <span>{formatShortDate(vn.createdAt)}</span>
                       </div>
                     </div>
 

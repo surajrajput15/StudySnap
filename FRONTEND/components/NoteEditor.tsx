@@ -10,24 +10,15 @@ import {
   List, ListOrdered, Quote, Code, Table2, Image, Sigma,
   Undo2, Redo2, Sparkles, Send, X
 } from 'lucide-react';
-import jsPDF from 'jspdf';
+import type { LucideIcon } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { SpeechRecognition, SpeechRecognitionEvent, SpeechRecognitionErrorEvent } from '@/lib/speech';
+import { PIN_LENGTH } from '@/lib/constants';
+import { stripHtml } from '@/lib/utils';
 
 interface NoteEditorProps {
   noteId: string | null;
   onBack: () => void;
-}
-
-interface SpeechRecognitionEvent {
-  resultIndex: number;
-  results: { [key: number]: { [key: number]: { transcript: string } } };
-}
-interface SpeechRecognitionErrorEvent { error: string; }
-interface SpeechRecognition {
-  continuous: boolean; interimResults: boolean; lang: string;
-  onstart: () => void; onresult: (event: SpeechRecognitionEvent) => void;
-  onerror: (event: SpeechRecognitionErrorEvent) => void; onend: () => void;
-  start: () => void; stop: () => void;
 }
 
 const TABLE_SIZES = [3, 4, 5, 6, 7, 8];
@@ -62,21 +53,58 @@ function execFormat(command: string, value?: string) {
   document.execCommand(command, false, value);
 }
 
+interface ToolbarItem {
+  type?: 'divider';
+  icon?: LucideIcon;
+  label?: string;
+  shortcut?: string;
+  action?: () => void;
+}
+
+function EditorToolbarItems({ items }: { items: ToolbarItem[] }) {
+  return (
+    <>
+      {items.map((item, i) => {
+        if (item.type === 'divider') {
+          return <span key={i} className="editor-toolbar-divider" />;
+        }
+        if (item.icon && item.action) {
+          const Icon = item.icon;
+          return (
+            <button key={i} onClick={item.action} className="editor-toolbar-btn" title={item.label}>
+              <Icon size={15} />
+            </button>
+          );
+        }
+        return null;
+      })}
+    </>
+  );
+}
+
 export default function NoteEditor({ noteId, onBack }: NoteEditorProps) {
-  const { notes, categories, folders, addNote, updateNote, deleteNote } = useStore();
+  return <NoteEditorInner key={noteId ?? 'new'} noteId={noteId} onBack={onBack} />;
+}
+
+function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
+  const notes = useStore((s) => s.notes);
+  const categories = useStore((s) => s.categories);
+  const folders = useStore((s) => s.folders);
+  const addNote = useStore((s) => s.addNote);
+  const updateNote = useStore((s) => s.updateNote);
 
   const isNew = !noteId;
   const activeNote = notes.find(n => n.id === noteId);
 
-  const [title, setTitle] = useState('');
-  const [content, setContent] = useState('');
-  const [tags, setTags] = useState<string[]>([]);
+  const [title, setTitle] = useState(activeNote ? activeNote.title : '');
+  const [content, setContent] = useState(activeNote ? activeNote.content : '');
+  const [tags, setTags] = useState<string[]>(activeNote ? activeNote.tags : []);
   const [tagInput, setTagInput] = useState('');
-  const [categoryId, setCategoryId] = useState<string>('');
-  const [folderId, setFolderId] = useState<string>('');
-  const [isPinned, setIsPinned] = useState(false);
-  const [isFavorite, setIsFavorite] = useState(false);
-  const [pinLock, setPinLock] = useState<string | null>(null);
+  const [categoryId, setCategoryId] = useState<string>(activeNote?.categoryId || '');
+  const [folderId, setFolderId] = useState<string>(activeNote?.folderId || '');
+  const [isPinned, setIsPinned] = useState(activeNote ? activeNote.isPinned : false);
+  const [isFavorite, setIsFavorite] = useState(activeNote ? activeNote.isFavorite : false);
+  const [pinLock, setPinLock] = useState<string | null>(activeNote?.pinLock ?? null);
   const [showPinModal, setShowPinModal] = useState(false);
   const [pinCode, setPinCode] = useState('');
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
@@ -87,7 +115,7 @@ export default function NoteEditor({ noteId, onBack }: NoteEditorProps) {
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   const [isListening, setIsListening] = useState(false);
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
 
   const editorRef = useRef<HTMLDivElement>(null);
   const [showTablePicker, setShowTablePicker] = useState(false);
@@ -100,32 +128,6 @@ export default function NoteEditor({ noteId, onBack }: NoteEditorProps) {
 
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
-  const [showCodeLang, setShowCodeLang] = useState(false);
-
-  useEffect(() => {
-    if (activeNote) {
-      setTitle(activeNote.title);
-      setContent(activeNote.content);
-      setTags(activeNote.tags);
-      setCategoryId(activeNote.categoryId || '');
-      setFolderId(activeNote.folderId || '');
-      setIsPinned(activeNote.isPinned);
-      setIsFavorite(activeNote.isFavorite);
-      setPinLock(activeNote.pinLock);
-    } else {
-      setTitle('');
-      setContent('');
-      setTags([]);
-      setCategoryId('');
-      setFolderId('');
-      setIsPinned(false);
-      setIsFavorite(false);
-      setPinLock(null);
-    }
-    setSaveStatus('saved');
-    setHistory([]);
-    setHistoryIndex(-1);
-  }, [noteId, activeNote]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -136,16 +138,20 @@ export default function NoteEditor({ noteId, onBack }: NoteEditorProps) {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      if (SpeechRecognition) {
-        const rec = new SpeechRecognition() as SpeechRecognition;
+      const speechCtor = window as unknown as {
+        SpeechRecognition?: new () => SpeechRecognition;
+        webkitSpeechRecognition?: new () => SpeechRecognition;
+      };
+      const SpeechRecognitionCtor = speechCtor.SpeechRecognition || speechCtor.webkitSpeechRecognition;
+      if (SpeechRecognitionCtor) {
+        const rec = new SpeechRecognitionCtor();
         rec.continuous = true;
         rec.interimResults = true;
         rec.lang = 'en-US';
         rec.onstart = () => setIsListening(true);
         rec.onresult = (event: SpeechRecognitionEvent) => {
           let finalTranscript = '';
-          for (let i = event.resultIndex; i < (event.results as any).length; ++i) {
+          for (let i = event.resultIndex; i < event.results.length; ++i) {
             if (event.results[i][0].transcript) finalTranscript += event.results[i][0].transcript;
           }
           if (finalTranscript) {
@@ -166,7 +172,7 @@ export default function NoteEditor({ noteId, onBack }: NoteEditorProps) {
 
   useEffect(() => {
     if (isNew && !title.trim() && !content.trim()) return;
-    setSaveStatus('saving');
+    const savingTimer = setTimeout(() => setSaveStatus('saving'), 0);
     const timer = setTimeout(() => {
       const notePayload = {
         title: title || 'Untitled Note',
@@ -186,8 +192,8 @@ export default function NoteEditor({ noteId, onBack }: NoteEditorProps) {
       }
       setSaveStatus('saved');
     }, 1500);
-    return () => clearTimeout(timer);
-  }, [title, content, tags, categoryId, folderId, isPinned, isFavorite, pinLock]);
+    return () => { clearTimeout(savingTimer); clearTimeout(timer); };
+  }, [title, content, tags, categoryId, folderId, isPinned, isFavorite, pinLock, isNew, noteId, addNote, updateNote]);
 
   const pushHistory = useCallback((html: string) => {
     setHistory(prev => {
@@ -355,7 +361,7 @@ export default function NoteEditor({ noteId, onBack }: NoteEditorProps) {
       else { synthRef.current.pause(); setIsPaused(true); }
       return;
     }
-    const textToRead = content.replace(/<[^>]*>/g, '');
+    const textToRead = stripHtml(content);
     if (!textToRead.trim()) return;
     const utterance = new SpeechSynthesisUtterance(textToRead);
     utterance.onend = () => { setIsSpeaking(false); setIsPaused(false); };
@@ -402,10 +408,11 @@ export default function NoteEditor({ noteId, onBack }: NoteEditorProps) {
 
   const handleSavePin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (pinCode.length === 4) { setPinLock(pinCode); setShowPinModal(false); confetti({ particleCount: 50, colors: ['#0061A4'] }); }
+    if (pinCode.length === PIN_LENGTH) { setPinLock(pinCode); setShowPinModal(false); confetti({ particleCount: 50, colors: ['#0061A4'] }); }
   };
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
+    const { default: jsPDF } = await import('jspdf');
     const doc = new jsPDF();
     doc.setFont("helvetica", "bold");
     doc.setFontSize(22);
@@ -481,24 +488,24 @@ export default function NoteEditor({ noteId, onBack }: NoteEditorProps) {
     }
   };
 
-  const toolbarItems = [
+  const toolbarItems: ToolbarItem[] = [
     { icon: Undo2, action: handleUndo, label: 'Undo' },
     { icon: Redo2, action: handleRedo, label: 'Redo' },
-    { type: 'divider' as const },
+    { type: 'divider' },
     { icon: Bold, action: () => execFormat('bold'), label: 'Bold', shortcut: '**' },
     { icon: Italic, action: () => execFormat('italic'), label: 'Italic', shortcut: '*' },
     { icon: Underline, action: () => execFormat('underline'), label: 'Underline' },
     { icon: Strikethrough, action: () => execFormat('strikeThrough'), label: 'Strikethrough' },
-    { type: 'divider' as const },
+    { type: 'divider' },
     { icon: Heading1, action: () => execFormat('formatBlock', '<h1>'), label: 'Heading 1' },
     { icon: Heading2, action: () => execFormat('formatBlock', '<h2>'), label: 'Heading 2' },
     { icon: Heading3, action: () => execFormat('formatBlock', '<h3>'), label: 'Heading 3' },
-    { type: 'divider' as const },
+    { type: 'divider' },
     { icon: List, action: () => execFormat('insertUnorderedList'), label: 'Bullet List' },
     { icon: ListOrdered, action: () => execFormat('insertOrderedList'), label: 'Numbered List' },
     { icon: Quote, action: () => execFormat('formatBlock', '<blockquote>'), label: 'Quote' },
     { icon: Code, action: () => insertCodeBlock('javascript'), label: 'Code Block' },
-    { type: 'divider' as const },
+    { type: 'divider' },
     { icon: Sigma, action: insertMath, label: 'Math' },
     { icon: Table2, action: () => setShowTablePicker(!showTablePicker), label: 'Table' },
     { icon: Image, action: insertImage, label: 'Image' },
@@ -514,20 +521,7 @@ export default function NoteEditor({ noteId, onBack }: NoteEditorProps) {
               <ArrowLeft size={16} />
             </button>
             <span className="editor-toolbar-divider" />
-            {toolbarItems.map((item, i) => {
-              if ('type' in item && item.type === 'divider') {
-                return <span key={i} className="editor-toolbar-divider" />;
-              }
-              if ('icon' in item) {
-                const Icon = item.icon!;
-                return (
-                  <button key={i} onClick={item.action} className="editor-toolbar-btn" title={item.label}>
-                    <Icon size={15} />
-                  </button>
-                );
-              }
-              return null;
-            })}
+            <EditorToolbarItems items={toolbarItems} />
           </div>
           <div className="editor-toolbar-right">
             <span className="editor-save-status" style={{ color: saveStatus === 'saved' ? '#10B981' : saveStatus === 'saving' ? 'var(--primary)' : 'var(--outline)' }}>
@@ -704,12 +698,12 @@ export default function NoteEditor({ noteId, onBack }: NoteEditorProps) {
             <Lock size={40} style={{ color: 'var(--primary)', margin: '0 auto 12px' }} />
             <h3 style={{ fontSize: '18px' }}>Lock Note</h3>
             <p style={{ fontSize: '13px', color: 'var(--on-surface-variant)', marginBottom: '16px' }}>Set a 4-digit PIN to secure this note</p>
-            <input type="password" maxLength={4} placeholder="••••" value={pinCode}
+            <input type="password" maxLength={PIN_LENGTH} placeholder="••••" value={pinCode}
               onChange={(e) => setPinCode(e.target.value.replace(/\D/g, ''))} required autoFocus
               style={{ width: '120px', padding: '14px', borderRadius: '12px', border: '1.5px solid var(--outline-variant)', background: 'var(--surface)', color: 'var(--on-surface)', fontSize: '22px', letterSpacing: '10px', textAlign: 'center', outline: 'none', margin: '0 auto' }} />
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginTop: '20px' }}>
               <button type="button" onClick={() => setShowPinModal(false)} className="md3-btn md3-btn-text">Cancel</button>
-              <button type="submit" className="md3-btn md3-btn-primary" disabled={pinCode.length !== 4}>Set Lock</button>
+              <button type="submit" className="md3-btn md3-btn-primary" disabled={pinCode.length !== PIN_LENGTH}>Set Lock</button>
             </div>
           </form>
         </div>

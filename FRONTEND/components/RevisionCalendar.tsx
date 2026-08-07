@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { useStore, Note, RevisionLog } from '@/lib/store/useStore';
+import { useStore } from '@/lib/store/useStore';
 import {
   Calendar, Clock, CalendarDays, Star, Pin, Brain,
   TrendingUp, BarChart3, Target, Zap, ChevronLeft, ChevronRight,
@@ -9,10 +9,8 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import EmptyState, { EmptyRevisionIllustration } from './EmptyState';
-
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const DAYS_SHORT = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+import { MONTHS, DAYS_SHORT, DAILY_GOAL } from '@/lib/constants';
+import { formatShortDate } from '@/lib/utils';
 
 function DonutChart({ easy, medium, hard }: { easy: number; medium: number; hard: number }) {
   const total = easy + medium + hard || 1;
@@ -87,12 +85,17 @@ function MiniCalendar({ month, year, revisionDates, onPrev, onNext }: {
 }
 
 export default function RevisionCalendar() {
-  const { notes, revisionLogs, markAsRevised } = useStore();
+  const notes = useStore((s) => s.notes);
+  const revisionLogs = useStore((s) => s.revisionLogs);
+  const markAsRevised = useStore((s) => s.markAsRevised);
   const [calMonth, setCalMonth] = useState(new Date().getMonth());
   const [calYear, setCalYear] = useState(new Date().getFullYear());
 
-  const today = new Date();
-  today.setHours(23, 59, 59, 999);
+  const today = useMemo(() => {
+    const t = new Date();
+    t.setHours(23, 59, 59, 999);
+    return t;
+  }, []);
 
   const revisionNotes = useMemo(() =>
     notes.filter(n => n.nextRevisionAt).sort((a, b) => new Date(a.nextRevisionAt!).getTime() - new Date(b.nextRevisionAt!).getTime()),
@@ -101,9 +104,6 @@ export default function RevisionCalendar() {
 
   const dueNotes = useMemo(() => revisionNotes.filter(n => new Date(n.nextRevisionAt!) <= today), [revisionNotes, today]);
   const upcomingNotes = useMemo(() => revisionNotes.filter(n => new Date(n.nextRevisionAt!) > today), [revisionNotes, today]);
-
-  const totalRevised = notes.filter(n => n.revisionStreak > 0).length;
-  const totalNotes = notes.length;
 
   const easyCount = revisionLogs.filter(l => l.rating === 'easy').length;
   const mediumCount = revisionLogs.filter(l => l.rating === 'medium').length;
@@ -137,7 +137,6 @@ export default function RevisionCalendar() {
   }, [revisionLogs]);
 
   // Daily goal
-  const dailyGoal = 5;
   const todayStr = new Date().toISOString().split('T')[0];
   const todayRevised = revisionLogs.filter(l => l.revisedAt.startsWith(todayStr)).length;
 
@@ -188,7 +187,7 @@ export default function RevisionCalendar() {
           </div>
           <div>
             <div className="revision-stat-value">{dueNotes.length}</div>
-            <div className="revision-stat-label">Today's Cards</div>
+            <div className="revision-stat-label">Today&apos;s Cards</div>
           </div>
         </div>
         <div className="revision-stat-card">
@@ -214,7 +213,7 @@ export default function RevisionCalendar() {
             <Target size={16} style={{ color: '#DB2777' }} />
           </div>
           <div>
-            <div className="revision-stat-value">{todayRevised}<span style={{ fontSize: '12px', fontWeight: 500, opacity: 0.6 }}>/{dailyGoal}</span></div>
+            <div className="revision-stat-value">{todayRevised}<span style={{ fontSize: '12px', fontWeight: 500, opacity: 0.6 }}>/DAILY_GOAL</span></div>
             <div className="revision-stat-label">Daily Goal</div>
           </div>
         </div>
@@ -223,15 +222,15 @@ export default function RevisionCalendar() {
       {/* Progress Bar */}
       <div className="revision-progress-section">
         <div className="revision-progress-header">
-          <span>Today's Progress</span>
-          <span className="revision-progress-percent">{Math.round((todayRevised / dailyGoal) * 100)}%</span>
+          <span>Today&apos;s Progress</span>
+          <span className="revision-progress-percent">{Math.round((todayRevised / DAILY_GOAL) * 100)}%</span>
         </div>
         <div className="revision-progress-track">
-          <div className="revision-progress-fill" style={{ width: `${Math.min((todayRevised / dailyGoal) * 100, 100)}%` }} />
+          <div className="revision-progress-fill" style={{ width: `${Math.min((todayRevised / DAILY_GOAL) * 100, 100)}%` }} />
         </div>
         <div className="revision-progress-labels">
           <span>{todayRevised} revised</span>
-          <span>{Math.max(dailyGoal - todayRevised, 0)} remaining</span>
+          <span>{Math.max(DAILY_GOAL - todayRevised, 0)} remaining</span>
         </div>
       </div>
 
@@ -272,7 +271,7 @@ export default function RevisionCalendar() {
             <span>Weekly Revision Trend</span>
           </div>
           <div className="revision-weekly-chart">
-            {weeklyData.map((d, i) => (
+            {weeklyData.map((d) => (
               <div key={d.day} className="revision-weekly-bar-col">
                 <div className="revision-weekly-bar-wrapper">
                   <div className="revision-weekly-bar" style={{
@@ -298,15 +297,15 @@ export default function RevisionCalendar() {
             <div className="revision-goal-ring">
               <svg width="80" height="80" viewBox="0 0 80 80">
                 <circle cx="40" cy="40" r="32" fill="none" stroke="var(--outline-variant)" strokeWidth="6" />
-                <circle cx="40" cy="40" r="32" fill="none" stroke="var(--primary)" strokeWidth="6" strokeDasharray={`${(todayRevised / dailyGoal) * 201} 201`} strokeLinecap="round" transform="rotate(-90 40 40)" style={{ transition: 'stroke-dasharray 0.5s ease' }} />
+                <circle cx="40" cy="40" r="32" fill="none" stroke="var(--primary)" strokeWidth="6" strokeDasharray={`${(todayRevised / DAILY_GOAL) * 201} 201`} strokeLinecap="round" transform="rotate(-90 40 40)" style={{ transition: 'stroke-dasharray 0.5s ease' }} />
               </svg>
               <div className="revision-goal-ring-center">
                 <span className="revision-goal-value">{todayRevised}</span>
-                <span className="revision-goal-divider">/{dailyGoal}</span>
+                <span className="revision-goal-divider">/DAILY_GOAL</span>
               </div>
             </div>
             <div className="revision-goal-info">
-              <div className="revision-goal-text">{todayRevised >= dailyGoal ? 'Goal Complete! 🎉' : `${dailyGoal - todayRevised} more to reach goal`}</div>
+              <div className="revision-goal-text">{todayRevised >= DAILY_GOAL ? 'Goal Complete! 🎉' : `${DAILY_GOAL - todayRevised} more to reach goal`}</div>
               <div className="revision-goal-streak">
                 <Star size={12} fill="#F59E0B" color="#F59E0B" />
                 Consistency builds mastery
@@ -321,7 +320,7 @@ export default function RevisionCalendar() {
         <div className="revision-section-header">
           <h3 className="revision-section-title">
             <Clock size={18} style={{ color: 'var(--primary)' }} />
-            Today's Cards
+            Today&apos;s Cards
             {dueNotes.length > 0 && <span className="revision-section-badge">{dueNotes.length} due</span>}
           </h3>
         </div>
@@ -335,14 +334,12 @@ export default function RevisionCalendar() {
         ) : (
           <div className="revision-cards-list">
             {dueNotes.map((note) => {
-              const category = notes.find(n => n.id === note.id);
-              const noteCategory = category ? null : null;
               return (
                 <div key={note.id} className="revision-card-item">
                   <div className="revision-card-item-left">
                     <div className="revision-card-item-title">{note.title}</div>
                     <div className="revision-card-item-meta">
-                      <span>Last: {note.lastRevisedAt ? new Date(note.lastRevisedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : 'Never'}</span>
+                      <span>Last: {note.lastRevisedAt ? formatShortDate(note.lastRevisedAt) : 'Never'}</span>
                       <span className="revision-meta-streak">Streak {note.revisionStreak}x</span>
                       {note.isPinned && <Pin size={10} style={{ color: 'var(--primary)' }} />}
                       {note.isFavorite && <Star size={10} style={{ color: '#F59E0B' }} />}
@@ -386,7 +383,7 @@ export default function RevisionCalendar() {
                 <div key={note.id} className="revision-upcoming-item">
                   <span className="revision-upcoming-title">{note.title}</span>
                   <span className="revision-upcoming-date">
-                    {new Date(note.nextRevisionAt!).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                    {formatShortDate(note.nextRevisionAt!)}
                   </span>
                 </div>
               ))}
@@ -420,7 +417,7 @@ export default function RevisionCalendar() {
                         {log.rating.toUpperCase()}
                       </span>
                       <span className="revision-history-date">
-                        {new Date(log.revisedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                        {formatShortDate(log.revisedAt)}
                       </span>
                     </div>
                   </div>

@@ -1,12 +1,14 @@
 import { Request, Response, NextFunction } from 'express';
-import { z, ZodSchema } from 'zod';
+import { z } from 'zod';
+import { PIN_PATTERN, PIN_PATTERN_MESSAGE } from '../config/constants';
 
-export function validate(schema: ZodSchema) {
+export function validate(schema: z.ZodTypeAny) {
   return (req: Request, res: Response, next: NextFunction) => {
     const result = schema.safeParse(req.body);
     if (!result.success) {
       const errors = result.error.flatten().fieldErrors;
-      return res.status(400).json({ success: false, error: 'Validation failed', details: errors });
+      res.status(400).json({ success: false, error: 'Validation failed', details: errors });
+      return;
     }
     req.body = result.data;
     next();
@@ -20,7 +22,7 @@ export const noteSchema = z.object({
   tags: z.array(z.string()).or(z.string()).optional(),
   isPinned: z.boolean().optional(),
   isFavorite: z.boolean().optional(),
-  pinLock: z.string().regex(/^\d{4}$/, 'PIN must be 4 digits').optional().nullable(),
+  pinLock: z.string().regex(PIN_PATTERN, PIN_PATTERN_MESSAGE).optional().nullable(),
   categoryId: z.string().uuid().optional().nullable(),
   folderId: z.string().uuid().optional().nullable(),
 });
@@ -57,5 +59,5 @@ export const revisionSchema = z.object({
 
 export const verifyPinSchema = z.object({
   noteId: z.string().uuid('Invalid note ID'),
-  pin: z.string().regex(/^\d{4}$/, 'PIN must be 4 digits'),
+  pin: z.string().regex(PIN_PATTERN, PIN_PATTERN_MESSAGE),
 });

@@ -1,14 +1,13 @@
 import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
+import { env } from '../config/env';
 import * as schema from './schema';
 
-const databaseUrl = process.env.DATABASE_URL || '';
-
 export function createDb() {
-  if (!databaseUrl) {
+  if (!env.DATABASE_URL) {
     return null;
   }
-  const sql = neon(databaseUrl);
+  const sql = neon(env.DATABASE_URL);
   return drizzle(sql, { schema });
 }
 

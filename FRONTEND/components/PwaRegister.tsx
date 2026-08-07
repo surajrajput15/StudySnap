@@ -4,8 +4,6 @@ import { useEffect } from 'react';
 import { useStore } from '@/lib/store/useStore';
 
 export default function PwaRegister() {
-  const theme = useStore((state) => state.theme);
-
   useEffect(() => {
     // Register Service Worker for PWA offline support
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
@@ -36,11 +34,6 @@ export default function PwaRegister() {
       window.removeEventListener('offline', updateOnlineStatus);
     };
   }, []);
-
-  useEffect(() => {
-    // Dynamically apply dark/light theme to document body
-    document.documentElement.setAttribute('data-theme', theme);
-  }, [theme]);
 
   return null;
 }

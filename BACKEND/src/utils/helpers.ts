@@ -1,32 +1,11 @@
-export function parseTags(tags: string | string[] | undefined): string[] {
-  if (!tags) return [];
-  if (Array.isArray(tags)) return tags;
-  return tags.split(',').map(t => t.trim()).filter(Boolean);
-}
+import { REVISION_INTERVAL_DAYS } from '../config/constants';
 
-export function computeNextRevision(rating: 'easy' | 'medium' | 'hard'): Date {
+export function computeNextRevision(rating: keyof typeof REVISION_INTERVAL_DAYS): Date {
   const now = new Date();
-  const days = rating === 'easy' ? 7 : rating === 'medium' ? 3 : 1;
-  now.setDate(now.getDate() + days);
+  now.setDate(now.getDate() + REVISION_INTERVAL_DAYS[rating]);
   return now;
 }
 
 export function generateId(): string {
   return crypto.randomUUID();
-}
-
-export function sanitizeContent(content: string): string {
-  return content
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-    .replace(/on\w+\s*=\s*"[^"]*"/gi, '')
-    .replace(/on\w+\s*=\s*'[^']*'/gi, '')
-    .replace(/on\w+\s*=\s*\S+/gi, '')
-    .replace(/<[^>]*>/g, '')
-    .trim();
-}
-
-export function formatDuration(seconds: number): string {
-  const m = Math.floor(seconds / 60).toString().padStart(2, '0');
-  const s = (seconds % 60).toString().padStart(2, '0');
-  return `${m}:${s}`;
 }

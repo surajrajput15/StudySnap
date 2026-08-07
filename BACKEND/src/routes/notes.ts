@@ -1,40 +1,57 @@
 import { Router, Request, Response } from 'express';
 import { eq, and, desc } from 'drizzle-orm';
-import { getDb, notes } from '../db';
+import { getDb, notes, categories } from '../db';
 import { authMiddleware } from '../middleware/auth';
 import { pinLimiter } from '../middleware/rateLimiter';
-import { parseTags, generateId } from '../utils/helpers';
+import { generateId } from '../utils/helpers';
 import { hashPin, verifyPin } from '../utils/pin';
-import { validate, noteSchema, verifyPinSchema as verifyPinSchemaDef } from '../middleware/validate';
-import { cacheGet, cacheSet, cacheDel, invalidateUserCache } from '../services/cache';
+import { validate, noteSchema, verifyPinSchema } from '../middleware/validate';
+import { cacheGet, cacheSet, invalidateUserCache } from '../services/cache';
+import { CACHE_TTL_NOTES_SECONDS, DEFAULT_CATEGORIES } from '../config/constants';
 
 const router = Router();
 
-const DEFAULT_CATEGORIES = [
-  { id: 'cat-physics', name: 'Physics', color: '#3B82F6' },
-  { id: 'cat-chemistry', name: 'Chemistry', color: '#10B981' },
-  { id: 'cat-maths', name: 'Maths', color: '#F59E0B' },
-  { id: 'cat-biology', name: 'Biology', color: '#EC4899' },
-  { id: 'cat-computer', name: 'Computer', color: '#8B5CF6' },
-];
+interface MockNote {
+  id: string;
+  userId: string;
+  title: string;
+  content: string;
+  tags?: string | null;
+  isPinned?: boolean;
+  isFavorite?: boolean;
+  pinLock?: string | null;
+  categoryId?: string | null;
+  folderId?: string | null;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+}
 
-let mockNotes: any[] = [];
+type NoteWithoutPinLock = Omit<MockNote, 'pinLock'>;
+
+let mockNotes: MockNote[] = [];
 
 router.use(authMiddleware);
 
+function stripPinLock(note: MockNote): NoteWithoutPinLock {
+  const { pinLock: _pinLock, ...rest } = note;
+  return rest;
+}
+
 router.get('/', async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).userId;
+    const userId = req.userId!;
     const cacheKey = `${userId}:notes`;
 
-    const cached = await cacheGet<any[]>(cacheKey);
+    const cached = await cacheGet<Array<typeof notes.$inferSelect>>(cacheKey);
     if (cached) {
-      return res.json({ success: true, notes: cached.map(stripPinLock) });
+      res.json({ success: true, notes: cached.map(stripPinLock) });
+      return;
     }
 
     if (!getDb()) {
       const filtered = mockNotes.filter(n => n.userId === userId);
-      return res.json({ success: true, notes: filtered.map(stripPinLock) });
+      res.json({ success: true, notes: filtered.map(stripPinLock) });
+      return;
     }
 
     const dbNotes = await getDb()
@@ -43,22 +60,16 @@ router.get('/', async (req: Request, res: Response) => {
       .where(and(eq(notes.userId, userId), eq(notes.isArchived, false)))
       .orderBy(desc(notes.isPinned), desc(notes.updatedAt));
 
-    await cacheSet(cacheKey, dbNotes, 60);
+    await cacheSet(cacheKey, dbNotes, CACHE_TTL_NOTES_SECONDS);
     res.json({ success: true, notes: dbNotes.map(stripPinLock) });
-  } catch (error: any) {
+  } catch {
     res.status(500).json({ success: false, error: 'Failed to fetch notes' });
   }
 });
 
-function stripPinLock(obj: any) {
-  if (!obj) return obj;
-  const { pinLock, ...rest } = obj;
-  return rest;
-}
-
 router.post('/', validate(noteSchema), async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).userId;
+    const userId = req.userId!;
     const { id, title, content, tags, isPinned, isFavorite, pinLock, categoryId, folderId } = req.body;
 
     const noteData = {
@@ -75,7 +86,7 @@ router.post('/', validate(noteSchema), async (req: Request, res: Response) => {
 
     if (!getDb()) {
       const existingIdx = mockNotes.findIndex(n => n.id === id && n.userId === userId);
-      let result;
+      let result: MockNote;
       if (existingIdx !== -1) {
         result = { ...mockNotes[existingIdx], ...noteData, updatedAt: new Date().toISOString() };
         mockNotes[existingIdx] = result;
@@ -84,7 +95,8 @@ router.post('/', validate(noteSchema), async (req: Request, res: Response) => {
         mockNotes.push(result);
       }
       await invalidateUserCache(userId);
-      return res.json({ success: true, note: stripPinLock(result) });
+      res.json({ success: true, note: stripPinLock(result) });
+      return;
     }
 
     let result;
@@ -104,14 +116,14 @@ router.post('/', validate(noteSchema), async (req: Request, res: Response) => {
 
     await invalidateUserCache(userId);
     res.json({ success: true, note: stripPinLock(result) });
-  } catch (error: any) {
+  } catch {
     res.status(500).json({ success: false, error: 'Failed to save note' });
   }
 });
 
-router.post('/verify-pin', pinLimiter, validate(verifyPinSchemaDef), async (req: Request, res: Response) => {
+router.post('/verify-pin', pinLimiter, validate(verifyPinSchema), async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).userId;
+    const userId = req.userId!;
     const { noteId, pin } = req.body;
 
     let storedHash: string | null = null;
@@ -125,48 +137,54 @@ router.post('/verify-pin', pinLimiter, validate(verifyPinSchemaDef), async (req:
     }
 
     if (!storedHash) {
-      return res.status(404).json({ success: false, error: 'Note not found or no PIN set' });
+      res.status(404).json({ success: false, error: 'Note not found or no PIN set' });
+      return;
     }
 
     const valid = verifyPin(pin, storedHash);
     res.json({ success: valid });
-  } catch (error: any) {
+  } catch {
     res.status(500).json({ success: false, error: 'PIN verification failed' });
   }
 });
 
 router.delete('/', async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).userId;
+    const userId = req.userId!;
     const id = req.query.id as string;
 
-    if (!id) return res.status(400).json({ success: false, error: 'ID required' });
+    if (!id) {
+      res.status(400).json({ success: false, error: 'ID required' });
+      return;
+    }
 
     if (!getDb()) {
       mockNotes = mockNotes.filter(n => !(n.id === id && n.userId === userId));
       await invalidateUserCache(userId);
-      return res.json({ success: true });
+      res.json({ success: true });
+      return;
     }
 
     await getDb().delete(notes).where(and(eq(notes.id, id), eq(notes.userId, userId)));
     await invalidateUserCache(userId);
     res.json({ success: true });
-  } catch (error: any) {
+  } catch {
     res.status(500).json({ success: false, error: 'Failed to delete note' });
   }
 });
 
 router.get('/categories', async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).userId;
+    const userId = req.userId!;
 
     if (!getDb()) {
-      return res.json({ success: true, categories: DEFAULT_CATEGORIES });
+      res.json({ success: true, categories: DEFAULT_CATEGORIES });
+      return;
     }
 
-    const dbCategories = await getDb().select().from(require('../db').categories).where(eq(require('../db').categories.userId, userId));
+    const dbCategories = await getDb().select().from(categories).where(eq(categories.userId, userId));
     res.json({ success: true, categories: [...DEFAULT_CATEGORIES, ...dbCategories] });
-  } catch (error: any) {
+  } catch {
     res.status(500).json({ success: false, error: 'Failed to fetch categories' });
   }
 });

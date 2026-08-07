@@ -4,10 +4,11 @@ import React, { useState, useMemo } from 'react';
 import { useStore } from '@/lib/store/useStore';
 import {
   User, School, BookOpen, GraduationCap, Award, CheckCircle, FileText, Music, Sparkles,
-  TrendingUp, Clock, Target, Flame, Star, Zap, Medal, Trophy, BarChart3,
-  CalendarDays, Download
+  TrendingUp, Clock, Target, Flame, Zap, Trophy, BarChart3, CalendarDays
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { WEEKDAYS } from '@/lib/constants';
+import { getXpLevel, getMonthlyReport } from '@/lib/gamification';
 
 interface Badge {
   id: string;
@@ -17,27 +18,12 @@ interface Badge {
   color: string;
 }
 
-const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
-function getXpLevel(xp: number): { level: number; progress: number; next: number } {
-  const level = Math.floor(Math.sqrt(xp / 100)) + 1;
-  const current = 100 * (level - 1) ** 2;
-  const next = 100 * level ** 2;
-  const progress = Math.min((xp - current) / (next - current) * 100, 100);
-  return { level, progress, next };
-}
-
-function getMonthlyReport(revisionLogs: { revisedAt: string }[]) {
-  const months: Record<string, number> = {};
-  for (const log of revisionLogs) {
-    const m = new Date(log.revisedAt).toLocaleString('en', { month: 'short', year: 'numeric' });
-    months[m] = (months[m] || 0) + 1;
-  }
-  return Object.entries(months).slice(-6);
-}
-
 export default function ProfileView() {
-  const { user, notes, voiceNotes, revisionLogs, updateProfile } = useStore();
+  const user = useStore((s) => s.user);
+  const notes = useStore((s) => s.notes);
+  const voiceNotes = useStore((s) => s.voiceNotes);
+  const revisionLogs = useStore((s) => s.revisionLogs);
+  const updateProfile = useStore((s) => s.updateProfile);
 
   const [name, setName] = useState(user.name);
   const [college, setCollege] = useState(user.college);
@@ -95,7 +81,7 @@ export default function ProfileView() {
   ], [totalNotes, totalRevised, streakDays, totalVoiceNotes, level]);
 
   const earnedBadges = badges.filter(b => b.earned).length;
-  const monthlyReport = useMemo(() => getMonthlyReport(revisionLogs), [revisionLogs]);
+  const monthlyReport = useMemo(() => getMonthlyReport(revisionLogs, true), [revisionLogs]);
   const maxMonthly = Math.max(...monthlyReport.map(([, c]) => c), 1);
 
   const totalHours = weeklyHours.reduce((s, h) => s + h.hours, 0);

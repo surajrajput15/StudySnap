@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Sparkles, ArrowRight, Play } from 'lucide-react';
+import { Sparkles, Play } from 'lucide-react';
 
 const AI_CHIPS = [
   { emoji: '📝', label: 'Summaries' },

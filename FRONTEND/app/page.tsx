@@ -1,35 +1,48 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useSyncExternalStore } from 'react';
+import dynamic from 'next/dynamic';
 import { useStore } from '@/lib/store/useStore';
 import HomeScreen from '@/components/HomeScreen';
-import NoteEditor from '@/components/NoteEditor';
-import VoiceNotes from '@/components/VoiceNotes';
-import AiTutor from '@/components/AiTutor';
-import RevisionCalendar from '@/components/RevisionCalendar';
-import ProfileView from '@/components/ProfileView';
-import GamificationHub from '@/components/GamificationHub';
 import MobileDrawer from '@/components/MobileDrawer';
+
+const NoteEditor = dynamic(() => import('@/components/NoteEditor'), { ssr: false });
+const VoiceNotes = dynamic(() => import('@/components/VoiceNotes'), { ssr: false });
+const AiTutor = dynamic(() => import('@/components/AiTutor'), { ssr: false });
+const RevisionCalendar = dynamic(() => import('@/components/RevisionCalendar'), { ssr: false });
+const ProfileView = dynamic(() => import('@/components/ProfileView'), { ssr: false });
+const GamificationHub = dynamic(() => import('@/components/GamificationHub'), { ssr: false });
 import { 
   Home, FileText, Mic, Calendar, Sparkles, User, Sun, Moon, 
-  LogIn, Wifi, WifiOff, ChevronRight, Trophy, Menu
+  LogIn, ChevronRight, Trophy, Menu
 } from 'lucide-react';
 import { SignInButton, UserButton, useAuth, useUser } from '@clerk/nextjs';
+import Image from 'next/image';
 
 export default function Page() {
-  const { theme, toggleTheme, isOffline, activeNoteId, setActiveNoteId, updateProfile } = useStore();
+  const theme = useStore((s) => s.theme);
+  const toggleTheme = useStore((s) => s.toggleTheme);
+  const activeNoteId = useStore((s) => s.activeNoteId);
+  const setActiveNoteId = useStore((s) => s.setActiveNoteId);
+  const updateProfile = useStore((s) => s.updateProfile);
   const { isSignedIn } = useAuth();
   const { user: clerkUser } = useUser();
-  const [activeTab, setActiveTab] = useState<string>('home');
-  const [mounted, setMounted] = useState(false);
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    if (typeof window === 'undefined') return 'home';
+    const params = new URLSearchParams(window.location.search);
+    return params.get('returnTo') === 'ai' ? 'ai' : 'home';
+  });
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  useEffect(() => { setMounted(true); }, []);
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('returnTo') === 'ai') {
-      setActiveTab('ai');
       window.history.replaceState({}, '', '/');
     }
   }, []);
@@ -40,7 +53,7 @@ export default function Page() {
     } else if (!isSignedIn) {
       updateProfile({ name: 'Student' });
     }
-  }, [isSignedIn, clerkUser]);
+  }, [isSignedIn, clerkUser, updateProfile]);
 
   const handleEditNote = (noteId: string) => {
     setActiveNoteId(noteId);
@@ -93,7 +106,7 @@ export default function Page() {
       {/* ─── Desktop Sidebar ─── */}
       <aside className="app-sidebar">
         <div className="sidebar-brand" onClick={() => setActiveTab('home')}>
-          <img src="/window.svg" alt="StudySnap" className="sidebar-logo" />
+          <Image src="/window.svg" alt="StudySnap" className="sidebar-logo" width={512} height={512} unoptimized />
           <span className="sidebar-name">StudySnap</span>
         </div>
         <nav className="sidebar-nav">
@@ -144,7 +157,7 @@ export default function Page() {
               <Menu size={22} />
             </button>
             <span className="header-title" onClick={() => setActiveTab('home')}>
-              <img src="/window.svg" alt="StudySnap" className="header-mobile-logo" />
+              <Image src="/window.svg" alt="StudySnap" className="header-mobile-logo" width={512} height={512} unoptimized />
               <span className="header-brand-text">StudySnap</span>
               <span className="header-tab-name">{navItems.find(t => t.id === activeTab)?.label}</span>
             </span>

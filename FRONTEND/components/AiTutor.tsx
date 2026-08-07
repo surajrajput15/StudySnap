@@ -11,10 +11,11 @@ import rehypeKatex from 'rehype-katex';
 import {
   Sparkles, Send, Paperclip, Mic, Bot, User, BookOpen,
   FileText, LayoutGrid, HelpCircle, Languages, Lightbulb,
-  StopCircle, Copy, Check, X, ChevronDown, ChevronUp, Loader2,
+  Copy, Check, X, Loader2,
   ArrowLeft
 } from 'lucide-react';
 import SignInPrompt from '@/components/SignInPrompt';
+import { getSpeechRecognitionCtor } from '@/lib/speech';
 
 const QUICK_CHIPS = [
   { id: 'explain', label: 'Explain', icon: BookOpen, color: '#3B82F6', prompt: 'Explain this concept in simple terms with examples.' },
@@ -30,6 +31,10 @@ interface Message {
   content: string;
   isStreaming?: boolean;
   isError?: boolean;
+}
+
+interface NavigatorWithVirtualKeyboard extends Navigator {
+  virtualKeyboard?: { overlaysContent?: boolean };
 }
 
 type CodeLanguage = 'javascript' | 'typescript' | 'python' | 'java' | 'cpp' | 'c' | 'html' | 'css' | 'bash' | 'sql' | 'json' | 'xml' | 'rust' | 'go' | 'ruby' | 'php' | 'swift' | 'kotlin' | 'text';
@@ -126,7 +131,7 @@ function MessageMarkdown({ content }: { content: string }) {
       remarkPlugins={[remarkGfm, remarkMath]}
       rehypePlugins={[rehypeKatex]}
       components={{
-        code({ className, children, ...props }) {
+        code({ className, children }) {
           const isInline = !className;
           const codeStr = String(children).replace(/\n$/, '');
           if (isInline) return <InlineCode>{children}</InlineCode>;
@@ -170,7 +175,8 @@ const MessageItem = memo(function MessageItem({ msg, onRetry }: { msg: Message; 
 
 export default function AiTutor({ onBack }: { onBack?: () => void }) {
   const { getToken, isSignedIn, isLoaded } = useAuth();
-  const { activeAiTool, setActiveAiTool } = useStore();
+  const activeAiTool = useStore((s) => s.activeAiTool);
+  const setActiveAiTool = useStore((s) => s.setActiveAiTool);
   const [authTimedOut, setAuthTimedOut] = useState(false);
 
   useEffect(() => {
@@ -268,7 +274,7 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
     window.addEventListener('focusin', onFocusIn);
     window.addEventListener('resize', onWindowResize);
 
-    const virtualKeyboard = (navigator as any).virtualKeyboard;
+    const virtualKeyboard = (navigator as NavigatorWithVirtualKeyboard).virtualKeyboard;
     if (virtualKeyboard) {
       virtualKeyboard.overlaysContent = false;
     }
@@ -358,14 +364,16 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
       } else {
         renderErrorBubble(data.error || 'Failed to get response');
       }
-    } catch (err: any) {
-      if (err && (String(err?.message || '').includes('Authentication required') || String(err?.message || '').includes('401') || String(err?.message || '').includes('Invalid or expired session') || String(err?.message || '').includes('session has expired'))) {
+    } catch (err) {
+      const errorObj = err as { message?: string } | null;
+      const rawMessage = errorObj?.message || '';
+      if (errorObj && (rawMessage.includes('Authentication required') || rawMessage.includes('401') || rawMessage.includes('Invalid or expired session') || rawMessage.includes('session has expired'))) {
         isSendingRef.current = false;
         setIsLoading(false);
         return;
       }
 
-      const msg = err?.message || 'The AI could not respond. Please try again.';
+      const msg = rawMessage || 'The AI could not respond. Please try again.';
       const isCorsError = msg.includes('CORS') || msg.includes('cross-origin');
       const isTimeout = msg.includes('timeout') || msg.includes('timed out');
 
@@ -610,12 +618,12 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
                 title="Voice input"
                 aria-label="Use voice input"
                 onClick={() => {
-                  if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-                    const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
+                  const SpeechRecognition = getSpeechRecognitionCtor();
+                  if (SpeechRecognition) {
                     const recognition = new SpeechRecognition();
                     recognition.lang = 'en-US';
                     recognition.interimResults = false;
-                    recognition.onresult = (event: any) => {
+                    recognition.onresult = (event) => {
                       const transcript = event.results[0][0].transcript;
                       setInput(prev => prev + transcript);
                     };

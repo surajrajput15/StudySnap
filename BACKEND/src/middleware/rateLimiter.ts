@@ -1,33 +1,38 @@
 import rateLimit from 'express-rate-limit';
 
-export const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
+const SECOND = 1000;
+const MINUTE = 60 * SECOND;
+const HOUR = 60 * MINUTE;
+
+const limits = {
   standardHeaders: true,
   legacyHeaders: false,
+} as const;
+
+export const apiLimiter = rateLimit({
+  ...limits,
+  windowMs: 15 * MINUTE,
+  max: 100,
   message: { success: false, error: 'Too many requests. Please try again later.' },
 });
 
 export const authLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000,
+  ...limits,
+  windowMs: HOUR,
   max: 10,
-  standardHeaders: true,
-  legacyHeaders: false,
   message: { success: false, error: 'Too many auth attempts. Please try again later.' },
 });
 
 export const aiLimiter = rateLimit({
-  windowMs: 60 * 1000,
+  ...limits,
+  windowMs: MINUTE,
   max: 20,
-  standardHeaders: true,
-  legacyHeaders: false,
   message: { success: false, error: 'AI rate limit exceeded. Please wait a moment.' },
 });
 
 export const pinLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
+  ...limits,
+  windowMs: 15 * MINUTE,
   max: 20,
-  standardHeaders: true,
-  legacyHeaders: false,
   message: { success: false, error: 'Too many PIN attempts. Please try again later.' },
 });

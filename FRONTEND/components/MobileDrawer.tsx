@@ -6,6 +6,7 @@ import {
   BarChart3, Settings, Info, LogOut, LogIn, X
 } from 'lucide-react';
 import { SignInButton, useAuth, useUser, useClerk } from '@clerk/nextjs';
+import Image from 'next/image';
 import { useStore } from '@/lib/store/useStore';
 
 interface MobileDrawerProps {
@@ -32,7 +33,7 @@ export default function MobileDrawer({ open, onClose, activeTab, onNavigate }: M
   const { isSignedIn, isLoaded } = useAuth();
   const { user } = useUser();
   const { signOut } = useClerk();
-  const { updateProfile } = useStore();
+  const updateProfile = useStore((s) => s.updateProfile);
   const drawerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -74,7 +75,7 @@ export default function MobileDrawer({ open, onClose, activeTab, onNavigate }: M
       >
         <div className="drawer-header">
           <div className="drawer-header-top">
-            <img src="/window.svg" alt="StudySnap" className="drawer-logo" />
+            <Image src="/window.svg" alt="StudySnap" className="drawer-logo" width={512} height={512} unoptimized />
             <button className="drawer-close" onClick={onClose}>
               <X size={20} />
             </button>
@@ -85,7 +86,7 @@ export default function MobileDrawer({ open, onClose, activeTab, onNavigate }: M
             <div className="drawer-user">
               <div className="drawer-avatar">
                 {userImage ? (
-                  <img src={userImage} alt="avatar" className="drawer-avatar-img" />
+                  <Image src={userImage} alt="avatar" className="drawer-avatar-img" width={44} height={44} unoptimized />
                 ) : (
                   <span className="drawer-avatar-fallback">{userDisplayName[0]}</span>
                 )}

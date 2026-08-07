@@ -68,23 +68,6 @@ export function EmptyVoiceIllustration() {
   );
 }
 
-export function EmptyAiIllustration() {
-  return (
-    <svg width="160" height="120" viewBox="0 0 160 120" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="30" y="25" width="100" height="70" rx="16" fill="var(--primary)" opacity="0.08"/>
-      <rect x="36" y="31" width="88" height="58" rx="12" fill="var(--surface)" stroke="var(--outline-variant)" strokeWidth="1.5"/>
-      <circle cx="56" cy="56" r="12" fill="var(--primary-container)" opacity="0.5"/>
-      <path d="M52 56h8M56 52v8" stroke="var(--primary)" strokeWidth="2" strokeLinecap="round"/>
-      <text x="76" y="52" fontSize="10" fill="var(--on-surface-variant)" opacity="0.6" fontFamily="var(--font-body)">Hello!</text>
-      <text x="76" y="64" fontSize="10" fill="var(--on-surface-variant)" opacity="0.4" fontFamily="var(--font-body)">How can I help?</text>
-      <circle cx="40" cy="90" r="5" fill="var(--primary)" opacity="0.2"/>
-      <circle cx="120" cy="92" r="4" fill="var(--tertiary)" opacity="0.15"/>
-      <circle cx="52" cy="98" r="3" fill="var(--primary)" opacity="0.1"/>
-      <path d="M130 28l4-4M134 28l-4-4" stroke="var(--outline-variant)" strokeWidth="1.5" strokeLinecap="round" opacity="0.4"/>
-    </svg>
-  );
-}
-
 export function EmptyRevisionIllustration() {
   return (
     <svg width="160" height="120" viewBox="0 0 160 120" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -97,57 +80,6 @@ export function EmptyRevisionIllustration() {
       <circle cx="80" cy="83" r="3" fill="#10B981" opacity="0.2"/>
       <circle cx="110" cy="86" r="4" fill="var(--primary)" opacity="0.1"/>
       <path d="M20 45l8-8M28 45l-8-8" stroke="var(--outline-variant)" strokeWidth="1.5" strokeLinecap="round" opacity="0.3"/>
-    </svg>
-  );
-}
-
-export function EmptyProfileIllustration() {
-  return (
-    <svg width="160" height="120" viewBox="0 0 160 120" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="80" cy="40" r="24" fill="var(--primary-container)" opacity="0.4"/>
-      <circle cx="80" cy="40" r="16" fill="var(--surface)" stroke="var(--primary)" strokeWidth="2"/>
-      <circle cx="80" cy="36" r="6" fill="var(--primary)" opacity="0.3"/>
-      <path d="M74 48a8 8 0 0 1 12 0" stroke="var(--primary)" strokeWidth="2" strokeLinecap="round" opacity="0.4"/>
-      <rect x="36" y="72" width="88" height="6" rx="3" fill="var(--outline-variant)" opacity="0.4"/>
-      <rect x="44" y="84" width="72" height="5" rx="2.5" fill="var(--outline-variant)" opacity="0.25"/>
-      <rect x="50" y="95" width="60" height="4" rx="2" fill="var(--outline-variant)" opacity="0.15"/>
-      <circle cx="130" cy="30" r="18" fill="var(--primary)" opacity="0.06"/>
-      <path d="M126 30h8M130 26v8" stroke="var(--primary)" strokeWidth="2" strokeLinecap="round" opacity="0.3"/>
-      <circle cx="24" cy="28" r="12" fill="var(--tertiary)" opacity="0.06"/>
-      <path d="M21 28h6M24 25v6" stroke="var(--tertiary)" strokeWidth="1.5" strokeLinecap="round" opacity="0.25"/>
-    </svg>
-  );
-}
-
-export function EmptyFlashcardIllustration() {
-  return (
-    <svg width="160" height="120" viewBox="0 0 160 120" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="28" y="18" width="104" height="72" rx="12" fill="var(--primary)" opacity="0.08" transform="rotate(-4 80 54)"/>
-      <rect x="32" y="22" width="96" height="64" rx="10" fill="var(--surface)" stroke="var(--outline-variant)" strokeWidth="1.5" transform="rotate(-4 80 54)"/>
-      <text x="56" y="48" fontSize="11" fill="var(--on-surface-variant)" opacity="0.5" fontFamily="var(--font-body)" transform="rotate(-4 80 54)">Question ?</text>
-      <path d="M52 56l20 10M72 56l-20 10" stroke="var(--primary)" strokeWidth="1.5" strokeLinecap="round" opacity="0.3" transform="rotate(-4 80 54)"/>
-      <circle cx="132" cy="26" r="16" fill="var(--primary)" opacity="0.1"/>
-      <path d="M128 26h8M132 22v8" stroke="var(--primary)" strokeWidth="2" strokeLinecap="round" opacity="0.5"/>
-      <circle cx="24" cy="90" r="12" fill="var(--tertiary)" opacity="0.08"/>
-      <path d="M21 90h6M24 87v6" stroke="var(--tertiary)" strokeWidth="1.5" strokeLinecap="round" opacity="0.3"/>
-    </svg>
-  );
-}
-
-export function EmptyMcqIllustration() {
-  return (
-    <svg width="160" height="120" viewBox="0 0 160 120" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="80" cy="50" r="38" fill="var(--primary-container)" opacity="0.25"/>
-      <rect x="36" y="32" width="88" height="10" rx="5" fill="var(--surface)" stroke="var(--outline-variant)" strokeWidth="1.2"/>
-      <circle cx="46" cy="37" r="3" fill="none" stroke="var(--outline-variant)" strokeWidth="1.5"/>
-      <rect x="36" y="48" width="88" height="10" rx="5" fill="var(--surface)" stroke="var(--primary)" strokeWidth="1.5"/>
-      <circle cx="46" cy="53" r="3" fill="var(--primary)" opacity="0.5"/>
-      <rect x="36" y="64" width="88" height="10" rx="5" fill="var(--surface)" stroke="var(--outline-variant)" strokeWidth="1.2"/>
-      <circle cx="46" cy="69" r="3" fill="none" stroke="var(--outline-variant)" strokeWidth="1.5"/>
-      <rect x="36" y="80" width="88" height="10" rx="5" fill="var(--surface)" stroke="var(--outline-variant)" strokeWidth="1.2"/>
-      <circle cx="46" cy="85" r="3" fill="none" stroke="var(--outline-variant)" strokeWidth="1.5"/>
-      <path d="M130 20l3-3M133 20l-3-3" stroke="var(--outline-variant)" strokeWidth="1.5" strokeLinecap="round" opacity="0.3"/>
-      <circle cx="28" cy="100" r="4" fill="var(--primary)" opacity="0.1"/>
     </svg>
   );
 }

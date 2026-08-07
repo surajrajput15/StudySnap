@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { useStore, Note } from '@/lib/store/useStore';
+import { useStore } from '@/lib/store/useStore';
 import {
-  Sparkles, BookOpen, FileText, ListChecks, Clock,
+  Sparkles, BookOpen, FileText, Clock,
   Target, ChevronRight, Play, BarChart3,
   CheckCircle2, Flame, Plus, Search, Star, Pin, Trash2,
   Layers, FolderPlus, Grid3X3, List, Lock, ArrowRight
@@ -12,20 +12,14 @@ import { motion } from 'framer-motion';
 import confetti from 'canvas-confetti';
 import EmptyState, { EmptyNotesIllustration } from './EmptyState';
 import HeroAI from './HeroAI';
+import { WEEKDAYS, DAILY_GOAL, AI_TOOLS } from '@/lib/constants';
+import { formatShortDate, stripHtml } from '@/lib/utils';
 
 interface HomeScreenProps {
   onEditNote: (noteId: string) => void;
   onCreateNote: () => void;
   onNavigate: (tab: string) => void;
 }
-
-const QUICK_ACTIONS = [
-  { id: 'chat', icon: MessageSquare, label: 'AI Chat', desc: 'Ask anything', gradient: 'linear-gradient(135deg, #0061A4, #3399FF)', tab: 'ai' },
-  { id: 'summarize', icon: FileText, label: 'Summarize', desc: 'Condense notes', gradient: 'linear-gradient(135deg, #00497E, #0061A4)', tab: 'ai' },
-  { id: 'mcq', icon: ListChecks, label: 'Generate MCQ', desc: 'Test yourself', gradient: 'linear-gradient(135deg, #1a73e8, #4da6ff)', tab: 'ai' },
-  { id: 'flashcards', icon: GraduationCap, label: 'Flashcards', desc: 'Quick revision', gradient: 'linear-gradient(135deg, #0d47a1, #1976d2)', tab: 'ai' },
-  { id: 'translate', icon: Languages, label: 'Translate', desc: 'Any language', gradient: 'linear-gradient(135deg, #1565c0, #42a5f5)', tab: 'ai' },
-];
 
 const QUOTES = [
   { text: "The only way to learn mathematics is to do mathematics.", author: "Paul Halmos" },
@@ -36,7 +30,8 @@ const QUOTES = [
   { text: "Tell me and I forget. Teach me and I remember. Involve me and I learn.", author: "Benjamin Franklin" },
 ];
 
-const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const DAY_OF_YEAR = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
+const TODAY_QUOTE = QUOTES[DAY_OF_YEAR % QUOTES.length];
 
 function CircularProgress({ value, max, size = 80, strokeWidth = 6, color = 'var(--primary)' }: { value: number; max: number; size?: number; strokeWidth?: number; color?: string }) {
   const radius = (size - strokeWidth) / 2;
@@ -52,28 +47,25 @@ function CircularProgress({ value, max, size = 80, strokeWidth = 6, color = 'var
   );
 }
 
-function MessageSquare(props: any) { return <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>; }
-function GraduationCap(props: any) { return <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>; }
-function Languages(props: any) { return <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m5 8 6 6"/><path d="m4 14 6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="m22 22-5-10-5 10"/><path d="M14 18h6"/></svg>; }
-
-const AI_TOOLS = [
-  { id: 'summarize', emoji: '📝', title: 'Summarize', desc: 'Create concise notes instantly.', gradient: 'linear-gradient(135deg, #0061A4, #3399FF)' },
-  { id: 'mcq', emoji: '❓', title: 'MCQ Generator', desc: 'Generate practice questions.', gradient: 'linear-gradient(135deg, #7C3AED, #A78BFA)' },
-  { id: 'flashcards', emoji: '🧠', title: 'Flashcards', desc: 'Create smart flashcards.', gradient: 'linear-gradient(135deg, #EC4899, #F472B6)' },
-  { id: 'quiz', emoji: '🧩', title: 'Quiz Mode', desc: 'Test your knowledge.', gradient: 'linear-gradient(135deg, #F59E0B, #FBBF24)' },
-  { id: 'translate', emoji: '🌍', title: 'Translate', desc: 'Hindi ↔ English translation.', gradient: 'linear-gradient(135deg, #10B981, #34D399)' },
-  { id: 'explain', emoji: '💡', title: 'Explain Simply', desc: 'Understand difficult topics easily.', gradient: 'linear-gradient(135deg, #06B6D4, #22D3EE)' },
-  { id: 'mindmap', emoji: '🗺', title: 'Mind Map', desc: 'Visualize concepts.', gradient: 'linear-gradient(135deg, #F97316, #FB923C)' },
-  { id: 'pdf', emoji: '📄', title: 'AI PDF Assistant', desc: 'Analyze PDFs with AI.', gradient: 'linear-gradient(135deg, #6366F1, #818CF8)' },
-];
-
 export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: HomeScreenProps) {
-  const {
-    user, notes, categories, folders, activeFolderId, activeCategoryId, searchQuery,
-    addFolder, addCategory, deleteFolder, deleteCategory, setActiveFolderId, setActiveCategoryId,
-    setSearchQuery, togglePinNote, toggleFavoriteNote, deleteNote, markAsRevised, incrementStreak,
-    setActiveAiTool
-  } = useStore();
+  const user = useStore((s) => s.user);
+  const notes = useStore((s) => s.notes);
+  const categories = useStore((s) => s.categories);
+  const folders = useStore((s) => s.folders);
+  const activeFolderId = useStore((s) => s.activeFolderId);
+  const activeCategoryId = useStore((s) => s.activeCategoryId);
+  const searchQuery = useStore((s) => s.searchQuery);
+  const addFolder = useStore((s) => s.addFolder);
+  const addCategory = useStore((s) => s.addCategory);
+  const deleteFolder = useStore((s) => s.deleteFolder);
+  const deleteCategory = useStore((s) => s.deleteCategory);
+  const setActiveFolderId = useStore((s) => s.setActiveFolderId);
+  const setActiveCategoryId = useStore((s) => s.setActiveCategoryId);
+  const setSearchQuery = useStore((s) => s.setSearchQuery);
+  const deleteNote = useStore((s) => s.deleteNote);
+  const markAsRevised = useStore((s) => s.markAsRevised);
+  const incrementStreak = useStore((s) => s.incrementStreak);
+  const setActiveAiTool = useStore((s) => s.setActiveAiTool);
 
   const [newFolderName, setNewFolderName] = useState('');
   const [showFolderModal, setShowFolderModal] = useState(false);
@@ -84,36 +76,34 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
   const [unlockNoteId, setUnlockNoteId] = useState<string | null>(null);
   const [pinError, setPinError] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const filteredNotes = notes.filter((note) => {
+  const filteredNotes = useMemo(() => notes.filter((note) => {
     const matchesSearch = note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           note.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           note.tags.some(t => t.toLowerCase().includes(searchQuery.toLowerCase()));
     const matchesFolder = activeFolderId ? note.folderId === activeFolderId : true;
     const matchesCategory = activeCategoryId ? note.categoryId === activeCategoryId : true;
     return matchesSearch && matchesFolder && matchesCategory;
-  });
+  }), [notes, searchQuery, activeFolderId, activeCategoryId]);
 
-  const pinnedNotes = filteredNotes.filter(n => n.isPinned);
-  const unpinnedNotes = filteredNotes.filter(n => !n.isPinned);
-  const displayNotes = [...pinnedNotes, ...unpinnedNotes];
+  const pinnedNotes = useMemo(() => filteredNotes.filter(n => n.isPinned), [filteredNotes]);
+  const unpinnedNotes = useMemo(() => filteredNotes.filter(n => !n.isPinned), [filteredNotes]);
+  const displayNotes = useMemo(() => [...pinnedNotes, ...unpinnedNotes], [pinnedNotes, unpinnedNotes]);
 
-  const dueRevisionNotes = notes.filter((note) => {
-    if (!note.nextRevisionAt) return false;
-    return new Date(note.nextRevisionAt) <= new Date();
-  });
+  const dueRevisionNotes = useMemo(() => notes.filter((note) => {
+      if (!note.nextRevisionAt) return false;
+      return new Date(note.nextRevisionAt) <= new Date();
+    }), [notes]);
 
-  const recentNotes = [...notes].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()).slice(0, 6);
+  const recentNotes = useMemo(() => [...notes].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()).slice(0, 6), [notes]);
 
   const totalNotes = notes.length;
-  const totalRevised = notes.filter(n => n.revisionStreak > 0).length;
-  const totalPinned = notes.filter(n => n.isPinned).length;
-  const totalFavorites = notes.filter(n => n.isFavorite).length;
+  const totalRevised = useMemo(() => notes.filter(n => n.revisionStreak > 0).length, [notes]);
+  const totalPinned = useMemo(() => notes.filter(n => n.isPinned).length, [notes]);
+  const totalFavorites = useMemo(() => notes.filter(n => n.isFavorite).length, [notes]);
 
-  const dailyGoal = 5;
-  const dailyProgress = Math.min(notes.filter(n => {
-    const today = new Date().toISOString().split('T')[0];
-    return n.updatedAt.startsWith(today);
-  }).length, dailyGoal);
+  const dailyProgress = useMemo(() => Math.min(notes.filter(n => {
+    return n.updatedAt.startsWith(new Date().toISOString().split('T')[0]);
+  }).length, DAILY_GOAL), [notes]);
 
   const weeklyData = useMemo(() => {
     const today = new Date();
@@ -127,12 +117,7 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
   }, [notes]);
   const weeklyMax = Math.max(...weeklyData.map(d => d.count), 3);
 
-  const lastEditedNote = [...notes].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
-
-  const todayQuote = useMemo(() => {
-    const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
-    return QUOTES[dayOfYear % QUOTES.length];
-  }, []);
+  const lastEditedNote = useMemo(() => [...notes].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0], [notes]);
 
   const handleStreakClick = () => {
     incrementStreak();
@@ -177,22 +162,22 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
             <div className="hero-metric-card">
               <div className="hero-metric-header">
                 <Target size={15} />
-                <span>Today's Goal</span>
+                <span>Today&apos;s Goal</span>
               </div>
               <div className="hero-goal-body">
                 <div className="hero-ring-container">
-                  <CircularProgress value={dailyProgress} max={dailyGoal} size={64} strokeWidth={6} color="#ffffff" />
+                  <CircularProgress value={dailyProgress} max={DAILY_GOAL} size={64} strokeWidth={6} color="#ffffff" />
                   <div className="hero-ring-label">
                     <div className="hero-ring-value">{dailyProgress}</div>
-                    <div className="hero-ring-divider">/{dailyGoal}</div>
+                    <div className="hero-ring-divider">/{DAILY_GOAL}</div>
                   </div>
                 </div>
                 <div className="hero-goal-info">
                   <div className="hero-goal-text">
-                    {dailyProgress >= dailyGoal ? 'Goal completed! 🎉' : `${dailyGoal - dailyProgress} more to go`}
+                    {dailyProgress >= DAILY_GOAL ? 'Goal completed! 🎉' : `${DAILY_GOAL - dailyProgress} more to go`}
                   </div>
                   <div className="hero-progress-track">
-                    <div className="hero-progress-fill" style={{ width: `${(dailyProgress / dailyGoal) * 100}%` }} />
+                    <div className="hero-progress-fill" style={{ width: `${(dailyProgress / DAILY_GOAL) * 100}%` }} />
                   </div>
                 </div>
               </div>
@@ -213,7 +198,7 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
                     <div className="hero-continue-title">{lastEditedNote.title}</div>
                     <div className="hero-continue-meta">
                       {lastEditedNote.tags[0] && <span>#{lastEditedNote.tags[0]}</span>}
-                      <span>{new Date(lastEditedNote.updatedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
+                      <span>{formatShortDate(lastEditedNote.updatedAt)}</span>
                     </div>
                   </div>
                   <ChevronRight size={16} className="hero-chevron" />
@@ -230,7 +215,7 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
             <div className="hero-metric-card">
               <div className="hero-metric-header">
                 <Clock size={15} />
-                <span>Today's Revision</span>
+                <span>Today&apos;s Revision</span>
                 {dueRevisionNotes.length > 0 && (
                   <span className="hero-due-badge">{dueRevisionNotes.length} due</span>
                 )}
@@ -265,10 +250,10 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
 
           {/* Bottom: Motivational Quote */}
           <div className="hero-quote-row">
-            <span className="hero-quote-icon">"</span>
+            <span className="hero-quote-icon">&quot;</span>
             <div className="hero-quote-content">
-              <p className="hero-quote-text">{todayQuote.text}</p>
-              <span className="hero-quote-author">— {todayQuote.author}</span>
+              <p className="hero-quote-text">{TODAY_QUOTE.text}</p>
+              <span className="hero-quote-author">— {TODAY_QUOTE.author}</span>
             </div>
           </div>
         </div>
@@ -384,14 +369,14 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
                       <span style={{ fontSize: '13px', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{note.title}</span>
                     </div>
                     <p style={{ fontSize: '12px', color: 'var(--on-surface-variant)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.5 }}>
-                      {note.content.replace(/<[^>]*>/g, '').substring(0, 80)}
+                      {stripHtml(note.content).substring(0, 80)}
                     </p>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '8px' }}>
                       {note.tags.slice(0, 2).map((tag, i) => (
                         <span key={i} className="md3-chip" style={{ fontSize: '9px', padding: '2px 8px' }}>#{tag}</span>
                       ))}
                       <span style={{ marginLeft: 'auto', fontSize: '10px', color: 'var(--outline)' }}>
-                        {new Date(note.updatedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                        {formatShortDate(note.updatedAt)}
                       </span>
                     </div>
                   </div>
@@ -408,7 +393,7 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
             <h3 style={{ fontSize: '16px', fontWeight: 700 }}>Weekly Progress</h3>
           </div>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', height: '120px', paddingTop: '8px' }}>
-            {weeklyData.map((d, i) => (
+            {weeklyData.map((d) => (
               <div key={d.day} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', height: '100%', justifyContent: 'flex-end' }}>
                 <div style={{
                   width: '100%', maxWidth: '28px', borderRadius: '6px 6px 2px 2px',
@@ -557,7 +542,7 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
                       </div>
                     </div>
                     <p style={{ fontSize: '13px', color: 'var(--on-surface-variant)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.5 }}>
-                      {note.pinLock ? '[🔒 Locked Note]' : note.content.replace(/<[^>]*>/g, '').substring(0, 150)}
+                      {note.pinLock ? '[🔒 Locked Note]' : stripHtml(note.content).substring(0, 150)}
                     </p>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: 'auto' }}>
                       {noteCategory && <span className="md3-chip" style={{ fontSize: '10px', padding: '2px 10px', background: `${noteCategory.color}18`, color: noteCategory.color }}>{noteCategory.name}</span>}
@@ -566,7 +551,7 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
                       ))}
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--outline-variant)', paddingTop: '10px', marginTop: '4px' }}>
-                      <span style={{ fontSize: '11px', color: 'var(--outline)' }}>{new Date(note.updatedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
+                      <span style={{ fontSize: '11px', color: 'var(--outline)' }}>{formatShortDate(note.updatedAt)}</span>
                       <button onClick={(e) => { e.stopPropagation(); deleteNote(note.id); }} className="md3-btn-ghost" style={{ padding: '4px', color: 'var(--error)', fontSize: '12px' }}><Trash2 size={14} /></button>
                     </div>
                   </div>
@@ -587,12 +572,12 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
                         {note.isFavorite && <Star size={11} style={{ color: '#F59E0B', fill: '#F59E0B', flexShrink: 0 }} />}
                       </div>
                       <p style={{ fontSize: '12px', color: 'var(--on-surface-variant)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: '2px' }}>
-                        {note.content.replace(/<[^>]*>/g, '').substring(0, 100)}
+                        {stripHtml(note.content).substring(0, 100)}
                       </p>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
                       {noteCategory && <span className="md3-chip" style={{ fontSize: '10px', padding: '2px 10px', background: `${noteCategory.color}18`, color: noteCategory.color }}>{noteCategory.name}</span>}
-                      <span style={{ fontSize: '11px', color: 'var(--outline)', whiteSpace: 'nowrap' }}>{new Date(note.updatedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
+                      <span style={{ fontSize: '11px', color: 'var(--outline)', whiteSpace: 'nowrap' }}>{formatShortDate(note.updatedAt)}</span>
                       <button onClick={(e) => { e.stopPropagation(); deleteNote(note.id); }} className="md3-btn-ghost" style={{ padding: '4px', color: 'var(--error)' }}><Trash2 size={14} /></button>
                     </div>
                   </div>

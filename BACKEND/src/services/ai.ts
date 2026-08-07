@@ -1,7 +1,21 @@
 import Groq from 'groq-sdk';
+import type { ChatCompletionMessageParam } from 'groq-sdk/resources/chat/completions';
 import { env } from '../config/env';
+import { AI_MODEL } from '../config/constants';
 
-let groq: any = null;
+interface MockMcq {
+  question: string;
+  options: string[];
+  answer: number;
+  explanation: string;
+}
+
+interface MockFlashcard {
+  question: string;
+  answer: string;
+}
+
+let groq: Groq | null = null;
 
 if (env.GROQ_API_KEY) {
   groq = new Groq({ apiKey: env.GROQ_API_KEY });
@@ -10,11 +24,11 @@ if (env.GROQ_API_KEY) {
   console.warn('[ai] ⚠️ GROQ_API_KEY not set — AI will return mock responses');
 }
 
-export function getGroq() {
-  return groq;
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback;
 }
 
-export async function chatCompletion(messages: { role: string; content: string }[]) {
+export async function chatCompletion(messages: ChatCompletionMessageParam[]) {
   if (!groq) {
     console.log('[ai] mock → chatCompletion');
     return mockChatReply(messages);
@@ -22,7 +36,7 @@ export async function chatCompletion(messages: { role: string; content: string }
   try {
     console.log('[ai] groq → chatCompletion', { messages: messages.length });
     const response = await groq.chat.completions.create({
-      model: 'llama-3.1-8b-instant',
+      model: AI_MODEL,
       messages: [
         {
           role: 'system',
@@ -37,12 +51,9 @@ export async function chatCompletion(messages: { role: string; content: string }
     if (!content) throw new Error('Groq returned empty response');
     console.log(`[ai] groq → chatCompletion ✓ ${content.length} chars`);
     return content;
-  } catch (error: any) {
-    console.error('[ai] groq → chatCompletion ❌', {
-      message: error?.message,
-      status: error?.status,
-    });
-    throw new Error(error?.message || 'Groq AI request failed');
+  } catch (error) {
+    console.error('[ai] groq → chatCompletion ❌', getErrorMessage(error, 'Groq request failed'));
+    throw new Error(getErrorMessage(error, 'Groq AI request failed'), { cause: error });
   }
 }
 
@@ -54,7 +65,7 @@ export async function summarizeNote(title: string, content: string) {
   try {
     console.log('[ai] groq → summarizeNote', { title: title.substring(0, 40), contentLength: content.length });
     const response = await groq.chat.completions.create({
-      model: 'llama-3.1-8b-instant',
+      model: AI_MODEL,
       messages: [
         {
           role: 'system',
@@ -65,21 +76,21 @@ export async function summarizeNote(title: string, content: string) {
       temperature: 0.3,
     });
     return response.choices[0]?.message?.content || 'Could not generate summary.';
-  } catch (error: any) {
-    console.error('[ai] groq → summarizeNote ❌', error?.message);
-    throw new Error(error?.message || 'Summary generation failed');
+  } catch (error) {
+    console.error('[ai] groq → summarizeNote ❌', getErrorMessage(error, 'Summary generation failed'));
+    throw new Error(getErrorMessage(error, 'Summary generation failed'), { cause: error });
   }
 }
 
-export async function generateMcqs(title: string, content: string) {
+export async function generateMcqs(title: string, content: string): Promise<MockMcq[]> {
   if (!groq) {
     console.log('[ai] mock → generateMcqs');
     return mockMcqs();
   }
   try {
-    console.log('[ai] groq → generateMcqs', { contentLength: content.length });
+    console.log('[ai] groq → generateMcqs', { label: title, contentLength: content.length });
     const response = await groq.chat.completions.create({
-      model: 'llama-3.1-8b-instant',
+      model: AI_MODEL,
       messages: [
         {
           role: 'system',
@@ -89,24 +100,22 @@ export async function generateMcqs(title: string, content: string) {
       ],
       temperature: 0.5,
     });
-    const raw = response.choices[0]?.message?.content || '[]';
-    const match = raw.match(/\[\s*\{[\s\S]*\}\s*\]/);
-    return JSON.parse(match ? match[0] : '[]');
-  } catch (error: any) {
-    console.error('[ai] groq → generateMcqs ❌', error?.message);
-    throw new Error(error?.message || 'MCQ generation failed');
+    return parseJsonArray<MockMcq>(response.choices[0]?.message?.content);
+  } catch (error) {
+    console.error('[ai] groq → generateMcqs ❌', getErrorMessage(error, 'MCQ generation failed'));
+    throw new Error(getErrorMessage(error, 'MCQ generation failed'), { cause: error });
   }
 }
 
-export async function generateFlashcards(title: string, content: string) {
+export async function generateFlashcards(title: string, content: string): Promise<MockFlashcard[]> {
   if (!groq) {
     console.log('[ai] mock → generateFlashcards');
     return mockFlashcards();
   }
   try {
-    console.log('[ai] groq → generateFlashcards', { contentLength: content.length });
+    console.log('[ai] groq → generateFlashcards', { label: title, contentLength: content.length });
     const response = await groq.chat.completions.create({
-      model: 'llama-3.1-8b-instant',
+      model: AI_MODEL,
       messages: [
         {
           role: 'system',
@@ -116,12 +125,10 @@ export async function generateFlashcards(title: string, content: string) {
       ],
       temperature: 0.5,
     });
-    const raw = response.choices[0]?.message?.content || '[]';
-    const match = raw.match(/\[\s*\{[\s\S]*\}\s*\]/);
-    return JSON.parse(match ? match[0] : '[]');
-  } catch (error: any) {
-    console.error('[ai] groq → generateFlashcards ❌', error?.message);
-    throw new Error(error?.message || 'Flashcard generation failed');
+    return parseJsonArray<MockFlashcard>(response.choices[0]?.message?.content);
+  } catch (error) {
+    console.error('[ai] groq → generateFlashcards ❌', getErrorMessage(error, 'Flashcard generation failed'));
+    throw new Error(getErrorMessage(error, 'Flashcard generation failed'), { cause: error });
   }
 }
 
@@ -134,7 +141,7 @@ export async function translateText(content: string, lang: 'hindi' | 'english') 
     const label = lang === 'hindi' ? 'Hindi' : 'English';
     console.log('[ai] groq → translateText', { lang, contentLength: content.length });
     const response = await groq.chat.completions.create({
-      model: 'llama-3.1-8b-instant',
+      model: AI_MODEL,
       messages: [
         {
           role: 'system',
@@ -145,21 +152,27 @@ export async function translateText(content: string, lang: 'hindi' | 'english') 
       temperature: 0.2,
     });
     return response.choices[0]?.message?.content || 'Translation failed.';
-  } catch (error: any) {
-    console.error('[ai] groq → translateText ❌', error?.message);
-    throw new Error(error?.message || 'Translation failed');
+  } catch (error) {
+    console.error('[ai] groq → translateText ❌', getErrorMessage(error, 'Translation failed'));
+    throw new Error(getErrorMessage(error, 'Translation failed'), { cause: error });
   }
 }
 
-function mockChatReply(messages: { role: string; content: string }[]) {
-  const last = messages[messages.length - 1]?.content?.toLowerCase() || '';
-  if (last.includes('hello') || last.includes('hi')) {
+function parseJsonArray<T>(raw: string | null | undefined): T[] {
+  const match = (raw || '[]').match(/\[\s*\{[\s\S]*\}\s*\]/);
+  return JSON.parse(match ? match[0] : '[]') as T[];
+}
+
+function mockChatReply(messages: ChatCompletionMessageParam[]) {
+  const last = messages[messages.length - 1]?.content;
+  const text = (typeof last === 'string' ? last : '').toLowerCase();
+  if (text.includes('hello') || text.includes('hi')) {
     return 'Hello! I am StudyBot. Ask me to summarize notes, generate flashcards, or explain any topic!';
   }
-  if (last.includes('summarize')) {
+  if (text.includes('summarize')) {
     return 'Send me notes text and I will generate a structured summary for you.';
   }
-  if (last.includes('explain') || last.includes('what')) {
+  if (text.includes('explain') || text.includes('what')) {
     return 'In simple terms, think of it like building blocks. Each concept stacks on the previous one. What specific topic would you like me to break down?';
   }
   return 'I can help you study better! Try asking me to explain a concept, generate quiz questions, or create a revision schedule. (Set GROQ_API_KEY for full AI power)';
@@ -169,7 +182,7 @@ function mockSummary(title: string) {
   return `### Summary: ${title || 'Study Note'}\n\n**Core Concepts:** Key definitions and relationships from the material.\n**Takeaway:** Regular review improves retention.\n**Next:** Test yourself with flashcards.`;
 }
 
-function mockMcqs() {
+function mockMcqs(): MockMcq[] {
   return [
     { question: 'What is the best way to retain study material?', options: ['Passive reading', 'Active recall', 'Cramming', 'Skipping'], answer: 1, explanation: 'Active recall forces retrieval, strengthening memory pathways.' },
     { question: 'What does spaced repetition prevent?', options: ['Overlearning', 'Forgetting curve', 'Burnout', 'Procrastination'], answer: 1, explanation: 'It schedules reviews right before forgetting would occur.' },
@@ -177,7 +190,7 @@ function mockMcqs() {
   ];
 }
 
-function mockFlashcards() {
+function mockFlashcards(): MockFlashcard[] {
   return [
     { question: 'What is active recall?', answer: 'A learning method where you actively retrieve information from memory.' },
     { question: 'What is spaced repetition?', answer: 'Reviewing material at increasing intervals to combat the forgetting curve.' },

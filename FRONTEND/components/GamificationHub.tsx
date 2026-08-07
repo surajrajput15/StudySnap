@@ -3,13 +3,13 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useStore } from '@/lib/store/useStore';
 import {
-  Zap, Trophy, Flame, Target, Star, Medal, Crown, Coins,
-  TrendingUp, CalendarDays, Sparkles, User, CheckCircle, Gift,
-  ArrowUp, Lock, Unlock, GiftIcon
+  Zap, Trophy, Flame, Target, Crown, Coins,
+  TrendingUp, CalendarDays, Sparkles, CheckCircle, Gift,
+  Lock, GiftIcon
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-
-const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+import { WEEKDAYS } from '@/lib/constants';
+import { getXpLevel, getMonthlyReport } from '@/lib/gamification';
 
 const ALL_ACHIEVEMENTS = [
   { id: 'first-note', label: 'First Note', emoji: '📝', description: 'Create your first study note', xpReward: 50, coinReward: 10 },
@@ -37,24 +37,6 @@ const MOCK_LEADERBOARD = [
   { rank: 8, name: 'StudyBuddy', xp: 2500, level: 5, avatar: '🤝' },
 ];
 
-function getXpLevel(xp: number) {
-  const level = Math.floor(Math.sqrt(xp / 100)) + 1;
-  const current = 100 * (level - 1) ** 2;
-  const next = 100 * level ** 2;
-  const progress = Math.min((xp - current) / (next - current) * 100, 100);
-  return { level, progress, current, next };
-}
-
-function getMonthlyReport(revisionLogs: { revisedAt: string }[]) {
-  const months: Record<string, number> = {};
-  for (const log of revisionLogs) {
-    const d = new Date(log.revisedAt);
-    const m = d.toLocaleString('en', { month: 'short' });
-    months[m] = (months[m] || 0) + 1;
-  }
-  return Object.entries(months).slice(-6);
-}
-
 function generateWeeklyChallenge(): { id: string; label: string; description: string; target: number; xpReward: number; coinReward: number } {
   const challenges = [
     { label: 'Note Machine', description: 'Create notes this week', target: 10, xpReward: 500, coinReward: 100 },
@@ -67,25 +49,32 @@ function generateWeeklyChallenge(): { id: string; label: string; description: st
 }
 
 export default function GamificationHub() {
-  const {
-    notes, voiceNotes, revisionLogs, coins, earnedAchievements,
-    earnAchievement, addCoins, weeklyChallenge, setWeeklyChallenge,
-    updateWeeklyProgress, dailyGoal, dailyProgress, incrementDailyProgress,
-    checkAndResetDaily, user
-  } = useStore();
+  const notes = useStore((s) => s.notes);
+  const voiceNotes = useStore((s) => s.voiceNotes);
+  const revisionLogs = useStore((s) => s.revisionLogs);
+  const coins = useStore((s) => s.coins);
+  const earnedAchievements = useStore((s) => s.earnedAchievements);
+  const earnAchievement = useStore((s) => s.earnAchievement);
+  const addCoins = useStore((s) => s.addCoins);
+  const weeklyChallenge = useStore((s) => s.weeklyChallenge);
+  const setWeeklyChallenge = useStore((s) => s.setWeeklyChallenge);
+  const dailyGoal = useStore((s) => s.dailyGoal);
+  const dailyProgress = useStore((s) => s.dailyProgress);
+  const checkAndResetDaily = useStore((s) => s.checkAndResetDaily);
+  const user = useStore((s) => s.user);
 
   const [showReward, setShowReward] = useState<{ xp: number; coins: number; message: string } | null>(null);
   const [showAllAchievements, setShowAllAchievements] = useState(false);
   const [leaderboardTab, setLeaderboardTab] = useState<'global' | 'friends'>('global');
 
-  useEffect(() => { checkAndResetDaily(); }, []);
+  useEffect(() => { checkAndResetDaily(); }, [checkAndResetDaily]);
 
   useEffect(() => {
     if (!weeklyChallenge) {
       const challenge = generateWeeklyChallenge();
       setWeeklyChallenge({ ...challenge, progress: 0, weekStart: new Date().toISOString().split('T')[0] });
     }
-  }, []);
+  }, [weeklyChallenge, setWeeklyChallenge]);
 
   const xp = useMemo(() => {
     return notes.length * 10 + voiceNotes.length * 15 + revisionLogs.length * 20 + (user.streakCount || 0) * 5;

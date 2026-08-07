@@ -1,7 +1,8 @@
 import { verifyToken } from '@clerk/backend';
+import { RequestHandler } from 'express';
 import { env } from '../config/env';
 
-export async function verifySession(token: string) {
+export async function verifySession(token: string): Promise<{ userId: string }> {
   if (!env.CLERK_SECRET_KEY) {
     throw new Error('Clerk not configured');
   }
@@ -12,21 +13,23 @@ export async function verifySession(token: string) {
   return { userId: claims.sub };
 }
 
-export async function authMiddleware(req: any, res: any, next: any) {
+export const authMiddleware: RequestHandler = async (req, res, next) => {
   const authHeader = req.headers.authorization;
+  const tokenHeader = req.headers['x-session-token'];
   const sessionToken = authHeader?.startsWith('Bearer ')
     ? authHeader.slice(7)
-    : req.headers['x-session-token'];
+    : Array.isArray(tokenHeader) ? tokenHeader[0] : tokenHeader;
 
   if (!sessionToken) {
-    return res.status(401).json({ success: false, error: 'Authentication required' });
+    res.status(401).json({ success: false, error: 'Authentication required' });
+    return;
   }
 
   try {
     const { userId } = await verifySession(sessionToken);
     req.userId = userId;
     next();
-  } catch (error) {
-    return res.status(401).json({ success: false, error: 'Invalid or expired session' });
+  } catch {
+    res.status(401).json({ success: false, error: 'Invalid or expired session' });
   }
-}
+};

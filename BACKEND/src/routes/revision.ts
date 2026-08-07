@@ -14,13 +14,19 @@ interface RevisionLog {
   nextScheduledAt: string;
 }
 
-let mockRevisionLogs: RevisionLog[] = [];
-let mockNotesRevision: { [key: string]: { revisionStreak: number; lastRevisedAt: string; nextRevisionAt: string } } = {};
+interface NoteRevisionStatus {
+  revisionStreak: number;
+  lastRevisedAt: string;
+  nextRevisionAt: string;
+}
+
+const mockRevisionLogs: RevisionLog[] = [];
+const mockNotesRevision: Record<string, NoteRevisionStatus> = {};
 
 router.use(authMiddleware);
 
 router.post('/mark', validate(revisionSchema), (req: Request, res: Response) => {
-  const userId = (req as any).userId;
+  const userId = req.userId!;
   const { noteId, rating } = req.body;
 
   const nextRev = computeNextRevision(rating);
@@ -48,13 +54,13 @@ router.post('/mark', validate(revisionSchema), (req: Request, res: Response) => 
 });
 
 router.get('/logs', (req: Request, res: Response) => {
-  const userId = (req as any).userId;
+  const userId = req.userId!;
   const logs = mockRevisionLogs.filter(l => l.userId === userId);
   res.json({ success: true, logs });
 });
 
 router.get('/status/:noteId', (req: Request, res: Response) => {
-  const userId = (req as any).userId;
+  const userId = req.userId!;
   const noteId = req.params.noteId as string;
   const status = mockNotesRevision[`${userId}:${noteId}`] || null;
   res.json({ success: true, status });

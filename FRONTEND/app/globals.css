@@ -710,13 +710,6 @@ h1, h2, h3, h4, h5, h6 {
 .stagger > *:nth-child(7) { animation-delay: 0.26s; }
 .stagger > *:nth-child(8) { animation-delay: 0.30s; }
 
-/* ─── Leaflet Override ─── */
-.leaflet-container {
-  border-radius: var(--card-radius-lg);
-  box-shadow: var(--elevation-1);
-  border: 1px solid var(--outline-variant);
-}
-
 /* ─── AI Hero Section ─── */
 /* ─── Screenshot Split Divider ─── */
 .screenshot-divider {

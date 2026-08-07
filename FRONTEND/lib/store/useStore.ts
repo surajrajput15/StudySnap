@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { DAILY_GOAL, REVISION_INTERVAL_DAYS } from '../constants';
+import { dateKey } from '../utils';
 
 export interface Note {
   id: string;
@@ -56,16 +58,6 @@ export interface RevisionLog {
   nextScheduledAt: string;
 }
 
-export interface Achievement {
-  id: string;
-  label: string;
-  emoji: string;
-  description: string;
-  condition: (state: AppState) => boolean;
-  xpReward: number;
-  coinReward: number;
-}
-
 export interface WeeklyChallenge {
   id: string;
   label: string;
@@ -102,14 +94,12 @@ interface AppState {
 
   // Theme Actions
   toggleTheme: () => void;
-  setTheme: (theme: 'light' | 'dark') => void;
 
   // Profile Actions
   updateProfile: (profile: Partial<UserProfile>) => void;
   incrementStreak: () => void;
 
   // Notes Actions
-  setNotes: (notes: Note[]) => void;
   addNote: (note: Omit<Note, 'id' | 'createdAt' | 'updatedAt' | 'lastRevisedAt' | 'nextRevisionAt' | 'revisionStreak'> & { 
     id?: string;
     lastRevisedAt?: string | null;
@@ -118,38 +108,26 @@ interface AppState {
   }) => Note;
   updateNote: (id: string, updates: Partial<Note>) => void;
   deleteNote: (id: string) => void;
-  togglePinNote: (id: string) => void;
-  toggleFavoriteNote: (id: string) => void;
-  lockNote: (id: string, pin: string) => void;
-  unlockNote: (id: string) => void;
-  
+
   // Voice Notes Actions
-  setVoiceNotes: (voiceNotes: VoiceNote[]) => void;
   addVoiceNote: (voiceNote: Omit<VoiceNote, 'id' | 'createdAt'> & { id?: string }) => VoiceNote;
   deleteVoiceNote: (id: string) => void;
 
   // Categories Actions
-  setCategories: (categories: Category[]) => void;
   addCategory: (category: Omit<Category, 'id'>) => Category;
   deleteCategory: (id: string) => void;
 
   // Folders Actions
-  setFolders: (folders: Folder[]) => void;
   addFolder: (folder: Omit<Folder, 'id'>) => Folder;
   deleteFolder: (id: string) => void;
 
   // Revision Actions
   markAsRevised: (noteId: string, rating: 'easy' | 'medium' | 'hard') => void;
-  setRevisionLogs: (logs: RevisionLog[]) => void;
 
   // Gamification Actions
   addCoins: (amount: number) => void;
-  spendCoins: (amount: number) => boolean;
   earnAchievement: (id: string) => void;
   setWeeklyChallenge: (challenge: WeeklyChallenge | null) => void;
-  updateWeeklyProgress: (amount: number) => void;
-  incrementDailyProgress: (amount: number) => void;
-  resetDailyProgress: () => void;
   checkAndResetDaily: () => void;
 
   // Sync / App UI State Actions
@@ -190,7 +168,7 @@ const DEFAULT_CATEGORIES: Category[] = [
 
 export const useStore = create<AppState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       theme: 'light',
       user: {
         name: 'Student',
@@ -199,7 +177,7 @@ export const useStore = create<AppState>()(
         semester: '',
         studyGoals: 'Complete my daily study goals and revise consistently!',
         streakCount: 1,
-        lastActiveDate: new Date().toISOString().split('T')[0],
+        lastActiveDate: dateKey(),
       },
       notes: [],
       voiceNotes: [],
@@ -209,9 +187,9 @@ export const useStore = create<AppState>()(
       coins: 0,
       earnedAchievements: [],
       weeklyChallenge: null,
-      dailyGoal: 5,
+      dailyGoal: DAILY_GOAL,
       dailyProgress: 0,
-      lastDailyReset: new Date().toISOString().split('T')[0],
+      lastDailyReset: dateKey(),
       isOffline: false,
       activeNoteId: null,
       activeFolderId: null,
@@ -220,13 +198,12 @@ export const useStore = create<AppState>()(
       activeAiTool: null,
 
       toggleTheme: () => set((state) => ({ theme: state.theme === 'light' ? 'dark' : 'light' })),
-      setTheme: (theme) => set({ theme }),
 
       updateProfile: (updates) => set((state) => ({
         user: { ...state.user, ...updates, name: updates.name || state.user.name }
       })),
       incrementStreak: () => set((state) => {
-        const today = new Date().toISOString().split('T')[0];
+        const today = dateKey();
         const lastActive = state.user.lastActiveDate;
 
         if (lastActive === today) {
@@ -237,7 +214,7 @@ export const useStore = create<AppState>()(
         if (lastActive) {
           const yesterday = new Date();
           yesterday.setDate(yesterday.getDate() - 1);
-          const yesterdayStr = yesterday.toISOString().split('T')[0];
+          const yesterdayStr = dateKey(yesterday);
 
           if (lastActive === yesterdayStr) {
             newStreak += 1;
@@ -257,7 +234,6 @@ export const useStore = create<AppState>()(
         };
       }),
 
-      setNotes: (notes) => set({ notes }),
       addNote: (noteData) => {
         const newNote: Note = {
           id: noteData.id || crypto.randomUUID(),
@@ -285,20 +261,7 @@ export const useStore = create<AppState>()(
         notes: state.notes.filter((n) => n.id !== id),
         activeNoteId: state.activeNoteId === id ? null : state.activeNoteId
       })),
-      togglePinNote: (id) => set((state) => ({
-        notes: state.notes.map((n) => n.id === id ? { ...n, isPinned: !n.isPinned } : n)
-      })),
-      toggleFavoriteNote: (id) => set((state) => ({
-        notes: state.notes.map((n) => n.id === id ? { ...n, isFavorite: !n.isFavorite } : n)
-      })),
-      lockNote: (id, pin) => set((state) => ({
-        notes: state.notes.map((n) => n.id === id ? { ...n, pinLock: pin } : n)
-      })),
-      unlockNote: (id) => set((state) => ({
-        notes: state.notes.map((n) => n.id === id ? { ...n, pinLock: null } : n)
-      })),
 
-      setVoiceNotes: (voiceNotes) => set({ voiceNotes }),
       addVoiceNote: (voiceNoteData) => {
         const newVoiceNote: VoiceNote = {
           id: voiceNoteData.id || crypto.randomUUID(),
@@ -315,7 +278,6 @@ export const useStore = create<AppState>()(
         voiceNotes: state.voiceNotes.filter((vn) => vn.id !== id)
       })),
 
-      setCategories: (categories) => set({ categories }),
       addCategory: (categoryData) => {
         const newCategory: Category = {
           id: crypto.randomUUID(),
@@ -330,7 +292,6 @@ export const useStore = create<AppState>()(
         activeCategoryId: state.activeCategoryId === id ? null : state.activeCategoryId
       })),
 
-      setFolders: (folders) => set({ folders }),
       addFolder: (folderData) => {
         const newFolder: Folder = {
           id: crypto.randomUUID(),
@@ -347,12 +308,9 @@ export const useStore = create<AppState>()(
 
       markAsRevised: (noteId, rating) => set((state) => {
         const today = new Date();
-        
-        // Simple spaced repetition interval computation based on rating:
-        // Easy: 7 days, Medium: 3 days, Hard: 1 day
-        const daysToAdd = rating === 'easy' ? 7 : rating === 'medium' ? 3 : 1;
+
         const nextRev = new Date();
-        nextRev.setDate(today.getDate() + daysToAdd);
+        nextRev.setDate(today.getDate() + REVISION_INTERVAL_DAYS[rating]);
 
         const newLog: RevisionLog = {
           id: crypto.randomUUID(),
@@ -379,29 +337,15 @@ export const useStore = create<AppState>()(
           notes: updatedNotes,
         };
       }),
-      setRevisionLogs: (revisionLogs) => set({ revisionLogs }),
 
       // Gamification Actions
       addCoins: (amount) => set((state) => ({ coins: state.coins + amount })),
-      spendCoins: (amount) => {
-        const state = get();
-        if (state.coins < amount) return false;
-        set({ coins: state.coins - amount });
-        return true;
-      },
       earnAchievement: (id) => set((state) => ({
         earnedAchievements: state.earnedAchievements.includes(id) ? state.earnedAchievements : [...state.earnedAchievements, id]
       })),
       setWeeklyChallenge: (challenge) => set({ weeklyChallenge: challenge }),
-      updateWeeklyProgress: (amount) => set((state) => ({
-        weeklyChallenge: state.weeklyChallenge ? { ...state.weeklyChallenge, progress: state.weeklyChallenge.progress + amount } : state.weeklyChallenge
-      })),
-      incrementDailyProgress: (amount) => set((state) => ({
-        dailyProgress: state.dailyProgress + amount
-      })),
-      resetDailyProgress: () => set({ dailyProgress: 0, lastDailyReset: new Date().toISOString().split('T')[0] }),
       checkAndResetDaily: () => set((state) => {
-        const today = new Date().toISOString().split('T')[0];
+        const today = dateKey();
         if (state.lastDailyReset !== today) {
           return { dailyProgress: 0, lastDailyReset: today };
         }

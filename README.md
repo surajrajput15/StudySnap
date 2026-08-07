@@ -260,7 +260,6 @@ studysnap/
 │   │   ├── NoteEditor.tsx               # Rich text editor with auto-save
 │   │   ├── VoiceNotes.tsx              # Audio recorder + transcription
 │   │   ├── AiTutor.tsx                 # AI chat with streaming
-│   │   ├── AiHelper.tsx                # Summarize, MCQs, flashcards
 │   │   ├── RevisionCalendar.tsx        # Spaced repetition scheduler
 │   │   ├── GamificationHub.tsx         # Achievements, XP, leaderboard
 │   │   ├── ProfileView.tsx             # Student profile + study zones
@@ -282,20 +281,19 @@ studysnap/
 │       ├── routes/                     # REST API endpoints
 │       │   ├── ai.ts                   # /api/ai/* — Groq integration
 │       │   ├── notes.ts                # /api/notes/* — CRUD
-│       │   ├── voiceNotes.ts           # /api/voice-notes/*
-│       │   ├── revision.ts            # /api/revision/*
-│       │   └── webhooks.ts            # External webhooks
+│   │       ├── voice-notes.ts           # /api/voice-notes/*
+│   │       ├── revision.ts            # /api/revision/*
+│   │       └── webhooks.ts            # External webhooks
 │       ├── services/                   # Business logic
 │       │   ├── ai.ts                   # Groq chat, summarize, MCQ, translate
-│       │   ├── email.ts               # Brevo transactional emails
-│       │   └── storage.ts             # Cloudinary uploads
+│       │   └── cache.ts                # Redis caching
 │       ├── middleware/
 │       │   ├── auth.ts                # Clerk JWT verification
 │       │   ├── security.ts            # CORS, Helmet, CSRF
 │       │   └── rateLimiter.ts         # 20 req/min AI limit
 │       ├── db/                         # Drizzle ORM schema + migrations
-│       ├── config/env.ts              # Environment config
-│       └── types/                      # TypeScript interfaces
+│       ├── config/                      # env.ts + constants
+│       └── types/                       # TypeScript interfaces (express.d.ts)
 │
 ├── .env.example                        # Environment template
 └── package.json                        # Root scripts

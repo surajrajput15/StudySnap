@@ -36,7 +36,7 @@
 | `components/HomeScreen.tsx` | Dashboard — hero, streak, stats, search, subjects, folders, notes grid/list |
 | `components/NoteEditor.tsx` | Full editor — auto-save, TTS/STT, PIN lock, PDF export, tags |
 | `components/VoiceNotes.tsx` | Audio recording + playback + real-time transcription |
-| `components/AiHelper.tsx` | AI chat, summarize, MCQ quiz, flashcards, Hindi/English translate |
+| `components/AiTutor.tsx` | AI chat, summarize, MCQ quiz, flashcards, Hindi/English translate |
 | `components/RevisionCalendar.tsx` | Spaced repetition scheduler |
 | `components/ProfileView.tsx` | Student profile with stats and Leaflet study zones map |
 | `lib/store/useStore.ts` | Zustand store — 24 subjects, user, notes, revision system |

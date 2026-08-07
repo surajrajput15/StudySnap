@@ -1,13 +1,14 @@
-import { Router, raw, Request, Response } from 'express';
+import { Router, raw } from 'express';
 import { Webhook, WebhookVerificationError } from 'svix';
 import { env } from '../config/env';
 
 const router = Router();
 
-router.post('/clerk', raw({ type: 'application/json' }), async (req: Request, res: Response) => {
+router.post('/clerk', raw({ type: 'application/json' }), async (req, res) => {
   if (!env.CLERK_WEBHOOK_SECRET) {
     console.error('[Webhook] ⚠️ CLERK_WEBHOOK_SECRET is not set. Rejecting webhook.');
-    return res.status(500).json({ success: false, error: 'Webhook secret not configured' });
+    res.status(500).json({ success: false, error: 'Webhook secret not configured' });
+    return;
   }
 
   const wh = new Webhook(env.CLERK_WEBHOOK_SECRET);
@@ -18,41 +19,36 @@ router.post('/clerk', raw({ type: 'application/json' }), async (req: Request, re
   };
 
   if (!headers['svix-id'] || !headers['svix-timestamp'] || !headers['svix-signature']) {
-    return res.status(400).json({ success: false, error: 'Missing Svix signature headers' });
+    res.status(400).json({ success: false, error: 'Missing Svix signature headers' });
+    return;
   }
 
-  let event: any;
+  let event: unknown;
   try {
     event = wh.verify(req.body, headers);
   } catch (error) {
     if (error instanceof WebhookVerificationError) {
-      console.warn('[Webhook] ❌ Invalid signature:', (error as any)?.message);
-      return res.status(401).json({ success: false, error: 'Invalid webhook signature' });
+      console.warn('[Webhook] ❌ Invalid signature:', error.message);
+      res.status(401).json({ success: false, error: 'Invalid webhook signature' });
+      return;
     }
-    console.error('[Webhook] ❌ Verification error:', (error as any)?.message);
-    return res.status(400).json({ success: false, error: 'Malformed webhook payload' });
+    console.error('[Webhook] ❌ Verification error:', error instanceof Error ? error.message : error);
+    res.status(400).json({ success: false, error: 'Malformed webhook payload' });
+    return;
   }
 
   try {
-    if (!event?.type) {
-      return res.status(400).json({ success: false, error: 'Malformed webhook event' });
+    if (event === null || typeof event !== 'object' || !('type' in event)) {
+      res.status(400).json({ success: false, error: 'Malformed webhook event' });
+      return;
     }
 
-    console.log('[Webhook] Clerk event:', event.type);
-
-    switch (event.type) {
-      case 'user.created':
-      case 'user.updated':
-        break;
-      case 'session.created':
-        break;
-      default:
-        break;
-    }
+    const eventType = (event as { type: string }).type;
+    console.log('[Webhook] Clerk event:', eventType);
 
     res.json({ success: true, received: true });
-  } catch (error: any) {
-    console.error('[Webhook] Error:', error?.message);
+  } catch (error) {
+    console.error('[Webhook] Error:', error instanceof Error ? error.message : error);
     res.status(500).json({ success: false, error: 'Webhook processing failed' });
   }
 });

@@ -10,10 +10,6 @@ if (env.UPSTASH_REDIS_URL && env.UPSTASH_REDIS_TOKEN) {
   });
 }
 
-export function getCache() {
-  return redis;
-}
-
 export async function cacheGet<T>(key: string): Promise<T | null> {
   if (!redis) return null;
   try {
@@ -23,19 +19,10 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
   }
 }
 
-export async function cacheSet(key: string, value: any, ttlSeconds = 300) {
+export async function cacheSet<T>(key: string, value: T, ttlSeconds = 300) {
   if (!redis) return;
   try {
     await redis.set(key, value, { ex: ttlSeconds });
-  } catch {
-    // silently fail
-  }
-}
-
-export async function cacheDel(key: string) {
-  if (!redis) return;
-  try {
-    await redis.del(key);
   } catch {
     // silently fail
   }

@@ -30,14 +30,18 @@ export const API = {
     mark: `${BACKEND_URL}/api/revision/mark`,
     logs: `${BACKEND_URL}/api/revision/logs`,
   },
-  payments: {
-    createOrder: `${BACKEND_URL}/api/payments/create-order`,
-    verify: `${BACKEND_URL}/api/payments/verify`,
-  },
-  health: `${BACKEND_URL}/api/health`,
 };
 
-export async function apiFetch<T = any>(
+export interface ApiResponse {
+  success?: boolean;
+  error?: string;
+  sessionExpired?: boolean;
+  message?: { content?: string };
+  response?: string;
+  text?: string;
+}
+
+export async function apiFetch<T = ApiResponse>(
   url: string,
   options: RequestInit & { token?: string; returnTo?: string; timeoutMs?: number } = {}
 ): Promise<T> {

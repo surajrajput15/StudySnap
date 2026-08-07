@@ -12,7 +12,7 @@ graph TD
         NE[NoteEditor View]
         VN[VoiceNotes View]
         RC[RevisionCalendar View]
-        AH[AiHelper View]
+        AH[AiTutor View]
         PV[ProfileView View]
         
         UI --> HS
@@ -60,9 +60,8 @@ graph TD
   - `HomeScreen.tsx` - Note directory feeds, category tabs, and study streaks.
   - `NoteEditor.tsx` - Rich note canvas incorporating TTS/STT and PDF builders.
   - `VoiceNotes.tsx` - Media recorder capturing audio buffers alongside transcript summaries.
-  - `AiHelper.tsx` - Interactive AI quiz cards, translators, and tutor chatbot.
+  - `AiTutor.tsx` - AI chat, summarize, MCQ, flashcards, translate, and tutor assistant.
   - `RevisionCalendar.tsx` - Repetition planner displaying revision histories.
-  - `StudyMap.tsx` - Client Leaflet map showing study zones.
   - `PwaRegister.tsx` - Bootstrapping scripts for offline service workers.
 - `lib/` - Code constants, databases, auth utilities, and store handlers.
   - `db/` - Drizzle schemas and client initializers.
