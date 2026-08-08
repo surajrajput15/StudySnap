@@ -93,10 +93,9 @@ export default function ProfileView() {
       <div className="premium-card">
         {isEditing ? (
           <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            <h3 style={{ fontSize: '18px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <h2 style={{ fontSize: '18px', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <Sparkles size={18} style={{ color: 'var(--primary)' }} /> Edit Profile
-            </h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            </h2>            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
               <label style={{ fontSize: '11px', fontWeight: 600 }}>Your Name</label>
               <input type="text" value={name} onChange={e => setName(e.target.value)} required className="md3-input" />
             </div>
@@ -124,10 +123,10 @@ export default function ProfileView() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', position: 'relative', zIndex: 1 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ fontSize: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <h2 style={{ fontSize: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <User size={20} style={{ color: 'var(--primary)' }} />
                 Student Profile
-              </h3>
+              </h2>
               <button onClick={() => setIsEditing(true)} className="md3-btn md3-btn-secondary" style={{ fontSize: '12px', padding: '6px 14px' }}>
                 Edit
               </button>

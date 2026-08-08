@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useStore } from '@/lib/store/useStore';
 import {
   Sparkles, BookOpen, FileText, Clock,
@@ -19,6 +19,13 @@ interface HomeScreenProps {
   onEditNote: (noteId: string) => void;
   onCreateNote: () => void;
   onNavigate: (tab: string) => void;
+}
+
+function handleCardKeyDown(e: React.KeyboardEvent, action: () => void) {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    action();
+  }
 }
 
 const QUOTES = [
@@ -124,6 +131,17 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
     confetti({ particleCount: 120, spread: 80, origin: { y: 0.5 } });
   };
 
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (showFolderModal) setShowFolderModal(false);
+      if (showCategoryModal) setShowCategoryModal(false);
+      if (unlockNoteId) setUnlockNoteId(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [showFolderModal, showCategoryModal, unlockNoteId]);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
 
@@ -190,7 +208,7 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
                 <span>Continue Last Note</span>
               </div>
               {lastEditedNote ? (
-                <div className="hero-continue-body" onClick={() => onEditNote(lastEditedNote.id)}>
+                <div className="hero-continue-body" role="button" tabIndex={0} onClick={() => onEditNote(lastEditedNote.id)} onKeyDown={(e) => handleCardKeyDown(e, () => onEditNote(lastEditedNote.id))}>
                   <div className="hero-continue-icon">
                     <BookOpen size={18} />
                   </div>
@@ -204,7 +222,7 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
                   <ChevronRight size={16} className="hero-chevron" />
                 </div>
               ) : (
-                <div className="hero-continue-empty" onClick={onCreateNote}>
+                <div className="hero-continue-empty" role="button" tabIndex={0} onClick={onCreateNote} onKeyDown={(e) => handleCardKeyDown(e, onCreateNote)}>
                   <Plus size={18} />
                   <span>Create your first note</span>
                 </div>
@@ -228,7 +246,7 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
               ) : (
                 <div className="hero-revision-list">
                   {dueRevisionNotes.slice(0, 2).map((note) => (
-                    <div key={note.id} className="hero-revision-item" onClick={() => onEditNote(note.id)}>
+                    <div key={note.id} className="hero-revision-item" role="button" tabIndex={0} onClick={() => onEditNote(note.id)} onKeyDown={(e) => handleCardKeyDown(e, () => onEditNote(note.id))}>
                       <div className="hero-revision-info">
                         <div className="hero-revision-title">{note.title}</div>
                         <div className="hero-revision-streak">Streak {note.revisionStreak}x</div>
@@ -239,7 +257,7 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
                     </div>
                   ))}
                   {dueRevisionNotes.length > 2 && (
-                    <div className="hero-revision-more" onClick={() => onNavigate('calendar')}>
+                    <div className="hero-revision-more" role="button" tabIndex={0} onClick={() => onNavigate('calendar')} onKeyDown={(e) => handleCardKeyDown(e, () => onNavigate('calendar'))}>
                       +{dueRevisionNotes.length - 2} more due
                     </div>
                   )}
@@ -264,7 +282,7 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
       {/* ─── Stats Grid ─── */}
       <div className="stats-grid">
         <div className="stat-card">
-          <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #d1e4ff, #e8f0fe)' }}>
+          <div className="stat-icon" style={{ background: 'rgba(0, 97, 164, 0.12)' }}>
             <FileText size={18} style={{ color: 'var(--primary)' }} />
           </div>
           <div>
@@ -273,8 +291,8 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
           </div>
         </div>
         <div className="stat-card">
-          <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #d1fae5, #a7f3d0)' }}>
-            <CheckCircle2 size={18} style={{ color: '#059669' }} />
+          <div className="stat-icon" style={{ background: 'rgba(16, 185, 129, 0.12)' }}>
+            <CheckCircle2 size={18} style={{ color: '#10B981' }} />
           </div>
           <div>
             <div className="stat-value">{totalRevised}</div>
@@ -282,8 +300,8 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
           </div>
         </div>
         <div className="stat-card">
-          <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #fef3c7, #fde68a)' }}>
-            <Pin size={18} style={{ color: '#D97706' }} />
+          <div className="stat-icon" style={{ background: 'rgba(245, 158, 11, 0.12)' }}>
+            <Pin size={18} style={{ color: '#F59E0B' }} />
           </div>
           <div>
             <div className="stat-value">{totalPinned}</div>
@@ -291,8 +309,8 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
           </div>
         </div>
         <div className="stat-card">
-          <div className="stat-icon" style={{ background: 'linear-gradient(135deg, #fce7f3, #fbcfe8)' }}>
-            <Star size={18} style={{ color: '#DB2777' }} />
+          <div className="stat-icon" style={{ background: 'rgba(236, 72, 153, 0.12)' }}>
+            <Star size={18} style={{ color: '#EC4899' }} />
           </div>
           <div>
             <div className="stat-value">{totalFavorites}</div>
@@ -363,7 +381,7 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
               {recentNotes.map((note) => {
                 const noteCategory = categories.find(c => c.id === note.categoryId);
                 return (
-                  <div key={note.id} className="recent-note-card" onClick={() => onEditNote(note.id)}>
+                  <div key={note.id} className="recent-note-card" role="button" tabIndex={0} onClick={() => onEditNote(note.id)} onKeyDown={(e) => handleCardKeyDown(e, () => onEditNote(note.id))}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
                       {noteCategory && <span className="note-category-dot" style={{ background: noteCategory.color }} />}
                       <span style={{ fontSize: '13px', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{note.title}</span>
@@ -419,7 +437,7 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="md3-input"
-            style={{ paddingLeft: '42px', borderRadius: '100px', paddingTop: '12px', paddingBottom: '12px', fontSize: '13px' }}
+            style={{ paddingLeft: '42px', borderRadius: '100px', paddingTop: '12px', paddingBottom: '12px', fontSize: '16px' }}
           />
         </div>
         <button onClick={onCreateNote} className="md3-btn md3-btn-primary" style={{ padding: '12px 24px', fontSize: '13px', flexShrink: 0 }}>
@@ -445,7 +463,7 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
             <Plus size={14} /> Add Subject
           </button>
         </div>
-        <div className="categories-scroll" style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
+        <div className="categories-scroll">
           <button onClick={() => setActiveCategoryId(null)}
             style={{ padding: '7px 16px', borderRadius: '100px', border: 'none', fontSize: '12px', fontWeight: 600, cursor: 'pointer', flexShrink: 0, transition: 'all 0.2s',
               background: activeCategoryId === null ? 'var(--primary)' : 'var(--surface)', color: activeCategoryId === null ? 'var(--on-primary)' : 'var(--on-surface)',
@@ -461,7 +479,7 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
                 {cat.name}
               </button>
               {!cat.id.startsWith('cat-') && (
-                <button onClick={() => deleteCategory(cat.id)} style={{ position: 'absolute', top: '-4px', right: '-4px', border: 'none', background: 'var(--error)', color: '#fff', borderRadius: '50%', width: '18px', height: '18px', fontSize: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+                <button onClick={() => deleteCategory(cat.id)} aria-label={`Delete category ${cat.name}`} style={{ position: 'absolute', top: '-4px', right: '-4px', border: 'none', background: 'var(--error)', color: '#fff', borderRadius: '50%', width: '18px', height: '18px', fontSize: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
               )}
             </div>
           ))}
@@ -478,7 +496,7 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
             <Plus size={14} /> New Folder
           </button>
         </div>
-        <div className="folders-scroll" style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
+        <div className="folders-scroll">
           <button onClick={() => setActiveFolderId(null)}
             style={{ padding: '7px 16px', borderRadius: '12px', border: 'none', fontSize: '12px', fontWeight: 600, cursor: 'pointer', flexShrink: 0, transition: 'all 0.2s',
               background: activeFolderId === null ? 'var(--primary)' : 'var(--surface)', color: activeFolderId === null ? 'var(--on-primary)' : 'var(--on-surface)',
@@ -493,7 +511,7 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
                     boxShadow: 'var(--elevation-1)' }}>
                   📁 {folder.name}
                 </button>
-                <button onClick={() => deleteFolder(folder.id)} style={{ border: 'none', background: 'none', padding: '4px', cursor: 'pointer', color: 'var(--error)', fontSize: '14px' }}>×</button>
+                <button onClick={() => deleteFolder(folder.id)} aria-label={`Delete folder ${folder.name}`} style={{ border: 'none', background: 'none', padding: '4px', cursor: 'pointer', color: 'var(--error)', fontSize: '14px' }}>×</button>
               </div>
             ))}
           </div>
@@ -508,10 +526,10 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
             <span className="md3-chip" style={{ fontSize: '11px', padding: '2px 10px' }}>{displayNotes.length}</span>
           </h3>
           <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-            <button onClick={() => setViewMode('grid')} className="md3-btn-ghost" style={{ padding: '6px', borderRadius: '8px', color: viewMode === 'grid' ? 'var(--primary)' : 'var(--outline)' }}>
+            <button onClick={() => setViewMode('grid')} className="md3-btn-ghost" style={{ padding: '6px', borderRadius: '8px', color: viewMode === 'grid' ? 'var(--primary)' : 'var(--outline)' }} aria-label="Grid view" aria-pressed={viewMode === 'grid'}>
               <Grid3X3 size={16} />
             </button>
-            <button onClick={() => setViewMode('list')} className="md3-btn-ghost" style={{ padding: '6px', borderRadius: '8px', color: viewMode === 'list' ? 'var(--primary)' : 'var(--outline)' }}>
+            <button onClick={() => setViewMode('list')} className="md3-btn-ghost" style={{ padding: '6px', borderRadius: '8px', color: viewMode === 'list' ? 'var(--primary)' : 'var(--outline)' }} aria-label="List view" aria-pressed={viewMode === 'list'}>
               <List size={16} />
             </button>
           </div>
@@ -529,8 +547,7 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
               {displayNotes.map((note) => {
                 const noteCategory = categories.find(c => c.id === note.categoryId);
                 return (
-                  <div key={note.id} className="md3-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '10px', cursor: 'pointer', borderTop: noteCategory ? `4px solid ${noteCategory.color}` : '4px solid var(--outline-variant)' }}
-                    onClick={() => onEditNote(note.id)}>
+                  <div key={note.id} className="md3-card" role="button" tabIndex={0} onClick={() => onEditNote(note.id)} onKeyDown={(e) => handleCardKeyDown(e, () => onEditNote(note.id))} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '10px', cursor: 'pointer', borderTop: noteCategory ? `4px solid ${noteCategory.color}` : '4px solid var(--outline-variant)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                       <h4 style={{ fontSize: '15px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
                         {note.pinLock && <Lock size={12} style={{ color: 'var(--outline)' }} />}
@@ -552,7 +569,7 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--outline-variant)', paddingTop: '10px', marginTop: '4px' }}>
                       <span style={{ fontSize: '11px', color: 'var(--outline)' }}>{formatShortDate(note.updatedAt)}</span>
-                      <button onClick={(e) => { e.stopPropagation(); deleteNote(note.id); }} className="md3-btn-ghost" style={{ padding: '4px', color: 'var(--error)', fontSize: '12px' }}><Trash2 size={14} /></button>
+                      <button onClick={(e) => { e.stopPropagation(); deleteNote(note.id); }} aria-label={`Delete note ${note.title}`} className="md3-btn-ghost" style={{ padding: '4px', color: 'var(--error)', fontSize: '12px' }}><Trash2 size={14} /></button>
                     </div>
                   </div>
                 );
@@ -563,8 +580,7 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
               {displayNotes.map((note) => {
                 const noteCategory = categories.find(c => c.id === note.categoryId);
                 return (
-                  <div key={note.id} className="md3-card-sm" style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '14px 18px', cursor: 'pointer', borderLeft: noteCategory ? `4px solid ${noteCategory.color}` : '4px solid var(--outline-variant)' }}
-                    onClick={() => onEditNote(note.id)}>
+                  <div key={note.id} className="md3-card-sm" role="button" tabIndex={0} onClick={() => onEditNote(note.id)} onKeyDown={(e) => handleCardKeyDown(e, () => onEditNote(note.id))} style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '14px 18px', cursor: 'pointer', borderLeft: noteCategory ? `4px solid ${noteCategory.color}` : '4px solid var(--outline-variant)' }}>
                     <div style={{ flexGrow: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <h4 style={{ fontSize: '14px', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{note.title}</h4>
@@ -578,7 +594,7 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
                       {noteCategory && <span className="md3-chip" style={{ fontSize: '10px', padding: '2px 10px', background: `${noteCategory.color}18`, color: noteCategory.color }}>{noteCategory.name}</span>}
                       <span style={{ fontSize: '11px', color: 'var(--outline)', whiteSpace: 'nowrap' }}>{formatShortDate(note.updatedAt)}</span>
-                      <button onClick={(e) => { e.stopPropagation(); deleteNote(note.id); }} className="md3-btn-ghost" style={{ padding: '4px', color: 'var(--error)' }}><Trash2 size={14} /></button>
+                      <button onClick={(e) => { e.stopPropagation(); deleteNote(note.id); }} aria-label={`Delete note ${note.title}`} className="md3-btn-ghost" style={{ padding: '4px', color: 'var(--error)' }}><Trash2 size={14} /></button>
                     </div>
                   </div>
                 );
@@ -590,9 +606,9 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
 
       {/* ─── Modals ─── */}
       {showFolderModal && (
-        <div className="modal-backdrop" onClick={() => setShowFolderModal(false)}>
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="folder-modal-title" onClick={() => setShowFolderModal(false)}>
           <form className="modal-content" onClick={e => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); if (!newFolderName.trim()) return; addFolder({ name: newFolderName.trim() }); setNewFolderName(''); setShowFolderModal(false); confetti({ particleCount: 30, spread: 40, colors: ['#0061A4'] }); }}>
-            <h3 style={{ fontSize: '18px', marginBottom: '16px' }}>Create Folder</h3>
+            <h3 id="folder-modal-title" style={{ fontSize: '18px', marginBottom: '16px' }}>Create Folder</h3>
             <input type="text" placeholder='e.g. Semester 2, Assignments' value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)} className="md3-input" autoFocus required />
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>
               <button type="button" onClick={() => setShowFolderModal(false)} className="md3-btn md3-btn-text">Cancel</button>
@@ -603,13 +619,13 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
       )}
 
       {showCategoryModal && (
-        <div className="modal-backdrop" onClick={() => setShowCategoryModal(false)}>
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="category-modal-title" onClick={() => setShowCategoryModal(false)}>
           <form className="modal-content" onClick={e => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); if (!newCategoryName.trim()) return; addCategory({ name: newCategoryName.trim(), color: newCategoryColor }); setNewCategoryName(''); setShowCategoryModal(false); confetti({ particleCount: 30, spread: 40, colors: [newCategoryColor] }); }}>
-            <h3 style={{ fontSize: '18px', marginBottom: '16px' }}>Add Subject</h3>
+            <h3 id="category-modal-title" style={{ fontSize: '18px', marginBottom: '16px' }}>Add Subject</h3>
             <input type="text" placeholder="e.g. Computer Science" value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} className="md3-input" autoFocus required />
             <div style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>
               {['#0061A4', '#10B981', '#F59E0B', '#EC4899', '#8B5CF6', '#EF4444', '#F97316', '#14B8A6', '#84CC16', '#06B6D4', '#D946EF', '#6366F1'].map(color => (
-                <button key={color} type="button" onClick={() => setNewCategoryColor(color)} style={{ width: '30px', height: '30px', borderRadius: '50%', background: color, border: newCategoryColor === color ? '2px solid var(--on-surface)' : '2px solid transparent', cursor: 'pointer', transition: 'all 0.15s' }} />
+                <button key={color} type="button" onClick={() => setNewCategoryColor(color)} aria-label={`Select color ${color}`} aria-pressed={newCategoryColor === color} style={{ width: '30px', height: '30px', borderRadius: '50%', background: color, border: newCategoryColor === color ? '2px solid var(--on-surface)' : '2px solid transparent', cursor: 'pointer', transition: 'all 0.15s' }} />
               ))}
             </div>
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>
@@ -621,10 +637,10 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
       )}
 
       {unlockNoteId && (
-        <div className="modal-backdrop" onClick={() => setUnlockNoteId(null)}>
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="unlock-modal-title" onClick={() => setUnlockNoteId(null)}>
           <form className="modal-content" onClick={e => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); const target = notes.find(n => n.id === unlockNoteId); if (target && target.pinLock === pinInput) { onEditNote(unlockNoteId); setUnlockNoteId(null); } else setPinError(true); }}>
             <Lock size={36} style={{ color: 'var(--primary)', margin: '0 auto 12px', display: 'block' }} />
-            <h3 style={{ fontSize: '18px', textAlign: 'center' }}>Enter PIN</h3>
+            <h3 id="unlock-modal-title" style={{ fontSize: '18px', textAlign: 'center' }}>Enter PIN</h3>
             <p style={{ fontSize: '13px', color: 'var(--on-surface-variant)', textAlign: 'center', marginBottom: '16px' }}>This note is locked</p>
             <input type="password" maxLength={4} placeholder="••••" value={pinInput} onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ''))} autoFocus style={{ width: '120px', margin: '0 auto', display: 'block', padding: '14px', borderRadius: '12px', border: '1.5px solid var(--outline-variant)', background: 'var(--surface)', color: 'var(--on-surface)', fontSize: '22px', letterSpacing: '10px', textAlign: 'center', outline: 'none' }} />
             {pinError && <p style={{ color: 'var(--error)', fontSize: '12px', textAlign: 'center', marginTop: '8px' }}>Incorrect PIN</p>}

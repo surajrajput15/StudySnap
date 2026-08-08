@@ -105,8 +105,8 @@ export default function Page() {
 
       {/* ─── Desktop Sidebar ─── */}
       <aside className="app-sidebar">
-        <div className="sidebar-brand" onClick={() => setActiveTab('home')}>
-          <Image src="/window.svg" alt="StudySnap" className="sidebar-logo" width={512} height={512} unoptimized />
+        <div className="sidebar-brand" role="button" tabIndex={0} onClick={() => setActiveTab('home')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setActiveTab('home'); } }}>
+          <Image src="/window.svg" alt="" className="sidebar-logo" width={512} height={512} unoptimized />
           <span className="sidebar-name">StudySnap</span>
         </div>
         <nav className="sidebar-nav">
@@ -153,17 +153,17 @@ export default function Page() {
       <header className="app-header">
         <div className="header-inner">
           <div className="header-left">
-            <button className="header-hamburger" onClick={() => setDrawerOpen(true)}>
+            <button className="header-hamburger" onClick={() => setDrawerOpen(true)} aria-label="Open menu" aria-expanded={drawerOpen} aria-controls="mobile-menu">
               <Menu size={22} />
             </button>
-            <span className="header-title" onClick={() => setActiveTab('home')}>
-              <Image src="/window.svg" alt="StudySnap" className="header-mobile-logo" width={512} height={512} unoptimized />
+            <span className="header-title" role="button" tabIndex={0} onClick={() => setActiveTab('home')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setActiveTab('home'); } }}>
+              <Image src="/window.svg" alt="" className="header-mobile-logo" width={512} height={512} unoptimized />
               <span className="header-brand-text">StudySnap</span>
               <span className="header-tab-name">{navItems.find(t => t.id === activeTab)?.label}</span>
             </span>
           </div>
           <div className="header-right">
-            <button onClick={toggleTheme} className="header-icon-btn">
+            <button onClick={toggleTheme} className="header-icon-btn" aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}>
               {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
             </button>
             {isSignedIn ? (
@@ -181,6 +181,7 @@ export default function Page() {
 
       {/* ─── Main Content ─── */}
       <main className="app-main">
+        <h1 className="visually-hidden">{navItems.find(t => t.id === activeTab)?.label || 'StudySnap'}</h1>
         <div className="main-content">
           {activeTab === 'home' && (
             <HomeScreen 

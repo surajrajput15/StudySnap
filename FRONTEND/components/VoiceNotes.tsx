@@ -221,10 +221,13 @@ export default function VoiceNotes({ onBack, onLinkToNote }: VoiceNotesProps) {
 
       startAudioAnalysis(stream);
 
-      const mediaRecorder = new MediaRecorder(stream);
+      const mimeType = typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported
+        ? (MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : (MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : ''))
+        : '';
+      const mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
       mediaRecorder.ondataavailable = (event) => { if (event.data.size > 0) audioChunksRef.current.push(event.data); };
       mediaRecorder.onstop = () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType || 'audio/webm' });
         const audioUrl = URL.createObjectURL(audioBlob);
         addVoiceNote({
           noteId: '',
@@ -316,6 +319,21 @@ export default function VoiceNotes({ onBack, onLinkToNote }: VoiceNotesProps) {
     }
   };
 
+  const handleSeekKeyDown = (vn: VoiceNote, e: React.KeyboardEvent<HTMLDivElement>) => {
+    const step = Math.max(1, Math.round(vn.duration / 20));
+    let next = playbackProgress;
+    if (e.key === 'ArrowRight') next = Math.min(vn.duration, playbackProgress + step);
+    else if (e.key === 'ArrowLeft') next = Math.max(0, playbackProgress - step);
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = vn.duration;
+    else return;
+    e.preventDefault();
+    if (activeAudioRef.current && playingId === vn.id) {
+      activeAudioRef.current.currentTime = next;
+    }
+    setPlaybackProgress(Math.floor(next));
+  };
+
   const handleRename = (vn: VoiceNote) => {
     if (renameValue.trim() && renameValue !== vn.transcript) {
       const linkedNote = notes.find(n => n.id === vn.noteId);
@@ -348,7 +366,7 @@ export default function VoiceNotes({ onBack, onLinkToNote }: VoiceNotesProps) {
     <div className="voice-memos-container">
       {/* Header */}
       <div className="voice-memos-header">
-        <button onClick={onBack} className="voice-memos-header-btn">
+        <button onClick={onBack} className="voice-memos-header-btn" aria-label="Back to notes">
           <ArrowLeft size={18} />
         </button>
         <h2 className="voice-memos-title">Voice Memos</h2>
@@ -389,15 +407,15 @@ export default function VoiceNotes({ onBack, onLinkToNote }: VoiceNotesProps) {
         <div className="voice-controls">
           {isRecording ? (
             <>
-              <button onClick={handlePauseRecording} className="voice-btn voice-btn-secondary" title={isPaused ? 'Resume' : 'Pause'}>
+              <button onClick={handlePauseRecording} className="voice-btn voice-btn-secondary" title={isPaused ? 'Resume' : 'Pause'} aria-label={isPaused ? 'Resume recording' : 'Pause recording'}>
                 {isPaused ? <Play size={20} fill="currentColor" /> : <Pause size={20} />}
               </button>
-              <button onClick={handleStopRecording} className="voice-btn voice-btn-stop" title="Stop">
+              <button onClick={handleStopRecording} className="voice-btn voice-btn-stop" title="Stop" aria-label="Stop recording">
                 <Square size={18} />
               </button>
             </>
           ) : (
-            <button onClick={handleStartRecording} className="voice-btn voice-btn-record" title="Record">
+            <button onClick={handleStartRecording} className="voice-btn voice-btn-record" title="Record" aria-label="Start recording">
               <Mic size={24} />
             </button>
           )}
@@ -429,11 +447,12 @@ export default function VoiceNotes({ onBack, onLinkToNote }: VoiceNotesProps) {
 
               return (
                 <div key={vn.id} className={`voice-recording-card ${isPlaying ? 'playing' : ''}`}>
-                  <div className="voice-recording-main" onClick={() => !isRenaming && setExpandedId(isExpanded ? null : vn.id)}>
+                  <div className="voice-recording-main" onClick={() => !isRenaming && setExpandedId(isExpanded ? null : vn.id)} role="button" tabIndex={0} aria-expanded={isExpanded} aria-label={isExpanded ? `Collapse ${vn.transcript?.substring(0, 40) || 'Voice note'}` : `Expand ${vn.transcript?.substring(0, 40) || 'Voice note'}`} onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !isRenaming) { e.preventDefault(); setExpandedId(isExpanded ? null : vn.id); } }}>
                     {/* Play Button */}
                     <button
                       onClick={(e) => { e.stopPropagation(); handlePlayVoice(vn); }}
                       className="voice-play-btn"
+                      aria-label={isPlaying ? 'Stop playback' : 'Play recording'}
                     >
                       {isPlaying ? <Square size={14} /> : <Play size={18} style={{ marginLeft: '2px' }} fill="currentColor" />}
                     </button>
@@ -450,8 +469,8 @@ export default function VoiceNotes({ onBack, onLinkToNote }: VoiceNotesProps) {
                             className="voice-rename-input"
                             onKeyDown={e => { if (e.key === 'Enter') handleRename(vn); if (e.key === 'Escape') setRenamingId(null); }}
                           />
-                          <button onClick={() => handleRename(vn)} className="voice-rename-confirm"><Check size={14} /></button>
-                          <button onClick={() => setRenamingId(null)} className="voice-rename-cancel"><X size={14} /></button>
+                          <button onClick={() => handleRename(vn)} className="voice-rename-confirm" aria-label="Confirm rename"><Check size={14} /></button>
+                          <button onClick={() => setRenamingId(null)} className="voice-rename-cancel" aria-label="Cancel rename"><X size={14} /></button>
                         </div>
                       ) : (
                         <div className="voice-recording-title">
@@ -480,13 +499,13 @@ export default function VoiceNotes({ onBack, onLinkToNote }: VoiceNotesProps) {
                           ))}
                         </div>
                       )}
-                      <button onClick={() => { setRenamingId(vn.id); setRenameValue(vn.transcript?.substring(0, 40) || `Voice ${formatTime(vn.duration)}`); }} className="voice-action-btn" title="Rename">
+                      <button onClick={() => { setRenamingId(vn.id); setRenameValue(vn.transcript?.substring(0, 40) || `Voice ${formatTime(vn.duration)}`); }} className="voice-action-btn" title="Rename" aria-label="Rename recording">
                         <Edit3 size={14} />
                       </button>
-                      <button onClick={() => { handleCreateNoteFromVoice(vn); }} className="voice-action-btn" title="Create Note">
+                      <button onClick={() => { handleCreateNoteFromVoice(vn); }} className="voice-action-btn" title="Create Note" aria-label="Create note from recording">
                         <FileText size={14} />
                       </button>
-                      <button onClick={() => deleteVoiceNote(vn.id)} className="voice-action-btn voice-action-delete" title="Delete">
+                      <button onClick={() => deleteVoiceNote(vn.id)} className="voice-action-btn voice-action-delete" title="Delete" aria-label="Delete recording">
                         <Trash2 size={14} />
                       </button>
                     </div>
@@ -494,7 +513,7 @@ export default function VoiceNotes({ onBack, onLinkToNote }: VoiceNotesProps) {
 
                   {/* Playback Waveform / Progress */}
                   {isPlaying && (
-                    <div className="voice-playback-bar" onClick={(e) => handleSeek(vn, e)}>
+                    <div className="voice-playback-bar" role="slider" tabIndex={0} aria-label="Seek position" aria-valuemin={0} aria-valuemax={vn.duration} aria-valuenow={playbackProgress} aria-valuetext={formatTime(playbackProgress)} onClick={(e) => handleSeek(vn, e)} onKeyDown={(e) => handleSeekKeyDown(vn, e)}>
                       <div className="voice-playback-track">
                         <div className="voice-playback-fill" style={{ width: `${vn.duration > 0 ? (playbackProgress / vn.duration) * 100 : 0}%` }} />
                       </div>
@@ -535,7 +554,7 @@ export default function VoiceNotes({ onBack, onLinkToNote }: VoiceNotesProps) {
                   )}
 
                   {isExpanded && (
-                    <button className="voice-expand-toggle" onClick={() => setExpandedId(null)}>
+                    <button className="voice-expand-toggle" onClick={() => setExpandedId(null)} aria-label="Collapse recording">
                       <ChevronUp size={16} />
                     </button>
                   )}

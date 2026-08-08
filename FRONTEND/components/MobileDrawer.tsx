@@ -35,6 +35,11 @@ export default function MobileDrawer({ open, onClose, activeTab, onNavigate }: M
   const { signOut } = useClerk();
   const updateProfile = useStore((s) => s.updateProfile);
   const drawerRef = useRef<HTMLDivElement>(null);
+  const lastFocusedRef = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (user?.fullName) {
@@ -43,12 +48,48 @@ export default function MobileDrawer({ open, onClose, activeTab, onNavigate }: M
   }, [user, updateProfile]);
 
   useEffect(() => {
-    if (!open) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+    if (!open) {
+      return;
+    }
+    lastFocusedRef.current = document.activeElement as HTMLElement | null;
+    const drawer = drawerRef.current;
+    const focusables = () => {
+      if (!drawer) return [];
+      return Array.from(drawer.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])'
+      ));
     };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
+    const focusFirst = () => {
+      const els = focusables();
+      els[0]?.focus();
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onCloseRef.current();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const els = focusables();
+      if (els.length === 0) return;
+      const first = els[0];
+      const last = els[els.length - 1];
+      const active = document.activeElement as HTMLElement;
+      if (e.shiftKey) {
+        if (active === first || !drawer?.contains(active)) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else if (active === last || !drawer?.contains(active)) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    focusFirst();
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      lastFocusedRef.current?.focus();
+    };
   }, [open, onClose]);
 
   const handleNav = (id: string) => {
@@ -69,24 +110,26 @@ export default function MobileDrawer({ open, onClose, activeTab, onNavigate }: M
       />
       <div
         ref={drawerRef}
+        id="mobile-menu"
         className={`drawer ${open ? 'drawer--open' : ''}`}
         role="dialog"
         aria-modal="true"
+        aria-labelledby="drawer-title"
       >
         <div className="drawer-header">
           <div className="drawer-header-top">
             <Image src="/window.svg" alt="StudySnap" className="drawer-logo" width={512} height={512} unoptimized />
-            <button className="drawer-close" onClick={onClose}>
+            <button className="drawer-close" onClick={onClose} aria-label="Close menu">
               <X size={20} />
             </button>
           </div>
-          <div className="drawer-tagline">Study Smarter. Score Better.</div>
+          <div id="drawer-title" className="drawer-tagline">Study Smarter. Score Better.</div>
 
           {isLoaded && isSignedIn ? (
             <div className="drawer-user">
               <div className="drawer-avatar">
                 {userImage ? (
-                  <Image src={userImage} alt="avatar" className="drawer-avatar-img" width={44} height={44} unoptimized />
+                  <Image src={userImage} alt="Your profile avatar" className="drawer-avatar-img" width={44} height={44} unoptimized />
                 ) : (
                   <span className="drawer-avatar-fallback">{userDisplayName[0]}</span>
                 )}

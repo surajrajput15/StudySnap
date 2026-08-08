@@ -61,9 +61,9 @@ function MiniCalendar({ month, year, revisionDates, onPrev, onNext }: {
   return (
     <div className="revision-mini-cal">
       <div className="revision-cal-header">
-        <button onClick={onPrev} className="revision-cal-nav"><ChevronLeft size={14} /></button>
+        <button onClick={onPrev} className="revision-cal-nav" aria-label="Previous month"><ChevronLeft size={14} /></button>
         <span className="revision-cal-month">{MONTHS[month]} {year}</span>
-        <button onClick={onNext} className="revision-cal-nav"><ChevronRight size={14} /></button>
+        <button onClick={onNext} className="revision-cal-nav" aria-label="Next month"><ChevronRight size={14} /></button>
       </div>
       <div className="revision-cal-grid">
         {DAYS_SHORT.map(d => <div key={d} className="revision-cal-day-header">{d}</div>)}
@@ -182,7 +182,7 @@ export default function RevisionCalendar() {
       {/* Stats Row */}
       <div className="revision-stats-row">
         <div className="revision-stat-card">
-          <div className="revision-stat-icon" style={{ background: 'linear-gradient(135deg, #d1e4ff, #e8f0fe)' }}>
+          <div className="revision-stat-icon" style={{ background: 'rgba(0, 97, 164, 0.12)' }}>
             <Clock size={16} style={{ color: 'var(--primary)' }} />
           </div>
           <div>
@@ -191,8 +191,8 @@ export default function RevisionCalendar() {
           </div>
         </div>
         <div className="revision-stat-card">
-          <div className="revision-stat-icon" style={{ background: 'linear-gradient(135deg, #d1fae5, #a7f3d0)' }}>
-            <CalendarDays size={16} style={{ color: '#059669' }} />
+          <div className="revision-stat-icon" style={{ background: 'rgba(16, 185, 129, 0.12)' }}>
+            <CalendarDays size={16} style={{ color: '#10B981' }} />
           </div>
           <div>
             <div className="revision-stat-value">{upcomingNotes.length}</div>
@@ -200,8 +200,8 @@ export default function RevisionCalendar() {
           </div>
         </div>
         <div className="revision-stat-card">
-          <div className="revision-stat-icon" style={{ background: 'linear-gradient(135deg, #fef3c7, #fde68a)' }}>
-            <Timer size={16} style={{ color: '#D97706' }} />
+          <div className="revision-stat-icon" style={{ background: 'rgba(245, 158, 11, 0.12)' }}>
+            <Timer size={16} style={{ color: '#F59E0B' }} />
           </div>
           <div>
             <div className="revision-stat-value">{estimatedTime}<span style={{ fontSize: '12px', fontWeight: 500, opacity: 0.6 }}>m</span></div>
@@ -209,11 +209,11 @@ export default function RevisionCalendar() {
           </div>
         </div>
         <div className="revision-stat-card">
-          <div className="revision-stat-icon" style={{ background: 'linear-gradient(135deg, #fce7f3, #fbcfe8)' }}>
-            <Target size={16} style={{ color: '#DB2777' }} />
+          <div className="revision-stat-icon" style={{ background: 'rgba(236, 72, 153, 0.12)' }}>
+            <Target size={16} style={{ color: '#EC4899' }} />
           </div>
           <div>
-            <div className="revision-stat-value">{todayRevised}<span style={{ fontSize: '12px', fontWeight: 500, opacity: 0.6 }}>/DAILY_GOAL</span></div>
+            <div className="revision-stat-value">{todayRevised}<span style={{ fontSize: '12px', fontWeight: 500, opacity: 0.6 }}>/{DAILY_GOAL}</span></div>
             <div className="revision-stat-label">Daily Goal</div>
           </div>
         </div>
@@ -301,7 +301,7 @@ export default function RevisionCalendar() {
               </svg>
               <div className="revision-goal-ring-center">
                 <span className="revision-goal-value">{todayRevised}</span>
-                <span className="revision-goal-divider">/DAILY_GOAL</span>
+                <span className="revision-goal-divider">/{DAILY_GOAL}</span>
               </div>
             </div>
             <div className="revision-goal-info">

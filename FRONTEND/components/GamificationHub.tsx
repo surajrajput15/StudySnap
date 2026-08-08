@@ -338,12 +338,12 @@ export default function GamificationHub() {
 
       {/* ─── Animated Reward Overlay ─── */}
       {showReward && (
-        <div className="game-reward-overlay" onClick={() => setShowReward(null)}>
+        <div className="game-reward-overlay" role="dialog" aria-modal="true" aria-labelledby="reward-title" onClick={() => setShowReward(null)}>
           <div className="game-reward-card">
             <div className="game-reward-icon">
               <Sparkles size={32} />
             </div>
-            <div className="game-reward-message">{showReward.message}</div>
+            <div id="reward-title" className="game-reward-message">{showReward.message}</div>
             <div className="game-reward-items">
               {showReward.xp > 0 && (
                 <div className="game-reward-item">

@@ -362,7 +362,7 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
           setIsLoading(false);
         }, 100);
       } else {
-        renderErrorBubble(data.error || 'Failed to get response');
+        renderErrorBubble(data.error && !/BACKEND|node_modules|allowedOrigins/i.test(data.error) ? data.error : 'Failed to get a response. Please try again.');
       }
     } catch (err) {
       const errorObj = err as { message?: string } | null;
@@ -377,18 +377,19 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
       const isCorsError = msg.includes('CORS') || msg.includes('cross-origin');
       const isTimeout = msg.includes('timeout') || msg.includes('timed out');
 
+      if (msg) {
+        console.warn('[AiTutor] Request failed:', msg);
+      }
+
       let userMessage: string;
       if (isCorsError) {
-        userMessage = `🔴 **CORS Error** — Your frontend URL isn't allowed by the backend.\n\n` +
-          `**Fix:** Add \`${typeof window !== 'undefined' ? window.location.origin : 'your-frontend-url'}\` ` +
-          `to the \`allowedOrigins\` array in \`BACKEND/src/middleware/security.ts\`.\n\n` +
-          `_Error: ${msg}_`;
+        userMessage = `🔴 **Connection issue** — We couldn't reach the AI service securely.\n\n` +
+          `Please try again in a moment. If the problem persists, contact support.`;
       } else if (isTimeout) {
         userMessage = `⏱️ **Request Timeout** — The AI took too long to respond.\n\n` +
-          `Try asking a shorter or simpler question. The AI model may be under load.\n\n` +
-          `_Error: ${msg}_`;
+          `Try asking a shorter or simpler question. The AI model may be under load.`;
       } else {
-        userMessage = `⚠️ **Error:** ${msg}\n\nPlease try again or rephrase your question.`;
+        userMessage = `⚠️ **Something went wrong** — We couldn't generate an AI response.\n\nPlease try again or rephrase your question.`;
       }
       renderErrorBubble(userMessage);
     }
@@ -574,7 +575,7 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
             <div className="tutor-attached">
               <Paperclip size={14} />
               <span className="tutor-attached-name">{attachedFile.name}</span>
-              <button className="tutor-attached-remove" onClick={() => setAttachedFile(null)}>
+              <button className="tutor-attached-remove" onClick={() => setAttachedFile(null)} aria-label="Remove attached file">
                 <X size={14} />
               </button>
             </div>

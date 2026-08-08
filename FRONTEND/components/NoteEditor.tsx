@@ -15,6 +15,8 @@ import confetti from 'canvas-confetti';
 import { SpeechRecognition, SpeechRecognitionEvent, SpeechRecognitionErrorEvent } from '@/lib/speech';
 import { PIN_LENGTH } from '@/lib/constants';
 import { stripHtml } from '@/lib/utils';
+import { API, apiFetch } from '@/lib/config';
+import { useAuth } from '@clerk/nextjs';
 
 interface NoteEditorProps {
   noteId: string | null;
@@ -71,7 +73,7 @@ function EditorToolbarItems({ items }: { items: ToolbarItem[] }) {
         if (item.icon && item.action) {
           const Icon = item.icon;
           return (
-            <button key={i} onClick={item.action} className="editor-toolbar-btn" title={item.label}>
+            <button key={i} onClick={item.action} className="editor-toolbar-btn" title={item.label} aria-label={item.label}>
               <Icon size={15} />
             </button>
           );
@@ -87,6 +89,7 @@ export default function NoteEditor({ noteId, onBack }: NoteEditorProps) {
 }
 
 function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
+  const { getToken } = useAuth();
   const notes = useStore((s) => s.notes);
   const categories = useStore((s) => s.categories);
   const folders = useStore((s) => s.folders);
@@ -194,6 +197,17 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
     }, 1500);
     return () => { clearTimeout(savingTimer); clearTimeout(timer); };
   }, [title, content, tags, categoryId, folderId, isPinned, isFavorite, pinLock, isNew, noteId, addNote, updateNote]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (showTablePicker) setShowTablePicker(false);
+      if (showAiAssistant) setShowAiAssistant(false);
+      if (showPinModal) setShowPinModal(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [showTablePicker, showAiAssistant, showPinModal]);
 
   const pushHistory = useCallback((html: string) => {
     setHistory(prev => {
@@ -339,7 +353,8 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
     const url = prompt('Paste image URL:');
     if (url) {
       const sanitizedUrl = url.replace(/^javascript:/i, '').replace(/<[^>]*>/g, '');
-      const html = `<figure class="editor-image-block"><img src="${sanitizedUrl}" alt="Image" loading="lazy" /><figcaption>Image</figcaption></figure>`;
+      const fileName = sanitizedUrl.split('/').pop()?.replace(/[?#].*$/, '').split('.')[0] || '';
+      const html = `<figure class="editor-image-block"><img src="${sanitizedUrl}" alt="${fileName}" loading="lazy" /><figcaption>Image</figcaption></figure>`;
       insertAtCursor(html);
       if (editorRef.current) handleEditorInput();
     }
@@ -458,15 +473,16 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
     setIsAiLoading(true);
     setAiResponse('');
     try {
-      const response = await fetch('/api/ai/chat', {
+      const data = await apiFetch(API.ai.chat, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: [{ role: 'user', content: aiPrompt }] }),
+        token: (await getToken()) ?? undefined,
       });
-      const data = await response.json();
       if (data.success) {
-        const text = data.message?.content || '';
+        const text = (data.message?.content) || (data as { response?: string }).response || (data as { text?: string }).text || '';
         setAiResponse(text);
+      } else if (data.sessionExpired) {
+        setAiResponse('Your session has expired. Please sign in again.');
       } else {
         setAiResponse('AI response failed. Try again.');
       }
@@ -517,7 +533,7 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
       <div className="editor-toolbar-wrapper">
         <div className="editor-toolbar">
           <div className="editor-toolbar-left">
-            <button onClick={onBack} className="editor-toolbar-back">
+            <button onClick={onBack} className="editor-toolbar-back" aria-label="Back to notes">
               <ArrowLeft size={16} />
             </button>
             <span className="editor-toolbar-divider" />
@@ -528,13 +544,13 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
               <RefreshCw size={11} className={saveStatus === 'saving' ? 'pulse-recording' : ''} />
               {saveStatus === 'saved' ? 'Saved' : saveStatus === 'saving' ? 'Saving...' : 'Unsaved'}
             </span>
-            <button onClick={() => setIsPinned(!isPinned)} className="editor-toolbar-btn" style={{ color: isPinned ? 'var(--primary)' : 'var(--outline)' }}>
+            <button onClick={() => setIsPinned(!isPinned)} className="editor-toolbar-btn" aria-label={isPinned ? 'Unpin note' : 'Pin note'} style={{ color: isPinned ? 'var(--primary)' : 'var(--outline)' }}>
               <Pin size={15} style={{ fill: isPinned ? 'var(--primary)' : 'transparent' }} />
             </button>
-            <button onClick={() => setIsFavorite(!isFavorite)} className="editor-toolbar-btn" style={{ color: isFavorite ? '#F59E0B' : 'var(--outline)' }}>
+            <button onClick={() => setIsFavorite(!isFavorite)} className="editor-toolbar-btn" aria-label={isFavorite ? 'Remove from favorites' : 'Mark as favorite'} style={{ color: isFavorite ? '#F59E0B' : 'var(--outline)' }}>
               <Star size={15} style={{ fill: isFavorite ? '#F59E0B' : 'transparent' }} />
             </button>
-            <button onClick={handleLockToggle} className="editor-toolbar-btn" style={{ color: pinLock ? 'var(--error)' : 'var(--outline)' }}>
+            <button onClick={handleLockToggle} className="editor-toolbar-btn" aria-label={pinLock ? 'Unlock note' : 'Lock note with PIN'} style={{ color: pinLock ? 'var(--error)' : 'var(--outline)' }}>
               {pinLock ? <Lock size={15} /> : <Unlock size={15} />}
             </button>
           </div>
@@ -594,7 +610,7 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
           {tags.map((tag) => (
             <span key={tag} className="editor-tag">
               #{tag}
-              <button onClick={() => handleRemoveTag(tag)}>×</button>
+              <button onClick={() => handleRemoveTag(tag)} aria-label={`Remove tag ${tag}`}>×</button>
             </span>
           ))}
         </div>
@@ -625,9 +641,9 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
 
       {/* ─── Table Picker ─── */}
       {showTablePicker && (
-        <div className="editor-table-picker-overlay" onClick={() => setShowTablePicker(false)}>
+        <div className="editor-table-picker-overlay" role="dialog" aria-modal="true" aria-labelledby="table-picker-title" onClick={() => setShowTablePicker(false)}>
           <div className="editor-table-picker" onClick={e => e.stopPropagation()}>
-            <div className="editor-table-picker-header">
+            <div className="editor-table-picker-header" id="table-picker-title">
               <Table2 size={14} /> Insert Table
             </div>
             <div className="editor-table-picker-grid">
@@ -653,11 +669,11 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
 
       {/* ─── Floating AI Assistant ─── */}
       {showAiAssistant && (
-        <div className="editor-ai-overlay" onClick={() => setShowAiAssistant(false)}>
+        <div className="editor-ai-overlay" role="dialog" aria-modal="true" aria-labelledby="ai-assistant-title" onClick={() => setShowAiAssistant(false)}>
           <div className="editor-ai-panel" onClick={e => e.stopPropagation()}>
-            <div className="editor-ai-header">
+            <div className="editor-ai-header" id="ai-assistant-title">
               <Sparkles size={16} /> SnapAI Assistant
-              <button onClick={() => setShowAiAssistant(false)} className="editor-ai-close">
+              <button onClick={() => setShowAiAssistant(false)} className="editor-ai-close" aria-label="Close AI Assistant">
                 <X size={16} />
               </button>
             </div>
@@ -687,16 +703,16 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
       )}
 
       {/* ─── AI FAB ─── */}
-      <button onClick={() => setShowAiAssistant(true)} className="editor-ai-fab">
+      <button onClick={() => setShowAiAssistant(true)} className="editor-ai-fab" aria-label="Open AI Assistant">
         <Sparkles size={20} />
       </button>
 
       {/* ─── Pin Modal ─── */}
       {showPinModal && (
-        <div className="modal-backdrop" onClick={() => setShowPinModal(false)}>
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="pin-modal-title" onClick={() => setShowPinModal(false)}>
           <form className="modal-content" onClick={e => e.stopPropagation()} onSubmit={handleSavePin} style={{ textAlign: 'center', maxWidth: '360px' }}>
             <Lock size={40} style={{ color: 'var(--primary)', margin: '0 auto 12px' }} />
-            <h3 style={{ fontSize: '18px' }}>Lock Note</h3>
+            <h3 id="pin-modal-title" style={{ fontSize: '18px' }}>Lock Note</h3>
             <p style={{ fontSize: '13px', color: 'var(--on-surface-variant)', marginBottom: '16px' }}>Set a 4-digit PIN to secure this note</p>
             <input type="password" maxLength={PIN_LENGTH} placeholder="••••" value={pinCode}
               onChange={(e) => setPinCode(e.target.value.replace(/\D/g, ''))} required autoFocus
