@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { useStore } from '@/lib/store/useStore';
 import DOMPurify from 'dompurify';
 import {
@@ -18,6 +18,7 @@ import { stripHtml } from '@/lib/utils';
 import { API, apiFetch } from '@/lib/config';
 import { useAuth } from '@clerk/nextjs';
 import { hashPinClient } from '@/lib/pin';
+import { upsertRemoteNote } from '@/lib/sync/notesSync';
 
 interface NoteEditorProps {
   noteId: string | null;
@@ -55,6 +56,47 @@ function insertAtCursor(html: string) {
 function execFormat(command: string, value?: string) {
   document.execCommand(command, false, value);
 }
+
+function placeCaretAtEnd(el: HTMLElement) {
+  el.focus();
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  range.collapse(false);
+  const sel = window.getSelection();
+  sel?.removeAllRanges();
+  sel?.addRange(range);
+}
+
+// The contentEditable host lives here, memoized so React never re-renders it
+// during ordinary typing. Its props are stable callbacks that read refs, so
+// the browser owns the DOM and caret; React only updates this subtree for
+// programmatic operations (initial load, note switch, undo/redo, inserts).
+interface EditorAreaProps {
+  onInput: (e: React.FormEvent<HTMLDivElement>) => void;
+  onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => void;
+  onCompositionStart: () => void;
+  onCompositionEnd: () => void;
+}
+
+const EditorArea = React.memo(
+  React.forwardRef<HTMLDivElement, EditorAreaProps>(function EditorArea(
+    { onInput, onKeyDown, onCompositionStart, onCompositionEnd },
+    ref
+  ) {
+    return (
+      <div
+        ref={ref}
+        className="editor-content"
+        contentEditable
+        suppressContentEditableWarning
+        onInput={onInput}
+        onKeyDown={onKeyDown}
+        onCompositionStart={onCompositionStart}
+        onCompositionEnd={onCompositionEnd}
+      />
+    );
+  })
+);
 
 interface ToolbarItem {
   type?: 'divider';
@@ -123,6 +165,32 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
   const recognitionRef = useRef<SpeechRecognition | null>(null);
 
   const editorRef = useRef<HTMLDivElement>(null);
+  const initialContentRef = useRef<string>(activeNote?.content ?? '');
+
+  // Mutable editor state lives behind refs so a keystroke never schedules a
+  // render. Access is limited to event handlers and effects; the React Compiler
+  // mutability rule is disabled above for this file because the editor must own
+  // its DOM caret and content while typing.
+  const historyStore = useRef<{ stack: string[]; index: number }>({ stack: [], index: -1 });
+  const contentStore = useRef<{ html: string }>({ html: activeNote?.content ?? '' });
+  const composingState = useRef<{ on: boolean }>({ on: false });
+  const saveStatusState = useRef<{ s: 'saved' | 'saving' | 'unsaved' }>({ s: 'saved' });
+  // Stable handler reference for the speech effect, which is registered before
+  // the input handler is (re)declared further down in this render body.
+  const editorChangeRef = useRef<() => void>(() => {});
+
+  // Initialize the contentEditable DOM once when the note/draft is opened. The
+  // element is DOM-owned while typing afterwards, so state is never pushed back
+  // into it. This is the ONLY non-programmatic innerHTML write.
+  useLayoutEffect(() => {
+    if (!editorRef.current) return;
+    const initial = DOMPurify.sanitize(initialContentRef.current) || '<p><br></p>';
+    editorRef.current.innerHTML = initial;
+    contentStore.current.html = initial;
+    historyStore.current.stack = [initial];
+    historyStore.current.index = 0;
+  }, [noteId, contentStore, historyStore]);
+
   const [showTablePicker, setShowTablePicker] = useState(false);
   const [tableRows, setTableRows] = useState(3);
   const [tableCols, setTableCols] = useState(3);
@@ -130,9 +198,6 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
   const [aiPrompt, setAiPrompt] = useState('');
   const [aiResponse, setAiResponse] = useState('');
   const [isAiLoading, setIsAiLoading] = useState(false);
-
-  const [history, setHistory] = useState<string[]>([]);
-  const [historyIndex, setHistoryIndex] = useState(-1);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -159,13 +224,10 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
           for (let i = event.resultIndex; i < event.results.length; ++i) {
             if (event.results[i][0].transcript) finalTranscript += event.results[i][0].transcript;
           }
-          if (finalTranscript) {
-            if (editorRef.current) {
-              editorRef.current.focus();
-              insertAtCursor(finalTranscript + ' ');
-            }
-            setContent(prev => prev + finalTranscript + ' ');
-            setSaveStatus('unsaved');
+          if (finalTranscript && editorRef.current) {
+            editorRef.current.focus();
+            insertAtCursor(finalTranscript + ' ');
+            editorChangeRef.current();
           }
         };
         rec.onerror = (e: SpeechRecognitionErrorEvent) => { console.error("STT Error:", e.error); setIsListening(false); };
@@ -201,6 +263,7 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
       isFavorite: s.isFavorite,
       pinLock: s.pinLock,
     };
+    let savedId: string;
     if (s.isNew) {
       if (!draftIdRef.current) {
         draftIdRef.current = crypto.randomUUID();
@@ -208,11 +271,21 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
       } else {
         updateNote(draftIdRef.current, payload);
       }
+      savedId = draftIdRef.current;
     } else if (s.noteId) {
       updateNote(s.noteId, payload);
+      savedId = s.noteId;
+    } else {
+      return;
+    }
+    // Day 5 — fire-and-forget remote upsert. Local saving never depends on the
+    // network; the sync layer ignores failures and keeps local data intact.
+    const savedNote = useStore.getState().notes.find((n) => n.id === savedId);
+    if (savedNote) {
+      void upsertRemoteNote(savedNote, () => getToken());
     }
     return true;
-  }, [addNote, updateNote]);
+  }, [addNote, updateNote, getToken]);
 
   const persistNowRef = useRef(persistNow);
 
@@ -245,12 +318,15 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
   useEffect(() => {
     if (isNew && !title.trim() && !content.trim()) return;
     const timer = setTimeout(() => {
+      if (saveStatusState.current.s !== 'unsaved') return;
+      saveStatusState.current.s = 'saving';
       setSaveStatus('saving');
       persistNow();
+      saveStatusState.current.s = 'saved';
       setSaveStatus('saved');
     }, 1500);
     return () => clearTimeout(timer);
-  }, [title, content, tags, categoryId, folderId, isPinned, isFavorite, pinLock, isNew, persistNow]);
+  }, [title, content, tags, categoryId, folderId, isPinned, isFavorite, pinLock, isNew, persistNow, saveStatusState]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -263,51 +339,91 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [showTablePicker, showAiAssistant, showPinModal]);
 
-  const pushHistory = useCallback((html: string) => {
-    setHistory(prev => {
-      const newHistory = prev.slice(0, historyIndex + 1);
-      newHistory.push(html);
-      if (newHistory.length > 50) newHistory.shift();
-      return newHistory;
-    });
-    setHistoryIndex(prev => Math.min(prev + 1, 49));
-  }, [historyIndex]);
+  const recordSnapshot = useCallback(() => {
+    const el = editorRef.current;
+    if (!el) return;
+    const stack = historyStore.current.stack;
+    stack.length = historyStore.current.index + 1;
+    stack.push(el.innerHTML);
+    if (stack.length > 50) stack.shift();
+    historyStore.current.index = stack.length - 1;
+  }, [historyStore]);
 
-  const handleEditorInput = () => {
-    if (editorRef.current) {
-      const html = editorRef.current.innerHTML;
+  const markDirty = useCallback(() => {
+    if (saveStatusState.current.s === 'unsaved') return;
+    saveStatusState.current.s = 'unsaved';
+    setSaveStatus('unsaved');
+  }, [saveStatusState]);
+
+  // Programmatic write (undo/redo/import/inserts). Rare and intentional:
+  // rewrites innerHTML, then restores focus + caret so typing can continue.
+  const applyEditorHtml = useCallback((html: string) => {
+    const el = editorRef.current;
+    if (!el) return;
+    const safe = DOMPurify.sanitize(html);
+    el.innerHTML = safe;
+    placeCaretAtEnd(el);
+    contentStore.current.html = safe;
+    setContent(safe);
+  }, [contentStore]);
+
+  const handleUndo = useCallback(() => {
+    const stack = historyStore.current.stack;
+    if (historyStore.current.index <= 0) return;
+    historyStore.current.index -= 1;
+    applyEditorHtml(stack[historyStore.current.index]);
+    markDirty();
+  }, [applyEditorHtml, markDirty, historyStore]);
+
+  const handleRedo = useCallback(() => {
+    const stack = historyStore.current.stack;
+    if (historyStore.current.index >= stack.length - 1) return;
+    historyStore.current.index += 1;
+    applyEditorHtml(stack[historyStore.current.index]);
+    markDirty();
+  }, [applyEditorHtml, markDirty, historyStore]);
+
+  // Ordinary typing path. The browser has already committed the mutation; we
+  // only mirror the authoritative DOM into state/refs for autosave and undo.
+  // Nothing here writes back to the editor (EditorArea is memoized off).
+  const handleEditorInputChange = useCallback((e?: React.FormEvent<HTMLDivElement>) => {
+    const native = e?.nativeEvent as InputEvent | undefined;
+    if (composingState.current.on || (native && 'isComposing' in native && native.isComposing)) {
+      return; // flush once at composition end so we never mirror a half-typed glyph
+    }
+    const el = editorRef.current;
+    if (!el) return;
+    const html = el.innerHTML;
+    if (html !== contentStore.current.html) {
+      contentStore.current.html = html;
       setContent(html);
-      setSaveStatus('unsaved');
-      pushHistory(html);
     }
-  };
+    markDirty();
+    recordSnapshot();
+  }, [markDirty, recordSnapshot, composingState, contentStore]);
 
-  const handleUndo = () => {
-    if (historyIndex > 0) {
-      const newIndex = historyIndex - 1;
-      setHistoryIndex(newIndex);
-      const html = history[newIndex];
-      if (editorRef.current) {
-        editorRef.current.innerHTML = DOMPurify.sanitize(html);
-        setContent(html);
-      }
-    }
-  };
+  const handleEditorCompositionStart = useCallback(() => {
+    composingState.current.on = true;
+  }, [composingState]);
 
-  const handleRedo = () => {
-    if (historyIndex < history.length - 1) {
-      const newIndex = historyIndex + 1;
-      setHistoryIndex(newIndex);
-      const html = history[newIndex];
-      if (editorRef.current) {
-        editorRef.current.innerHTML = DOMPurify.sanitize(html);
-        setContent(html);
-      }
-    }
-  };
+  const handleEditorCompositionEnd = useCallback(() => {
+    composingState.current.on = false;
+    handleEditorInputChange();
+  }, [handleEditorInputChange, composingState]);
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+  const insertCodeBlock = useCallback((lang: string) => {
+    const html = `<div class="editor-code-block"><div class="editor-code-header"><span>${lang}</span><button class="editor-code-copy" onclick="(function(btn){var code=btn.parentElement.nextElementSibling.textContent;navigator.clipboard.writeText(code);btn.textContent='Copied!';setTimeout(function(){btn.textContent='Copy'},2000);})(this)">Copy</button></div><pre><code class="language-${lang}"> </code></pre></div>`;
+    insertAtCursor(html);
+    handleEditorInputChange();
+  }, [handleEditorInputChange]);
+
+  useEffect(() => {
+    editorChangeRef.current = handleEditorInputChange;
+  }, [handleEditorInputChange]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.nativeEvent.isComposing) return; // never run markdown shortcuts mid-composition
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
       e.preventDefault();
       if (e.shiftKey) handleRedo();
       else handleUndo();
@@ -388,19 +504,13 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
         }
       }
     }
-  };
-
-  const insertCodeBlock = (lang: string) => {
-    const html = `<div class="editor-code-block"><div class="editor-code-header"><span>${lang}</span><button class="editor-code-copy" onclick="(function(btn){var code=btn.parentElement.nextElementSibling.textContent;navigator.clipboard.writeText(code);btn.textContent='Copied!';setTimeout(function(){btn.textContent='Copy'},2000);})(this)">Copy</button></div><pre><code class="language-${lang}"> </code></pre></div>`;
-    insertAtCursor(html);
-    if (editorRef.current) handleEditorInput();
-  };
+  }, [handleRedo, handleUndo, insertCodeBlock]);
 
   const insertTable = () => {
     const html = generateTableHtml(tableRows, tableCols);
     insertAtCursor(html);
     setShowTablePicker(false);
-    if (editorRef.current) handleEditorInput();
+    handleEditorInputChange();
   };
 
   const insertImage = () => {
@@ -410,7 +520,7 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
       const fileName = sanitizedUrl.split('/').pop()?.replace(/[?#].*$/, '').split('.')[0] || '';
       const html = `<figure class="editor-image-block"><img src="${sanitizedUrl}" alt="${fileName}" loading="lazy" /><figcaption>Image</figcaption></figure>`;
       insertAtCursor(html);
-      if (editorRef.current) handleEditorInput();
+      handleEditorInputChange();
     }
   };
 
@@ -419,7 +529,7 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
     if (expr) {
       const html = `<span class="editor-math-inline" contenteditable="false">📐 ${expr}</span>`;
       insertAtCursor(html + ' ');
-      if (editorRef.current) handleEditorInput();
+      handleEditorInputChange();
     }
   };
 
@@ -526,8 +636,16 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
       const fileTitle = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
       setTitle(fileTitle);
       const escaped = text.replace(/\n/g, '<br>').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\*(.+?)\*/g, '<em>$1</em>').replace(/`(.+?)`/g, '<code>$1</code>');
-      setContent(`<p>${escaped}</p>`);
-      setSaveStatus('unsaved');
+      const html = `<p>${escaped}</p>`;
+      const safeHtml = DOMPurify.sanitize(html);
+      setContent(safeHtml);
+      if (editorRef.current) {
+        editorRef.current.innerHTML = safeHtml;
+        handleEditorInputChange();
+      } else {
+        contentStore.current.html = safeHtml;
+        markDirty();
+      }
       confetti({ particleCount: 50, colors: ['#0061A4'] });
     };
     reader.readAsText(file);
@@ -562,7 +680,7 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
     if (aiResponse) {
       const html = aiResponse.replace(/\n/g, '<br>');
       insertAtCursor(DOMPurify.sanitize(`<p>${html}</p>`));
-      if (editorRef.current) handleEditorInput();
+      handleEditorInputChange();
       setShowAiAssistant(false);
       setAiPrompt('');
       setAiResponse('');
@@ -658,14 +776,12 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
           </div>
         )}
 
-        <div
+        <EditorArea
           ref={editorRef}
-          className="editor-content"
-          contentEditable
-          suppressContentEditableWarning
-          onInput={handleEditorInput}
+          onInput={handleEditorInputChange}
           onKeyDown={handleKeyDown}
-          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(content) || '<p><br></p>' }}
+          onCompositionStart={handleEditorCompositionStart}
+          onCompositionEnd={handleEditorCompositionEnd}
         />
       </div>
 

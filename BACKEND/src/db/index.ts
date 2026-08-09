@@ -15,8 +15,5 @@ export const db = createDb();
 export * from './schema';
 
 export function getDb() {
-  if (!db) {
-    throw new Error('Database not configured. Set DATABASE_URL env.');
-  }
   return db;
 }

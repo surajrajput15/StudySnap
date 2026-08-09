@@ -17,6 +17,7 @@ export function validate(schema: z.ZodTypeAny) {
 
 export const noteSchema = z.object({
   id: z.string().uuid().optional(),
+  createdAt: z.string().datetime().optional(),
   title: z.string().min(1, 'Title is required').max(500),
   content: z.string(),
   tags: z.array(z.string()).or(z.string()).optional(),

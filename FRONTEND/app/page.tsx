@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useLayoutEffect, useSyncExternalStore } from 'react';
 import dynamic from 'next/dynamic';
 import { useStore, switchStoreScopeForUser } from '@/lib/store/useStore';
+import { syncNotesForUser } from '@/lib/sync/notesSync';
 import HomeScreen from '@/components/HomeScreen';
 import MobileDrawer from '@/components/MobileDrawer';
 import OfflineBanner from '@/components/OfflineBanner';
@@ -26,7 +27,7 @@ export default function Page() {
   const activeNoteId = useStore((s) => s.activeNoteId);
   const setActiveNoteId = useStore((s) => s.setActiveNoteId);
   const syncProfileNameFromClerk = useStore((s) => s.syncProfileNameFromClerk);
-  const { isSignedIn, isLoaded } = useAuth();
+  const { isSignedIn, isLoaded, getToken } = useAuth();
   const { user: clerkUser } = useUser();
   const [activeTab, setActiveTab] = useState<string>(() => {
     if (typeof window === 'undefined') return 'home';
@@ -65,6 +66,28 @@ export default function Page() {
       syncProfileNameFromClerk(clerkUser.fullName);
     }
   }, [isLoaded, isSignedIn, clerkUser, syncProfileNameFromClerk]);
+
+  // Day 5 — Notes hydration. Runs only after switchStoreScopeForUser (see the
+  // useLayoutEffect above) so the store is already scoped to this account.
+  // The sync layer itself guards against account switches mid-flight and
+  // against React StrictMode double-invocations. Offline/guest sessions no-op.
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn || !clerkId) return;
+
+    const runSync = () => {
+      void syncNotesForUser(clerkId, () => getToken());
+    };
+
+    runSync();
+
+    // Re-run hydration when the connection returns so offline changes get a
+    // chance to reach the server without requiring a page reload.
+    const handleOnline = () => runSync();
+    window.addEventListener('online', handleOnline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [isLoaded, isSignedIn, clerkId, getToken]);
 
   const handleEditNote = (noteId: string) => {
     setActiveNoteId(noteId);

@@ -15,6 +15,8 @@ import HeroAI from './HeroAI';
 import { WEEKDAYS, DAILY_GOAL, AI_TOOLS } from '@/lib/constants';
 import { formatShortDate, stripHtml } from '@/lib/utils';
 import { pinMatchesStored } from '@/lib/pin';
+import { deleteRemoteNote } from '@/lib/sync/notesSync';
+import { useAuth } from '@clerk/nextjs';
 
 interface HomeScreenProps {
   onEditNote: (noteId: string) => void;
@@ -56,6 +58,7 @@ function CircularProgress({ value, max, size = 80, strokeWidth = 6, color = 'var
 }
 
 export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: HomeScreenProps) {
+  const { getToken } = useAuth();
   const user = useStore((s) => s.user);
   const notes = useStore((s) => s.notes);
   const categories = useStore((s) => s.categories);
@@ -139,6 +142,13 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
   const handleStreakClick = () => {
     incrementStreak();
     confetti({ particleCount: 120, spread: 80, origin: { y: 0.5 } });
+  };
+
+  // Day 5 — delete locally immediately, then fire-and-forget the remote
+  // DELETE. A network failure must never restore the deleted local note.
+  const handleDeleteNote = (noteId: string) => {
+    deleteNote(noteId);
+    void deleteRemoteNote(noteId, () => getToken());
   };
 
   // Central gate for opening a note: locked notes first ask for their PIN
@@ -610,7 +620,7 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--outline-variant)', paddingTop: '10px', marginTop: '4px' }}>
                       <span style={{ fontSize: '11px', color: 'var(--outline)' }}>{formatShortDate(note.updatedAt)}</span>
-                      <button onClick={(e) => { e.stopPropagation(); deleteNote(note.id); }} aria-label={`Delete note ${note.title}`} className="md3-btn-ghost" style={{ padding: '4px', color: 'var(--error)', fontSize: '12px' }}><Trash2 size={14} /></button>
+                      <button onClick={(e) => { e.stopPropagation(); handleDeleteNote(note.id); }} aria-label={`Delete note ${note.title}`} className="md3-btn-ghost" style={{ padding: '4px', color: 'var(--error)', fontSize: '12px' }}><Trash2 size={14} /></button>
                     </div>
                   </div>
                 );
@@ -635,7 +645,7 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
                       {noteCategory && <span className="md3-chip" style={{ fontSize: '10px', padding: '2px 10px', background: `${noteCategory.color}18`, color: noteCategory.color }}>{noteCategory.name}</span>}
                       <span style={{ fontSize: '11px', color: 'var(--outline)', whiteSpace: 'nowrap' }}>{formatShortDate(note.updatedAt)}</span>
-                      <button onClick={(e) => { e.stopPropagation(); deleteNote(note.id); }} aria-label={`Delete note ${note.title}`} className="md3-btn-ghost" style={{ padding: '4px', color: 'var(--error)' }}><Trash2 size={14} /></button>
+                      <button onClick={(e) => { e.stopPropagation(); handleDeleteNote(note.id); }} aria-label={`Delete note ${note.title}`} className="md3-btn-ghost" style={{ padding: '4px', color: 'var(--error)' }}><Trash2 size={14} /></button>
                     </div>
                   </div>
                 );

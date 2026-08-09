@@ -48,13 +48,14 @@ router.get('/', async (req: Request, res: Response) => {
       return;
     }
 
-    if (!getDb()) {
+    const db = getDb();
+    if (!db) {
       const filtered = mockNotes.filter(n => n.userId === userId);
       res.json({ success: true, notes: filtered.map(stripPinLock) });
       return;
     }
 
-    const dbNotes = await getDb()
+    const dbNotes = await db
       .select()
       .from(notes)
       .where(and(eq(notes.userId, userId), eq(notes.isArchived, false)))
@@ -70,7 +71,9 @@ router.get('/', async (req: Request, res: Response) => {
 router.post('/', validate(noteSchema), async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const { id, title, content, tags, isPinned, isFavorite, pinLock, categoryId, folderId } = req.body;
+    const { id, title, content, tags, isPinned, isFavorite, pinLock, categoryId, folderId, createdAt } = req.body;
+
+    const createdAtValue = createdAt ? new Date(createdAt) : undefined;
 
     const noteData = {
       title,
@@ -84,14 +87,21 @@ router.post('/', validate(noteSchema), async (req: Request, res: Response) => {
       updatedAt: new Date(),
     };
 
-    if (!getDb()) {
+    const db = getDb();
+    if (!db) {
       const existingIdx = mockNotes.findIndex(n => n.id === id && n.userId === userId);
       let result: MockNote;
       if (existingIdx !== -1) {
         result = { ...mockNotes[existingIdx], ...noteData, updatedAt: new Date().toISOString() };
         mockNotes[existingIdx] = result;
       } else {
-        result = { id: id || generateId(), userId, ...noteData, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+        result = {
+          id: id || generateId(),
+          userId,
+          ...noteData,
+          createdAt: createdAtValue ? createdAtValue.toISOString() : new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
         mockNotes.push(result);
       }
       await invalidateUserCache(userId);
@@ -101,16 +111,16 @@ router.post('/', validate(noteSchema), async (req: Request, res: Response) => {
 
     let result;
     if (id) {
-      const existing = await getDb().select().from(notes).where(and(eq(notes.id, id), eq(notes.userId, userId)));
+      const existing = await db.select().from(notes).where(and(eq(notes.id, id), eq(notes.userId, userId)));
       if (existing.length > 0) {
-        const updated = await getDb().update(notes).set(noteData).where(and(eq(notes.id, id), eq(notes.userId, userId))).returning();
+        const updated = await db.update(notes).set(noteData).where(and(eq(notes.id, id), eq(notes.userId, userId))).returning();
         result = updated[0];
       } else {
-        const inserted = await getDb().insert(notes).values({ id, userId, ...noteData }).returning();
+        const inserted = await db.insert(notes).values({ ...noteData, id, userId, ...(createdAtValue ? { createdAt: createdAtValue } : {}) }).returning();
         result = inserted[0];
       }
     } else {
-      const inserted = await getDb().insert(notes).values({ userId, ...noteData }).returning();
+      const inserted = await db.insert(notes).values({ ...noteData, userId, ...(createdAtValue ? { createdAt: createdAtValue } : {}) }).returning();
       result = inserted[0];
     }
 
@@ -128,11 +138,12 @@ router.post('/verify-pin', pinLimiter, validate(verifyPinSchema), async (req: Re
 
     let storedHash: string | null = null;
 
-    if (!getDb()) {
+    const db = getDb();
+    if (!db) {
       const note = mockNotes.find(n => n.id === noteId && n.userId === userId);
       storedHash = note?.pinLock || null;
     } else {
-      const result = await getDb().select({ pinLock: notes.pinLock }).from(notes).where(and(eq(notes.id, noteId), eq(notes.userId, userId)));
+      const result = await db.select({ pinLock: notes.pinLock }).from(notes).where(and(eq(notes.id, noteId), eq(notes.userId, userId)));
       storedHash = result[0]?.pinLock || null;
     }
 
@@ -158,14 +169,15 @@ router.delete('/', async (req: Request, res: Response) => {
       return;
     }
 
-    if (!getDb()) {
+    const db = getDb();
+    if (!db) {
       mockNotes = mockNotes.filter(n => !(n.id === id && n.userId === userId));
       await invalidateUserCache(userId);
       res.json({ success: true });
       return;
     }
 
-    await getDb().delete(notes).where(and(eq(notes.id, id), eq(notes.userId, userId)));
+    await db.delete(notes).where(and(eq(notes.id, id), eq(notes.userId, userId)));
     await invalidateUserCache(userId);
     res.json({ success: true });
   } catch {
@@ -177,12 +189,13 @@ router.get('/categories', async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
 
-    if (!getDb()) {
+    const db = getDb();
+    if (!db) {
       res.json({ success: true, categories: DEFAULT_CATEGORIES });
       return;
     }
 
-    const dbCategories = await getDb().select().from(categories).where(eq(categories.userId, userId));
+    const dbCategories = await db.select().from(categories).where(eq(categories.userId, userId));
     res.json({ success: true, categories: [...DEFAULT_CATEGORIES, ...dbCategories] });
   } catch {
     res.status(500).json({ success: false, error: 'Failed to fetch categories' });

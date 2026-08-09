@@ -1,6 +1,7 @@
 import { Router, raw } from 'express';
 import { Webhook, WebhookVerificationError } from 'svix';
 import { env } from '../config/env';
+import { getDb, users } from '../db';
 
 const router = Router();
 
@@ -45,6 +46,21 @@ router.post('/clerk', raw({ type: 'application/json' }), async (req, res) => {
 
     const eventType = (event as { type: string }).type;
     console.log('[Webhook] Clerk event:', eventType);
+
+    if (eventType === 'user.created') {
+      const userData = (event as { data?: { id?: string; first_name?: string; last_name?: string } })?.data;
+      if (userData?.id) {
+        const name = [userData.first_name, userData.last_name].filter(Boolean).join(' ').trim() || 'Student';
+        try {
+          const db = getDb();
+          if (db) {
+            await db.insert(users).values({ id: userData.id, name }).onConflictDoNothing({ target: users.id });
+          }
+        } catch (e) {
+          console.error('[Webhook] user upsert failed:', e instanceof Error ? e.message : e);
+        }
+      }
+    }
 
     res.json({ success: true, received: true });
   } catch (error) {
