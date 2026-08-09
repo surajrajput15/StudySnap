@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useStore, VoiceNote } from '@/lib/store/useStore';
 import {
   Mic, Square, Play, Pause, Trash2, FileText, Volume2,
-  ArrowLeft, Check, X, Edit3, ChevronUp
+  ArrowLeft, Check, X, Edit3, ChevronUp, AlertTriangle
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import EmptyState, { EmptyVoiceIllustration } from './EmptyState';
@@ -112,6 +112,8 @@ export default function VoiceNotes({ onBack, onLinkToNote }: VoiceNotesProps) {
   const deleteVoiceNote = useStore((s) => s.deleteVoiceNote);
   const updateNote = useStore((s) => s.updateNote);
   const addNote = useStore((s) => s.addNote);
+  const persistenceError = useStore((s) => s.persistenceError);
+  const setPersistenceError = useStore((s) => s.setPersistenceError);
 
   const [isRecording, setIsRecording] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -235,6 +237,8 @@ export default function VoiceNotes({ onBack, onLinkToNote }: VoiceNotesProps) {
           duration: recordingDuration,
           transcript: transcript.trim() || 'Voice note captured.',
         });
+        // A successful save implies storage is writable again.
+        setPersistenceError(false);
         setRecordingDuration(0);
         setTranscript('');
         setAudioLevel(0);
@@ -360,18 +364,57 @@ export default function VoiceNotes({ onBack, onLinkToNote }: VoiceNotesProps) {
     onLinkToNote(created.id);
   };
 
+  const handleBack = () => {
+    if (isRecording) {
+      const leave = window.confirm('You are still recording. Leave and discard this recording?');
+      if (!leave) return;
+      if (streamRef.current) streamRef.current.getTracks().forEach(track => track.stop());
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') mediaRecorderRef.current.stop();
+      if (recognitionRef.current) recognitionRef.current.stop();
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+      setIsRecording(false);
+      setIsPaused(false);
+    }
+    onBack();
+  };
+
+  const handleDeleteVoice = (vn: VoiceNote) => {
+    if (playingId === vn.id && activeAudioRef.current) {
+      activeAudioRef.current.pause();
+      setPlayingId(null);
+      setPlaybackProgress(0);
+    }
+    // Object URLs hold the blob in memory for this session — release them so
+    // recordings don't leak memory while the SPA stays open.
+    if (vn.audioUrl.startsWith('blob:')) {
+      try {
+        URL.revokeObjectURL(vn.audioUrl);
+      } catch {
+        // ignoring revoke failures is safe; the URL is only used for playback
+      }
+    }
+    deleteVoiceNote(vn.id);
+  };
+
   const recordingWaveform = isRecording && !isPaused ? waveformLevels : new Array(WAVEFORM_BARS).fill(0.05);
 
   return (
     <div className="voice-memos-container">
       {/* Header */}
       <div className="voice-memos-header">
-        <button onClick={onBack} className="voice-memos-header-btn" aria-label="Back to notes">
+        <button onClick={handleBack} className="voice-memos-header-btn" aria-label="Back to notes">
           <ArrowLeft size={18} />
         </button>
         <h2 className="voice-memos-title">Voice Memos</h2>
         <span className="voice-memos-count">{voiceNotes.length}</span>
       </div>
+
+      {persistenceError && (
+        <div className="voice-storage-warning" role="alert">
+          <AlertTriangle size={15} />
+          <span>Browser storage is full — recordings can&apos;t be saved right now. Delete old voice notes or free up storage to keep recording.</span>
+        </div>
+      )}
 
       {/* Recording Area */}
       <div className={`voice-recording-area ${isRecording ? 'recording' : ''}`}>
@@ -505,7 +548,7 @@ export default function VoiceNotes({ onBack, onLinkToNote }: VoiceNotesProps) {
                       <button onClick={() => { handleCreateNoteFromVoice(vn); }} className="voice-action-btn" title="Create Note" aria-label="Create note from recording">
                         <FileText size={14} />
                       </button>
-                      <button onClick={() => deleteVoiceNote(vn.id)} className="voice-action-btn voice-action-delete" title="Delete" aria-label="Delete recording">
+                      <button onClick={() => handleDeleteVoice(vn)} className="voice-action-btn voice-action-delete" title="Delete" aria-label="Delete recording">
                         <Trash2 size={14} />
                       </button>
                     </div>

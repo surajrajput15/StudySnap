@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState, useEffect, useSyncExternalStore } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useSyncExternalStore } from 'react';
 import dynamic from 'next/dynamic';
-import { useStore } from '@/lib/store/useStore';
+import { useStore, switchStoreScopeForUser } from '@/lib/store/useStore';
 import HomeScreen from '@/components/HomeScreen';
 import MobileDrawer from '@/components/MobileDrawer';
+import OfflineBanner from '@/components/OfflineBanner';
 
 const NoteEditor = dynamic(() => import('@/components/NoteEditor'), { ssr: false });
 const VoiceNotes = dynamic(() => import('@/components/VoiceNotes'), { ssr: false });
@@ -24,8 +25,8 @@ export default function Page() {
   const toggleTheme = useStore((s) => s.toggleTheme);
   const activeNoteId = useStore((s) => s.activeNoteId);
   const setActiveNoteId = useStore((s) => s.setActiveNoteId);
-  const updateProfile = useStore((s) => s.updateProfile);
-  const { isSignedIn } = useAuth();
+  const syncProfileNameFromClerk = useStore((s) => s.syncProfileNameFromClerk);
+  const { isSignedIn, isLoaded } = useAuth();
   const { user: clerkUser } = useUser();
   const [activeTab, setActiveTab] = useState<string>(() => {
     if (typeof window === 'undefined') return 'home';
@@ -47,13 +48,23 @@ export default function Page() {
     }
   }, []);
 
+  const clerkId = clerkUser?.id ?? null;
+
+  // Isolate persisted data per account: whenever the signed-in user changes,
+  // atomically swap the store to that user's scoped localStorage key BEFORE the
+  // DOM paints, so a previous account's notes can never flash on screen.
+  useLayoutEffect(() => {
+    if (!isLoaded) return;
+    switchStoreScopeForUser(isSignedIn ? clerkId : null);
+  }, [isLoaded, isSignedIn, clerkId]);
+
   useEffect(() => {
-    if (isSignedIn && clerkUser?.fullName) {
-      updateProfile({ name: clerkUser.fullName });
-    } else if (!isSignedIn) {
-      updateProfile({ name: 'Student' });
+    // Adopt the Clerk display name only while a profile has no custom name yet
+    // (the sync action itself is idempotent). Never reset to "Student".
+    if (isLoaded && isSignedIn && clerkUser?.fullName) {
+      syncProfileNameFromClerk(clerkUser.fullName);
     }
-  }, [isSignedIn, clerkUser, updateProfile]);
+  }, [isLoaded, isSignedIn, clerkUser, syncProfileNameFromClerk]);
 
   const handleEditNote = (noteId: string) => {
     setActiveNoteId(noteId);
@@ -95,6 +106,8 @@ export default function Page() {
 
   return (
     <div className="app-root">
+      <OfflineBanner />
+
       {/* ─── Mobile Drawer ─── */}
       <MobileDrawer
         open={drawerOpen}

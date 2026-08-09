@@ -1679,6 +1679,23 @@ textarea:focus-visible,
   color: var(--primary);
 }
 
+.voice-storage-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 14px 0 4px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--error-container, rgba(239, 68, 68, 0.12));
+  color: var(--on-error-container, var(--error, #b91c1c));
+  font-size: 13px;
+  line-height: 1.45;
+}
+.voice-storage-warning svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
 /* ─── Recording Area ─── */
 .voice-recording-area {
   display: flex;
@@ -6400,5 +6417,33 @@ textarea:focus-visible,
 @media (max-width: 340px) {
   .signin-prompt-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+/* ─── Offline Banner ─── */
+.offline-banner {
+  position: sticky;
+  top: 0;
+  z-index: 210;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: #1f1b16;
+  color: #f5efe2;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+.offline-banner svg {
+  flex-shrink: 0;
+}
+.offline-banner ~ .app-header {
+  top: 35px;
+}
+@media (max-width: 480px) {
+  .offline-banner ~ .app-header {
+    top: 33px;
   }
 }

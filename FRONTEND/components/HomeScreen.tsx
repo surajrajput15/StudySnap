@@ -14,6 +14,7 @@ import EmptyState, { EmptyNotesIllustration } from './EmptyState';
 import HeroAI from './HeroAI';
 import { WEEKDAYS, DAILY_GOAL, AI_TOOLS } from '@/lib/constants';
 import { formatShortDate, stripHtml } from '@/lib/utils';
+import { pinMatchesStored } from '@/lib/pin';
 
 interface HomeScreenProps {
   onEditNote: (noteId: string) => void;
@@ -73,6 +74,13 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
   const markAsRevised = useStore((s) => s.markAsRevised);
   const incrementStreak = useStore((s) => s.incrementStreak);
   const setActiveAiTool = useStore((s) => s.setActiveAiTool);
+  const storedDailyProgress = useStore((s) => s.dailyProgress);
+  const checkAndResetDaily = useStore((s) => s.checkAndResetDaily);
+
+  useEffect(() => {
+    // Bump across midnight (store counters track a per-day window already).
+    checkAndResetDaily();
+  }, [checkAndResetDaily]);
 
   const [newFolderName, setNewFolderName] = useState('');
   const [showFolderModal, setShowFolderModal] = useState(false);
@@ -82,6 +90,7 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
   const [pinInput, setPinInput] = useState('');
   const [unlockNoteId, setUnlockNoteId] = useState<string | null>(null);
   const [pinError, setPinError] = useState(false);
+  const [isUnlocking, setIsUnlocking] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const filteredNotes = useMemo(() => notes.filter((note) => {
     const matchesSearch = note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -108,9 +117,10 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
   const totalPinned = useMemo(() => notes.filter(n => n.isPinned).length, [notes]);
   const totalFavorites = useMemo(() => notes.filter(n => n.isFavorite).length, [notes]);
 
-  const dailyProgress = useMemo(() => Math.min(notes.filter(n => {
-    return n.updatedAt.startsWith(new Date().toISOString().split('T')[0]);
-  }).length, DAILY_GOAL), [notes]);
+  // Now-day activity comes from the store's counter (incrementing on note
+  // creation, revisions, and voice notes) so the goal reflects real study
+  // actions instead of object timestamps.
+  const dailyProgress = Math.min(storedDailyProgress, DAILY_GOAL);
 
   const weeklyData = useMemo(() => {
     const today = new Date();
@@ -129,6 +139,37 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
   const handleStreakClick = () => {
     incrementStreak();
     confetti({ particleCount: 120, spread: 80, origin: { y: 0.5 } });
+  };
+
+  // Central gate for opening a note: locked notes first ask for their PIN
+  // (the hash is verified before the editor is opened), unlocked notes open
+  // directly.
+  const openNote = (id: string) => {
+    const target = notes.find(n => n.id === id);
+    if (target?.pinLock) {
+      setPinInput('');
+      setPinError(false);
+      setUnlockNoteId(id);
+    } else {
+      onEditNote(id);
+    }
+  };
+
+  const handleUnlockSubmit = async () => {
+    if (!unlockNoteId || isUnlocking) return;
+    const target = notes.find(n => n.id === unlockNoteId);
+    if (!target) { setUnlockNoteId(null); return; }
+    setIsUnlocking(true);
+    const ok = await pinMatchesStored(pinInput, target.pinLock);
+    setIsUnlocking(false);
+    if (ok) {
+      onEditNote(unlockNoteId);
+      setUnlockNoteId(null);
+      setPinInput('');
+      setPinError(false);
+    } else {
+      setPinError(true);
+    }
   };
 
   useEffect(() => {
@@ -208,7 +249,7 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
                 <span>Continue Last Note</span>
               </div>
               {lastEditedNote ? (
-                <div className="hero-continue-body" role="button" tabIndex={0} onClick={() => onEditNote(lastEditedNote.id)} onKeyDown={(e) => handleCardKeyDown(e, () => onEditNote(lastEditedNote.id))}>
+                <div className="hero-continue-body" role="button" tabIndex={0} onClick={() => openNote(lastEditedNote.id)} onKeyDown={(e) => handleCardKeyDown(e, () => openNote(lastEditedNote.id))}>
                   <div className="hero-continue-icon">
                     <BookOpen size={18} />
                   </div>
@@ -246,7 +287,7 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
               ) : (
                 <div className="hero-revision-list">
                   {dueRevisionNotes.slice(0, 2).map((note) => (
-                    <div key={note.id} className="hero-revision-item" role="button" tabIndex={0} onClick={() => onEditNote(note.id)} onKeyDown={(e) => handleCardKeyDown(e, () => onEditNote(note.id))}>
+                    <div key={note.id} className="hero-revision-item" role="button" tabIndex={0} onClick={() => openNote(note.id)} onKeyDown={(e) => handleCardKeyDown(e, () => openNote(note.id))}>
                       <div className="hero-revision-info">
                         <div className="hero-revision-title">{note.title}</div>
                         <div className="hero-revision-streak">Streak {note.revisionStreak}x</div>
@@ -381,7 +422,7 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
               {recentNotes.map((note) => {
                 const noteCategory = categories.find(c => c.id === note.categoryId);
                 return (
-                  <div key={note.id} className="recent-note-card" role="button" tabIndex={0} onClick={() => onEditNote(note.id)} onKeyDown={(e) => handleCardKeyDown(e, () => onEditNote(note.id))}>
+                  <div key={note.id} className="recent-note-card" role="button" tabIndex={0} onClick={() => openNote(note.id)} onKeyDown={(e) => handleCardKeyDown(e, () => openNote(note.id))}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
                       {noteCategory && <span className="note-category-dot" style={{ background: noteCategory.color }} />}
                       <span style={{ fontSize: '13px', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{note.title}</span>
@@ -547,7 +588,7 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
               {displayNotes.map((note) => {
                 const noteCategory = categories.find(c => c.id === note.categoryId);
                 return (
-                  <div key={note.id} className="md3-card" role="button" tabIndex={0} onClick={() => onEditNote(note.id)} onKeyDown={(e) => handleCardKeyDown(e, () => onEditNote(note.id))} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '10px', cursor: 'pointer', borderTop: noteCategory ? `4px solid ${noteCategory.color}` : '4px solid var(--outline-variant)' }}>
+                  <div key={note.id} className="md3-card" role="button" tabIndex={0} onClick={() => openNote(note.id)} onKeyDown={(e) => handleCardKeyDown(e, () => openNote(note.id))} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '10px', cursor: 'pointer', borderTop: noteCategory ? `4px solid ${noteCategory.color}` : '4px solid var(--outline-variant)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                       <h4 style={{ fontSize: '15px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
                         {note.pinLock && <Lock size={12} style={{ color: 'var(--outline)' }} />}
@@ -580,7 +621,7 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
               {displayNotes.map((note) => {
                 const noteCategory = categories.find(c => c.id === note.categoryId);
                 return (
-                  <div key={note.id} className="md3-card-sm" role="button" tabIndex={0} onClick={() => onEditNote(note.id)} onKeyDown={(e) => handleCardKeyDown(e, () => onEditNote(note.id))} style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '14px 18px', cursor: 'pointer', borderLeft: noteCategory ? `4px solid ${noteCategory.color}` : '4px solid var(--outline-variant)' }}>
+                  <div key={note.id} className="md3-card-sm" role="button" tabIndex={0} onClick={() => openNote(note.id)} onKeyDown={(e) => handleCardKeyDown(e, () => openNote(note.id))} style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '14px 18px', cursor: 'pointer', borderLeft: noteCategory ? `4px solid ${noteCategory.color}` : '4px solid var(--outline-variant)' }}>
                     <div style={{ flexGrow: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <h4 style={{ fontSize: '14px', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{note.title}</h4>
@@ -638,15 +679,17 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
 
       {unlockNoteId && (
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="unlock-modal-title" onClick={() => setUnlockNoteId(null)}>
-          <form className="modal-content" onClick={e => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); const target = notes.find(n => n.id === unlockNoteId); if (target && target.pinLock === pinInput) { onEditNote(unlockNoteId); setUnlockNoteId(null); } else setPinError(true); }}>
+          <form className="modal-content" onClick={e => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); void handleUnlockSubmit(); }}>
             <Lock size={36} style={{ color: 'var(--primary)', margin: '0 auto 12px', display: 'block' }} />
             <h3 id="unlock-modal-title" style={{ fontSize: '18px', textAlign: 'center' }}>Enter PIN</h3>
             <p style={{ fontSize: '13px', color: 'var(--on-surface-variant)', textAlign: 'center', marginBottom: '16px' }}>This note is locked</p>
-            <input type="password" maxLength={4} placeholder="••••" value={pinInput} onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ''))} autoFocus style={{ width: '120px', margin: '0 auto', display: 'block', padding: '14px', borderRadius: '12px', border: '1.5px solid var(--outline-variant)', background: 'var(--surface)', color: 'var(--on-surface)', fontSize: '22px', letterSpacing: '10px', textAlign: 'center', outline: 'none' }} />
+            <input type="password" maxLength={4} placeholder="••••" value={pinInput} onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ''))} autoFocus disabled={isUnlocking} style={{ width: '120px', margin: '0 auto', display: 'block', padding: '14px', borderRadius: '12px', border: '1.5px solid var(--outline-variant)', background: 'var(--surface)', color: 'var(--on-surface)', fontSize: '22px', letterSpacing: '10px', textAlign: 'center', outline: 'none' }} />
             {pinError && <p style={{ color: 'var(--error)', fontSize: '12px', textAlign: 'center', marginTop: '8px' }}>Incorrect PIN</p>}
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginTop: '20px' }}>
-              <button type="button" onClick={() => setUnlockNoteId(null)} className="md3-btn md3-btn-text">Cancel</button>
-              <button type="submit" className="md3-btn md3-btn-primary">Unlock</button>
+              <button type="button" onClick={() => setUnlockNoteId(null)} className="md3-btn md3-btn-text" disabled={isUnlocking}>Cancel</button>
+              <button type="submit" className="md3-btn md3-btn-primary" disabled={isUnlocking || pinInput.length !== 4}>
+                {isUnlocking ? 'Checking...' : 'Unlock'}
+              </button>
             </div>
           </form>
         </div>

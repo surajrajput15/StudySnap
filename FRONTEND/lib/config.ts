@@ -1,15 +1,30 @@
 const isBrowser = typeof window !== 'undefined';
 
 function detectBackendURL(): string {
+  // The backend URL must always be explicitly configured via env. On local
+  // development we allow a localhost fallback so the app works out of the box.
   if (process.env.NEXT_PUBLIC_BACKEND_URL) {
-    return process.env.NEXT_PUBLIC_BACKEND_URL;
+    return process.env.NEXT_PUBLIC_BACKEND_URL.replace(/\/+$/, '');
+  }
+  if (process.env.NODE_ENV === 'production') {
+    // Never guess/derive a backend URL in production — silently pointing the
+    // app at the wrong host is worse than clearly failing at runtime.
+    if (isBrowser) {
+      console.error(
+        '[StudySnap] NEXT_PUBLIC_BACKEND_URL is not configured in this production build. ' +
+          'API calls will fail, but the app can still run offline.'
+      );
+    }
+    return 'http://localhost:4000';
   }
   if (isBrowser) {
     const host = window.location.hostname;
-    if (host !== 'localhost' && host !== '127.0.0.1') {
-      return `https://${host.replace('frontend', 'api').replace('app', 'api')}`;
+    if (host === 'localhost' || host === '127.0.0.1') {
+      return 'http://localhost:4000';
     }
   }
+  // Inlining localhost is a pure dev/fallback convenience; deployments must
+  // provide NEXT_PUBLIC_BACKEND_URL explicitly.
   return 'http://localhost:4000';
 }
 

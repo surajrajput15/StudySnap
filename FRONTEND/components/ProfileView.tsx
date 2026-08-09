@@ -1,10 +1,10 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { useStore } from '@/lib/store/useStore';
+import { useStore, getStoreScopeKey } from '@/lib/store/useStore';
 import {
   User, School, BookOpen, GraduationCap, Award, CheckCircle, FileText, Music, Sparkles,
-  TrendingUp, Clock, Target, Flame, Zap, Trophy, BarChart3, CalendarDays
+  TrendingUp, Clock, Target, Flame, Zap, Trophy, BarChart3, CalendarDays, Download
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { WEEKDAYS } from '@/lib/constants';
@@ -86,6 +86,42 @@ export default function ProfileView() {
 
   const totalHours = weeklyHours.reduce((s, h) => s + h.hours, 0);
 
+  // Full "memory" export of everything the app persists for this account.
+  // PINs are never included in raw form — they are stored as salted PBKDF2 hashes.
+  const handleExportData = () => {
+    const state = useStore.getState();
+    const payload = {
+      app: 'StudySnap',
+      version: '0.1.0',
+      exportedAt: new Date().toISOString(),
+      scopeKey: getStoreScopeKey(),
+      pinStorage: 'salted PBKDF2-SHA512 hashes (never raw PINs)',
+      profile: state.user,
+      categories: state.categories,
+      folders: state.folders,
+      notes: state.notes,
+      voiceNotes: state.voiceNotes,
+      revisionLogs: state.revisionLogs,
+      gamification: {
+        coins: state.coins,
+        earnedAchievements: state.earnedAchievements,
+        weeklyChallenge: state.weeklyChallenge,
+      },
+      dailyGoal: state.dailyGoal,
+      dailyProgress: state.dailyProgress,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `studysnap-data-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    confetti({ particleCount: 40, colors: ['#0061A4', '#10B981'] });
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '800px', margin: '0 auto', width: '100%' }}>
 
@@ -142,6 +178,25 @@ export default function ProfileView() {
             </div>
           </div>
         )}
+      </div>
+
+      {/* ─── Data & Privacy ─── */}
+      <div className="premium-card">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+          <div>
+            <h2 style={{ fontSize: '16px', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+              <Download size={16} style={{ color: 'var(--primary)' }} /> Memory Export
+            </h2>
+            <p style={{ fontSize: '12px', color: 'var(--on-surface-variant)', maxWidth: '420px', lineHeight: 1.5 }}>
+              Download a JSON backup of everything StudySnap stores for this account (profile, notes, voice
+              transcripts, revision logs, and gamification). Note PINs are stored as salted hashes, never in
+              plaintext.
+            </p>
+          </div>
+          <button onClick={handleExportData} className="md3-btn md3-btn-secondary" style={{ fontSize: '12px', padding: '8px 16px', flexShrink: 0 }}>
+            <Download size={14} /> Export my data
+          </button>
+        </div>
       </div>
 
       {/* ─── Stats Row ─── */}

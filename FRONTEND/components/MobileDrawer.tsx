@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { SignInButton, useAuth, useUser, useClerk } from '@clerk/nextjs';
 import Image from 'next/image';
-import { useStore } from '@/lib/store/useStore';
+import { useStore, switchStoreScopeForUser } from '@/lib/store/useStore';
 
 interface MobileDrawerProps {
   open: boolean;
@@ -33,7 +33,7 @@ export default function MobileDrawer({ open, onClose, activeTab, onNavigate }: M
   const { isSignedIn, isLoaded } = useAuth();
   const { user } = useUser();
   const { signOut } = useClerk();
-  const updateProfile = useStore((s) => s.updateProfile);
+  const syncProfileNameFromClerk = useStore((s) => s.syncProfileNameFromClerk);
   const drawerRef = useRef<HTMLDivElement>(null);
   const lastFocusedRef = useRef<HTMLElement | null>(null);
   const onCloseRef = useRef(onClose);
@@ -42,10 +42,12 @@ export default function MobileDrawer({ open, onClose, activeTab, onNavigate }: M
   }, [onClose]);
 
   useEffect(() => {
+    // Only adopt the Clerk display name when the profile still has its default
+    // placeholder, so a custom name the user set is never overwritten.
     if (user?.fullName) {
-      updateProfile({ name: user.fullName });
+      syncProfileNameFromClerk(user.fullName);
     }
-  }, [user, updateProfile]);
+  }, [user, syncProfileNameFromClerk]);
 
   useEffect(() => {
     if (!open) {
@@ -173,7 +175,7 @@ export default function MobileDrawer({ open, onClose, activeTab, onNavigate }: M
 
         <div className="drawer-footer">
           {isSignedIn ? (
-            <button className="drawer-item drawer-item--danger" onClick={() => { onClose(); signOut(); }}>
+            <button className="drawer-item drawer-item--danger" onClick={() => { onClose(); switchStoreScopeForUser(null); signOut(); }}>
               <LogOut size={20} />
               <span className="drawer-item-label">Logout</span>
             </button>

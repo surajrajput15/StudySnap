@@ -17,6 +17,7 @@ import { PIN_LENGTH } from '@/lib/constants';
 import { stripHtml } from '@/lib/utils';
 import { API, apiFetch } from '@/lib/config';
 import { useAuth } from '@clerk/nextjs';
+import { hashPinClient } from '@/lib/pin';
 
 interface NoteEditorProps {
   noteId: string | null;
@@ -110,6 +111,7 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
   const [pinLock, setPinLock] = useState<string | null>(activeNote?.pinLock ?? null);
   const [showPinModal, setShowPinModal] = useState(false);
   const [pinCode, setPinCode] = useState('');
+  const [isPinSetting, setIsPinSetting] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
 
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -173,30 +175,82 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
     }
   }, []);
 
+  // Stable identity for an unsaved draft so the debounced autosave can never
+  // create a second copy of the same note (it only ever fires once per draft).
+  const draftIdRef = useRef<string | null>(null);
+
+  // Latest editor values accessible from cleanup/leave handlers.
+  const editorStateRef = useRef<{ title: string; content: string; tags: string[]; categoryId: string; folderId: string; isPinned: boolean; isFavorite: boolean; pinLock: string | null; isNew: boolean; noteId: string | null }>({
+    title, content, tags, categoryId, folderId, isPinned, isFavorite, pinLock, isNew, noteId,
+  });
+
+  // Persist the latest editor state immediately (used by the debounce and by
+  // leave/reload handlers so no edits are ever silently dropped).
+  const persistNow = useCallback(() => {
+    const s = editorStateRef.current;
+    if (s.isNew && !s.title.trim() && !s.content.trim() && s.tags.length === 0) {
+      return; // empty draft — do not create a note
+    }
+    const payload = {
+      title: s.title || 'Untitled Note',
+      content: s.content,
+      tags: s.tags,
+      categoryId: s.categoryId || null,
+      folderId: s.folderId || null,
+      isPinned: s.isPinned,
+      isFavorite: s.isFavorite,
+      pinLock: s.pinLock,
+    };
+    if (s.isNew) {
+      if (!draftIdRef.current) {
+        draftIdRef.current = crypto.randomUUID();
+        addNote({ id: draftIdRef.current, ...payload });
+      } else {
+        updateNote(draftIdRef.current, payload);
+      }
+    } else if (s.noteId) {
+      updateNote(s.noteId, payload);
+    }
+    return true;
+  }, [addNote, updateNote]);
+
+  const persistNowRef = useRef(persistNow);
+
+  // Keep leave/flush handlers in sync with the latest editor values after every
+  // commit (refs are not written during render).
+  useEffect(() => {
+    editorStateRef.current = { title, content, tags, categoryId, folderId, isPinned, isFavorite, pinLock, isNew, noteId };
+    persistNowRef.current = persistNow;
+  });
+
+  // Flush pending edits when this editor is unmounted (navigating away, or
+  // switching to a different note).
+  useEffect(() => {
+    return () => { persistNowRef.current(); };
+  }, []);
+
+  // Flush pending edits on page hide/unload too — React unmount does not run
+  // during a full browser reload or tab close.
+  useEffect(() => {
+    const flushOnHide = () => persistNowRef.current();
+    window.addEventListener('pagehide', flushOnHide);
+    window.addEventListener('beforeunload', flushOnHide);
+    return () => {
+      window.removeEventListener('pagehide', flushOnHide);
+      window.removeEventListener('beforeunload', flushOnHide);
+    };
+  }, []);
+
+  // Debounced autosave
   useEffect(() => {
     if (isNew && !title.trim() && !content.trim()) return;
-    const savingTimer = setTimeout(() => setSaveStatus('saving'), 0);
     const timer = setTimeout(() => {
-      const notePayload = {
-        title: title || 'Untitled Note',
-        content,
-        tags,
-        categoryId: categoryId || null,
-        folderId: folderId || null,
-        isPinned,
-        isFavorite,
-        pinLock,
-      };
-      if (isNew) {
-        const created = addNote(notePayload);
-        updateNote(created.id, {});
-      } else if (noteId) {
-        updateNote(noteId, notePayload);
-      }
+      setSaveStatus('saving');
+      persistNow();
       setSaveStatus('saved');
     }, 1500);
-    return () => { clearTimeout(savingTimer); clearTimeout(timer); };
-  }, [title, content, tags, categoryId, folderId, isPinned, isFavorite, pinLock, isNew, noteId, addNote, updateNote]);
+    return () => clearTimeout(timer);
+  }, [title, content, tags, categoryId, folderId, isPinned, isFavorite, pinLock, isNew, persistNow]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -421,9 +475,20 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
     else { setShowPinModal(true); setPinCode(''); }
   };
 
-  const handleSavePin = (e: React.FormEvent) => {
+  const handleSavePin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (pinCode.length === PIN_LENGTH) { setPinLock(pinCode); setShowPinModal(false); confetti({ particleCount: 50, colors: ['#0061A4'] }); }
+    if (pinCode.length !== PIN_LENGTH || isPinSetting) return;
+    // Store a salted hash (never the raw PIN) so a leaked localStorage dump
+    // cannot expose the PIN in plaintext.
+    setIsPinSetting(true);
+    try {
+      const storedPin = await hashPinClient(pinCode);
+      setPinLock(storedPin);
+      setShowPinModal(false);
+      confetti({ particleCount: 50, colors: ['#0061A4'] });
+    } finally {
+      setIsPinSetting(false);
+    }
   };
 
   const handleExportPDF = async () => {
@@ -719,7 +784,9 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
               style={{ width: '120px', padding: '14px', borderRadius: '12px', border: '1.5px solid var(--outline-variant)', background: 'var(--surface)', color: 'var(--on-surface)', fontSize: '22px', letterSpacing: '10px', textAlign: 'center', outline: 'none', margin: '0 auto' }} />
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginTop: '20px' }}>
               <button type="button" onClick={() => setShowPinModal(false)} className="md3-btn md3-btn-text">Cancel</button>
-              <button type="submit" className="md3-btn md3-btn-primary" disabled={pinCode.length !== PIN_LENGTH}>Set Lock</button>
+              <button type="submit" className="md3-btn md3-btn-primary" disabled={pinCode.length !== PIN_LENGTH || isPinSetting}>
+                {isPinSetting ? 'Locking...' : 'Set Lock'}
+              </button>
             </div>
           </form>
         </div>
