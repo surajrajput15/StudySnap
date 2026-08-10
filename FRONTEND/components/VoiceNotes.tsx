@@ -1,7 +1,14 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useStore, VoiceNote } from '@/lib/store/useStore';
+import { useStore, getStoreScopeKey, VoiceNote } from '@/lib/store/useStore';
+import {
+  saveVoiceAudio,
+  getVoiceAudio,
+  deleteVoiceAudio,
+  isVoiceRecordingScopeValid,
+  finalizeVoiceNoteTranscript,
+} from '@/lib/storage/voiceNotes';
 import {
   Mic, Square, Play, Pause, Trash2, FileText, Volume2,
   ArrowLeft, Check, X, Edit3, ChevronUp, AlertTriangle
@@ -16,6 +23,18 @@ interface VoiceNotesProps {
   onLinkToNote: (noteId: string) => void;
 }
 
+// Per-recording session state. MediaRecorder fires its events asynchronously,
+// so every callback closes over its own session context instead of reading
+// shared render/lifecycle refs. That keeps a stale recording's onstop from
+// ever mixing chunks, transcript, duration or scope with a newer recording.
+interface RecordingSession {
+  chunks: Blob[];
+  transcript: string;
+  duration: number;
+  persist: boolean;
+  scopeKey: string | null;
+}
+
 const WAVEFORM_BARS = 48;
 
 function formatTime(secs: number): string {
@@ -24,6 +43,13 @@ function formatTime(secs: number): string {
   const s = secs % 60;
   if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+}
+
+function createAudioId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `audio-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 interface AnimatedMicProps {
@@ -131,7 +157,6 @@ export default function VoiceNotes({ onBack, onLinkToNote }: VoiceNotesProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
   const durationTimerRef = useRef<NodeJS.Timeout | null>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const activeAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -139,6 +164,53 @@ export default function VoiceNotes({ onBack, onLinkToNote }: VoiceNotesProps) {
   const animationRef = useRef<number>(0);
   const streamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+
+  // The active recording session. Each recording get its own context (built in
+  // handleStartRecording and captured by that MediaRecorder's callbacks), so a
+  // stale onstop can never read a newer recording's live values.
+  const recordingCtxRef = useRef<RecordingSession | null>(null);
+  const isRecordingRef = useRef<boolean>(false);
+  // Object URLs we created for playback; revoked when playback ends.
+  const objectUrlsRef = useRef<Set<string>>(new Set());
+  const activePlaybackUrlRef = useRef<string | null>(null);
+
+  const scopeKey = getStoreScopeKey();
+
+  const revokeObjectUrl = useCallback((url: string | null | undefined) => {
+    if (!url || !objectUrlsRef.current.delete(url)) return;
+    try { URL.revokeObjectURL(url); } catch { /* ignoring revoke failure is safe */ }
+  }, []);
+
+  const revokeActivePlayback = useCallback(() => {
+    const url = activePlaybackUrlRef.current;
+    activePlaybackUrlRef.current = null;
+    revokeObjectUrl(url);
+  }, [revokeObjectUrl]);
+
+  // Deterministic discard: never persist a blob that was not explicitly
+  // committed via Stop. Idempotent, so it is safe on back, unmount and scope
+  // changes (as well as repeated rapid start/stop).
+  const discardRecording = useCallback(() => {
+    const ctx = recordingCtxRef.current;
+    if (ctx) ctx.persist = false;
+    recordingCtxRef.current = null;
+    isRecordingRef.current = false;
+    if (streamRef.current) streamRef.current.getTracks().forEach(track => track.stop());
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch { /* ignore */ }
+      try { recognitionRef.current.abort?.(); } catch { /* ignore */ }
+    }
+    if (animationRef.current) cancelAnimationFrame(animationRef.current);
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try { mediaRecorderRef.current.stop(); } catch { /* ignore */ }
+    }
+    setIsRecording(false);
+    setIsPaused(false);
+    setRecordingDuration(0);
+    setTranscript('');
+    setAudioLevel(0);
+    setWaveformLevels(new Array(WAVEFORM_BARS).fill(0.05));
+  }, []);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -153,11 +225,23 @@ export default function VoiceNotes({ onBack, onLinkToNote }: VoiceNotesProps) {
         rec.interimResults = true;
         rec.lang = 'en-IN';
         rec.onresult = (event: SpeechRecognitionEvent) => {
+          const ctx = recordingCtxRef.current;
+          if (!ctx) return;
           let finalTranscript = '';
           for (let i = event.resultIndex; i < event.results.length; ++i) {
             if (event.results[i].isFinal) finalTranscript += event.results[i][0].transcript;
           }
-          if (finalTranscript) setTranscript(prev => prev + ' ' + finalTranscript.trim());
+          if (finalTranscript) {
+            // Accumulate into the active recording's context (source of truth)
+            // and mirror into state for the live UI. onstop reads the model's
+            // context, never the render closure.
+            const base = ctx.transcript.trim();
+            const combined = base
+              ? `${base} ${finalTranscript.trim()}`
+              : finalTranscript.trim();
+            ctx.transcript = combined;
+            setTranscript(combined);
+          }
         };
         recognitionRef.current = rec;
       }
@@ -166,7 +250,12 @@ export default function VoiceNotes({ onBack, onLinkToNote }: VoiceNotesProps) {
 
   useEffect(() => {
     if (isRecording && !isPaused) {
-      durationTimerRef.current = setInterval(() => setRecordingDuration(prev => prev + 1), 1000);
+      durationTimerRef.current = setInterval(() => {
+        const ctx = recordingCtxRef.current;
+        if (!ctx) return;
+        ctx.duration += 1;
+        setRecordingDuration(ctx.duration);
+      }, 1000);
     } else {
       if (durationTimerRef.current) clearInterval(durationTimerRef.current);
     }
@@ -178,13 +267,49 @@ export default function VoiceNotes({ onBack, onLinkToNote }: VoiceNotesProps) {
       if (activeAudioRef.current) activeAudioRef.current.pause();
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
       if (audioContextRef.current) audioContextRef.current.close();
-      if (recognitionRef.current) recognitionRef.current.stop();
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch { /* ignore */ }
+        try { recognitionRef.current.abort?.(); } catch { /* ignore */ }
+      }
       if (streamRef.current) streamRef.current.getTracks().forEach(track => track.stop());
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        mediaRecorderRef.current.stop();
+        try { mediaRecorderRef.current.stop(); } catch { /* ignore */ }
       }
+      // An unfinished recording is discarded on unmount (nothing was committed
+      // via Stop, so persist stays false and the pending onstop no-ops). A
+      // recording that WAS stopped still finalizes with its own context even
+      // after unmount — but its callbacks must never touch the component's
+      // state, and the scope guard inside the finalize step still applies.
+      recordingCtxRef.current = null;
+      isRecordingRef.current = false;
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- cleanup must revoke every URL created across the component's lifetime, so it reads the live collection.
+      const liveUrls = objectUrlsRef.current;
+      for (const url of liveUrls) {
+        try { URL.revokeObjectURL(url); } catch { /* ignore */ }
+      }
+      liveUrls.clear();
+      activePlaybackUrlRef.current = null;
     };
   }, []);
+
+  // Account/store scope protection: a recording started under Account A must
+  // never be persisted into Account B (or the guest scope). If the scope flips
+  // mid-recording, the active recording is discarded safely. Playback of the
+  // previous scope's audio is also stopped and its object URL released so the
+  // next account never inherits stale audio/handles.
+  useEffect(() => {
+    if (activeAudioRef.current) {
+      activeAudioRef.current.pause();
+      activeAudioRef.current = null;
+      revokeActivePlayback();
+      setPlayingId(null);
+      setPlaybackProgress(0);
+    }
+    const ctx = recordingCtxRef.current;
+    if (!ctx || !isRecordingRef.current) return;
+    if (scopeKey === ctx.scopeKey) return;
+    discardRecording();
+  }, [scopeKey, discardRecording, revokeActivePlayback]);
 
   const startAudioAnalysis = useCallback((stream: MediaStream) => {
     const audioCtx = new AudioContext();
@@ -218,8 +343,19 @@ export default function VoiceNotes({ onBack, onLinkToNote }: VoiceNotesProps) {
   const handleStartRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Fresh per-recording context. MediaRecorder's ondataavailable and onstop
+      // close over this object, so a rapid stop → start can never make a stale
+      // onstop read the new recording's chunks, transcript, duration or scope.
+      const ctx: RecordingSession = {
+        chunks: [],
+        transcript: '',
+        duration: 0,
+        persist: false,
+        scopeKey: getStoreScopeKey(),
+      };
       streamRef.current = stream;
-      audioChunksRef.current = [];
+      recordingCtxRef.current = ctx;
+      isRecordingRef.current = true;
 
       startAudioAnalysis(stream);
 
@@ -227,36 +363,76 @@ export default function VoiceNotes({ onBack, onLinkToNote }: VoiceNotesProps) {
         ? (MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : (MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : ''))
         : '';
       const mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
-      mediaRecorder.ondataavailable = (event) => { if (event.data.size > 0) audioChunksRef.current.push(event.data); };
+      mediaRecorder.ondataavailable = (event) => { if (event.data.size > 0) ctx.chunks.push(event.data); };
       mediaRecorder.onstop = () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType || 'audio/webm' });
-        const audioUrl = URL.createObjectURL(audioBlob);
-        addVoiceNote({
-          noteId: '',
-          audioUrl,
-          duration: recordingDuration,
-          transcript: transcript.trim() || 'Voice note captured.',
-        });
-        // A successful save implies storage is writable again.
-        setPersistenceError(false);
-        setRecordingDuration(0);
-        setTranscript('');
-        setAudioLevel(0);
-        setWaveformLevels(new Array(WAVEFORM_BARS).fill(0.05));
-        if (animationRef.current) cancelAnimationFrame(animationRef.current);
-        confetti({ particleCount: 40, colors: ['#0061A4', '#bdc7dc'] });
+        // The microphone stream is fully consumed only once onstop fires; only
+        // then is the captured audio a complete, finalizable recording. This
+        // callback owns this recording's stream and context only — it can never
+        // stop or reset a different (newer) recording.
+        stream.getTracks().forEach(track => track.stop());
+        if (streamRef.current === stream) streamRef.current = null;
+
+        const isActive = recordingCtxRef.current === ctx;
+        if (isActive) {
+          recordingCtxRef.current = null;
+          isRecordingRef.current = false;
+          setRecordingDuration(0);
+          setTranscript('');
+          setAudioLevel(0);
+          setWaveformLevels(new Array(WAVEFORM_BARS).fill(0.05));
+          if (animationRef.current) cancelAnimationFrame(animationRef.current);
+        }
+
+        if (!ctx.persist || ctx.chunks.length === 0) return;
+
+        const audioBlob = new Blob(ctx.chunks, { type: mimeType || 'audio/webm' });
+        const audioId = createAudioId();
+        void finalizeAndSaveRecording(audioId, audioBlob, ctx);
       };
 
       mediaRecorderRef.current = mediaRecorder;
       mediaRecorder.start();
       setIsRecording(true);
       setIsPaused(false);
+      setRecordingDuration(0);
       setTranscript('');
       if (recognitionRef.current) recognitionRef.current.start();
     } catch (err) {
       console.error("Mic Access failed:", err);
       alert("Failed to access microphone. Please grant permission.");
     }
+  };
+
+  // Save a finalized recording: Blob → IndexedDB → stable audioId → store
+  // metadata. Fails safely — a failed IndexedDB write never leaves misleading
+  // metadata, and an account switch mid-save never leaks into another scope.
+  const finalizeAndSaveRecording = async (audioId: string, audioBlob: Blob, ctx: RecordingSession) => {
+    if (!isVoiceRecordingScopeValid(ctx.scopeKey, getStoreScopeKey())) {
+      // Scope changed before the save started — discard the recording entirely.
+      void deleteVoiceAudio(audioId).catch(() => { /* best-effort orphan cleanup */ });
+      return;
+    }
+    try {
+      await saveVoiceAudio(audioId, audioBlob);
+    } catch {
+      setPersistenceError(true);
+      // Without a durable blob the audioId is meaningless — do not persist it.
+      return;
+    }
+    if (!isVoiceRecordingScopeValid(ctx.scopeKey, getStoreScopeKey())) {
+      // Scope changed while the audio was being written.
+      void deleteVoiceAudio(audioId).catch(() => { /* best-effort orphan cleanup */ });
+      return;
+    }
+    addVoiceNote({
+      noteId: '',
+      audioId,
+      duration: ctx.duration,
+      transcript: finalizeVoiceNoteTranscript(ctx.transcript),
+    });
+    // A successful save implies storage is writable again.
+    setPersistenceError(false);
+    confetti({ particleCount: 40, colors: ['#0061A4', '#bdc7dc'] });
   };
 
   const handlePauseRecording = () => {
@@ -274,36 +450,89 @@ export default function VoiceNotes({ onBack, onLinkToNote }: VoiceNotesProps) {
   };
 
   const handleStopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      streamRef.current?.getTracks().forEach(track => track.stop());
-      setIsRecording(false);
-      setIsPaused(false);
-      if (recognitionRef.current) recognitionRef.current.stop();
-      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+    const ctx = recordingCtxRef.current;
+    if (!mediaRecorderRef.current || !ctx) return;
+    // Commit to persisting the finalized recording. onstop builds the Blob from
+    // this session's own context, then finalizeAndSaveRecording persists it
+    // (scope-guarded).
+    ctx.persist = true;
+    isRecordingRef.current = false;
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch { /* ignore */ }
     }
+    if (animationRef.current) cancelAnimationFrame(animationRef.current);
+    mediaRecorderRef.current.stop();
+    setIsRecording(false);
+    setIsPaused(false);
+    setRecordingDuration(0);
+    setTranscript('');
   };
 
-  const handlePlayVoice = (vn: VoiceNote) => {
-    if (playingId === vn.id) {
-      if (activeAudioRef.current) {
-        activeAudioRef.current.pause();
+  const handlePlayVoice = async (vn: VoiceNote) => {
+    try {
+      if (playingId === vn.id) {
+        if (activeAudioRef.current) activeAudioRef.current.pause();
+        activeAudioRef.current = null;
+        revokeActivePlayback();
         setPlayingId(null);
         setPlaybackProgress(0);
+        return;
       }
-    } else {
+
       if (activeAudioRef.current) activeAudioRef.current.pause();
-      const audio = new Audio(vn.audioUrl);
+      activeAudioRef.current = null;
+      revokeActivePlayback();
+
+      // Resolve the audio: durable IndexedDB blob first, legacy same-session
+      // blob: URL second — so playback keeps working across reloads.
+      let source: string | null = null;
+      if (vn.audioId) {
+        try {
+          const blob = await getVoiceAudio(vn.audioId);
+          if (blob) {
+            const url = URL.createObjectURL(blob);
+            objectUrlsRef.current.add(url);
+            activePlaybackUrlRef.current = url;
+            source = url;
+          }
+        } catch {
+          source = null;
+        }
+      } else if (vn.legacyAudioUrl) {
+        source = vn.legacyAudioUrl;
+      }
+
+      if (!source) {
+        setPlayingId(null);
+        setPlaybackProgress(0);
+        alert('This recording is no longer available.');
+        return;
+      }
+
+      const audio = new Audio(source);
       audio.playbackRate = playbackSpeed;
       audio.ontimeupdate = () => setPlaybackProgress(Math.floor(audio.currentTime));
       audio.onended = () => {
+        activeAudioRef.current = null;
+        revokeActivePlayback();
+        setPlayingId(null);
+        setPlaybackProgress(0);
+      };
+      audio.onerror = () => {
+        activeAudioRef.current = null;
+        revokeActivePlayback();
         setPlayingId(null);
         setPlaybackProgress(0);
       };
       activeAudioRef.current = audio;
       setPlayingId(vn.id);
       setPlaybackProgress(0);
-      audio.play();
+      await audio.play();
+    } catch {
+      activeAudioRef.current = null;
+      revokeActivePlayback();
+      setPlayingId(null);
+      setPlaybackProgress(0);
     }
   };
 
@@ -368,12 +597,7 @@ export default function VoiceNotes({ onBack, onLinkToNote }: VoiceNotesProps) {
     if (isRecording) {
       const leave = window.confirm('You are still recording. Leave and discard this recording?');
       if (!leave) return;
-      if (streamRef.current) streamRef.current.getTracks().forEach(track => track.stop());
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') mediaRecorderRef.current.stop();
-      if (recognitionRef.current) recognitionRef.current.stop();
-      if (animationRef.current) cancelAnimationFrame(animationRef.current);
-      setIsRecording(false);
-      setIsPaused(false);
+      discardRecording();
     }
     onBack();
   };
@@ -381,19 +605,17 @@ export default function VoiceNotes({ onBack, onLinkToNote }: VoiceNotesProps) {
   const handleDeleteVoice = (vn: VoiceNote) => {
     if (playingId === vn.id && activeAudioRef.current) {
       activeAudioRef.current.pause();
+      activeAudioRef.current = null;
+      revokeActivePlayback();
       setPlayingId(null);
       setPlaybackProgress(0);
     }
-    // Object URLs hold the blob in memory for this session — release them so
-    // recordings don't leak memory while the SPA stays open.
-    if (vn.audioUrl.startsWith('blob:')) {
-      try {
-        URL.revokeObjectURL(vn.audioUrl);
-      } catch {
-        // ignoring revoke failures is safe; the URL is only used for playback
-      }
-    }
+    // Remove the metadata first; only then tear down the underlying audio,
+    // so the delete is acknowledged before any storage cleanup runs.
     deleteVoiceNote(vn.id);
+    if (vn.audioId) {
+      void deleteVoiceAudio(vn.audioId).catch(() => { /* best-effort orphan cleanup */ });
+    }
   };
 
   const recordingWaveform = isRecording && !isPaused ? waveformLevels : new Array(WAVEFORM_BARS).fill(0.05);

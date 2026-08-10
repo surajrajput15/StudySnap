@@ -27,6 +27,7 @@ export interface SpeechRecognition {
   onend: () => void;
   start: () => void;
   stop: () => void;
+  abort?: () => void;
 }
 
 export interface SpeechRecognitionEventLike {

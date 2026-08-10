@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
-import { useStore } from '@/lib/store/useStore';
+import { useStore, getStoreScopeKey } from '@/lib/store/useStore';
 import DOMPurify from 'dompurify';
 import {
   ArrowLeft, Pin, Star, Lock, Unlock, Download, Upload,
@@ -163,6 +163,15 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
 
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+  // Identity/scope of the active dictation session. onresult only mutates the
+  // note while the session is active, still mounted, and still in the same
+  // account/store scope — a stale session is stopped and dropped instead of
+  // writing into another note or another account.
+  const dictationRef = useRef<{ active: boolean; noteId: string | null; scopeKey: string }>({
+    active: false,
+    noteId,
+    scopeKey: getStoreScopeKey(),
+  });
 
   const editorRef = useRef<HTMLDivElement>(null);
   const initialContentRef = useRef<string>(activeNote?.content ?? '');
@@ -220,19 +229,47 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
         rec.lang = 'en-US';
         rec.onstart = () => setIsListening(true);
         rec.onresult = (event: SpeechRecognitionEvent) => {
+          const session = dictationRef.current;
+          if (!session.active) return;
+          // Account/store scope check — never insert stale dictation into a
+          // note that now belongs to another account (or the guest scope).
+          if (session.scopeKey !== getStoreScopeKey()) {
+            session.active = false;
+            try { rec.stop(); } catch { /* ignore */ }
+            try { rec.abort?.(); } catch { /* ignore */ }
+            setIsListening(false);
+            return;
+          }
           let finalTranscript = '';
           for (let i = event.resultIndex; i < event.results.length; ++i) {
             if (event.results[i][0].transcript) finalTranscript += event.results[i][0].transcript;
           }
-          if (finalTranscript && editorRef.current) {
-            editorRef.current.focus();
-            insertAtCursor(finalTranscript + ' ');
-            editorChangeRef.current();
+          // Editor must still be mounted. The same-note guarantee is structural:
+          // NoteEditorInner is remounted per noteId (React key), so this session's
+          // recognition instance can only ever target this note.
+          if (!finalTranscript || !editorRef.current) return;
+          editorRef.current.focus();
+          insertAtCursor(finalTranscript + ' ');
+          editorChangeRef.current();
+        };
+        rec.onerror = (e: SpeechRecognitionErrorEvent) => {
+          console.error("STT Error:", e.error);
+          dictationRef.current.active = false;
+          setIsListening(false);
+        };
+        rec.onend = () => { dictationRef.current.active = false; setIsListening(false); };
+        recognitionRef.current = rec;
+        return () => {
+          // Deterministic teardown on unmount: never let a live recognition
+          // session keep mutating a note after the editor leaves the screen.
+          dictationRef.current.active = false;
+          const instance = recognitionRef.current;
+          recognitionRef.current = null;
+          if (instance) {
+            try { instance.stop(); } catch { /* ignore */ }
+            try { instance.abort?.(); } catch { /* ignore */ }
           }
         };
-        rec.onerror = (e: SpeechRecognitionErrorEvent) => { console.error("STT Error:", e.error); setIsListening(false); };
-        rec.onend = () => setIsListening(false);
-        recognitionRef.current = rec;
       }
     }
   }, []);
@@ -560,8 +597,16 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
       alert("Speech Recognition API is not supported in this browser. Try Chrome/Safari.");
       return;
     }
-    if (isListening) recognitionRef.current.stop();
-    else recognitionRef.current.start();
+    if (isListening) {
+      dictationRef.current.active = false;
+      try { recognitionRef.current.stop(); } catch { /* ignore */ }
+      try { recognitionRef.current.abort?.(); } catch { /* ignore */ }
+    } else {
+      // Pin the session to this note and store scope so late recognition
+      // results can be verified before any edit is inserted.
+      dictationRef.current = { active: true, noteId, scopeKey: getStoreScopeKey() };
+      recognitionRef.current.start();
+    }
   };
 
   const handleAddTag = (e: React.KeyboardEvent) => {

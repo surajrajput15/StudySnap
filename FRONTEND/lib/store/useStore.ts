@@ -24,7 +24,12 @@ export interface Note {
 export interface VoiceNote {
   id: string;
   noteId: string;
-  audioUrl: string;
+  audioId: string | null; // durable IndexedDB blob reference
+  /**
+   * Deprecated: blob: URL kept for legacy same-session records that were
+   * created before IndexedDB persistence. Never the primary reference.
+   */
+  legacyAudioUrl?: string;
   duration: number; // in seconds
   transcript: string | null;
   createdAt: string;
@@ -297,7 +302,7 @@ function makeInitialState(set: SetStateFn): AppState {
       const newVoiceNote: VoiceNote = {
         id: voiceNoteData.id || crypto.randomUUID(),
         noteId: voiceNoteData.noteId,
-        audioUrl: voiceNoteData.audioUrl,
+        audioId: voiceNoteData.audioId,
         duration: voiceNoteData.duration,
         transcript: voiceNoteData.transcript || null,
         createdAt: new Date().toISOString(),
@@ -465,6 +470,28 @@ export const useStore = create<AppState>()(
         dailyProgress: state.dailyProgress,
         lastDailyReset: state.lastDailyReset,
       }),
+      // Backward compatibility: records persisted before Day 6 stored a
+      // session-scoped blob: URL instead of a durable audioId. They keep the
+      // legacy URL so they can still play within this session, but get
+      // audioId: null so they fail gracefully after a reload instead of
+      // crashing hydration. We never invent fake audio IDs for old blobs.
+      merge: (persistedState, currentState) => {
+        const persisted = persistedState as Partial<AppState> | undefined;
+        if (!persisted || typeof persisted !== 'object') return currentState;
+        const merged: AppState = { ...currentState, ...persisted };
+        if (Array.isArray(persisted.voiceNotes)) {
+          merged.voiceNotes = persisted.voiceNotes.map((vn) => {
+            const legacy = vn as Partial<VoiceNote> & { audioUrl?: string };
+            if (!('audioId' in vn) && typeof legacy.audioUrl === 'string') {
+              const { audioUrl, ...rest } = legacy;
+              void audioUrl;
+              return { ...rest, audioId: null, legacyAudioUrl: audioUrl } as VoiceNote;
+            }
+            return vn as VoiceNote;
+          });
+        }
+        return merged;
+      },
     }
   )
 );
