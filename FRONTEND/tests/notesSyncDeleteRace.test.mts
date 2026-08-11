@@ -334,3 +334,104 @@ test('Repeated delete attempts — double deleteRemoteNote serializes and clears
   assert.ok(!readTombstones('userA').has(noteR.id), 'tombstone cleared exactly once at the end');
   assert.equal(useStore.getState().notes.some((n) => n.id === noteR.id), false);
 });
+
+test('Scenario F1 — hydration merge cannot clobber a note edited while the merge waits on the network', async () => {
+  // Force the MERGE path (not the one-time seed): sync flag already set + empty
+  // server store, so every local note is uploaded through guardedUpsert.
+  g.window.localStorage.setItem('studysnap:notes-synced:userA', '1');
+  const OLD = '2020-01-01T00:00:00.000Z';
+  const noteF1 = {
+    ...makeNote('note-f1-edit'),
+    content: '<p>Older K</p>',
+    updatedAt: OLD,
+    createdAt: OLD,
+  };
+  useStore.setState({ notes: [noteF1] });
+
+  const sync = syncNotesForUser('userA', tokenFn);
+  await flushMicrotasks();
+  const getReq = takePending('GET', '');
+  getReq.resolve({ success: true, notes: [] });
+  await flushMicrotasks();
+  const postReq = takePending('POST', noteF1.id);
+
+  // Autosave commits NEWER local content while the merge's own POST is pending.
+  useStore.getState().updateNote(noteF1.id, { content: '<p>Newer K2</p>' });
+  const edited = useStore.getState().notes.find((n) => n.id === noteF1.id);
+  assert.ok(edited);
+  const newerUpdatedAt = edited.updatedAt;
+
+  // Resolve the merge's stale POST (server row is not newer than the edit).
+  postReq.resolve({ success: true, note: serverNote(noteF1.id, OLD) });
+  await sync;
+  await flushMicrotasks();
+
+  const after = useStore.getState().notes.find((n) => n.id === noteF1.id);
+  assert.ok(after, 'note remains present');
+  assert.equal(after.content, '<p>Newer K2</p>', 'concurrent edit content is never rolled back');
+  assert.equal(after.updatedAt, newerUpdatedAt, 'concurrent edit timestamp is retained');
+});
+
+test('Scenario F2 — a note created while the merge is pending is not dropped or duplicated', async () => {
+  g.window.localStorage.setItem('studysnap:notes-synced:userA', '1');
+  const OLD = '2020-01-01T00:00:00.000Z';
+  const noteF2 = {
+    ...makeNote('note-f2-create'),
+    content: '<p>Existing</p>',
+    updatedAt: OLD,
+    createdAt: OLD,
+  };
+  useStore.setState({ notes: [noteF2] });
+
+  const sync = syncNotesForUser('userA', tokenFn);
+  await flushMicrotasks();
+  const getReq = takePending('GET', '');
+  getReq.resolve({ success: true, notes: [] });
+  await flushMicrotasks();
+  const postReq = takePending('POST', noteF2.id);
+
+  // A brand-new note is created while the merge POST is still pending.
+  const fresh = useStore.getState().addNote({
+    title: 'Fresh',
+    content: '<p>new</p>',
+    tags: [],
+    isPinned: false,
+    isFavorite: false,
+    pinLock: null,
+    categoryId: null,
+    folderId: null,
+  });
+
+  postReq.resolve({ success: true, note: serverNote(noteF2.id, OLD) });
+  await sync;
+  await flushMicrotasks();
+
+  assert.ok(useStore.getState().notes.some((n) => n.id === fresh.id), 'note created during the merge survives');
+  assert.equal(useStore.getState().notes.filter((n) => n.id === fresh.id).length, 1, 'no duplicate id introduced');
+  assert.ok(useStore.getState().notes.some((n) => n.id === noteF2.id), 'original note still present');
+});
+
+test('Scenario F3 — normal hydration still adopts the newer server row when nothing changed locally', async () => {
+  g.window.localStorage.setItem('studysnap:notes-synced:userA', '1');
+  const OLD = '2020-01-01T00:00:00.000Z';
+  const NEWER = '2099-01-01T00:00:00.000Z';
+  const noteF3 = {
+    ...makeNote('note-f3-normal'),
+    content: '<p>Local body</p>',
+    updatedAt: OLD,
+    createdAt: OLD,
+  };
+  useStore.setState({ notes: [noteF3] });
+
+  const sync = syncNotesForUser('userA', tokenFn);
+  await flushMicrotasks();
+  const getReq = takePending('GET', '');
+  getReq.resolve({ success: true, notes: [{ ...serverNote(noteF3.id, NEWER), content: '<p>Server body</p>' }] });
+  await sync;
+  await flushMicrotasks();
+
+  const after = useStore.getState().notes.find((n) => n.id === noteF3.id);
+  assert.ok(after, 'note remains present');
+  assert.equal(after.content, '<p>Server body</p>', 'server row wins when its updatedAt is newer');
+  assert.equal(after.updatedAt, NEWER, 'server timestamp adopted');
+});

@@ -447,9 +447,35 @@ async function mergeServerNotes(
 
   if (!isUserScopeActive(userId)) return;
   // Re-filter by the CURRENT tombstone set: a note deleted while this merge was
-  // in flight must never be brought back into local state by the full replace.
+  // in flight must never be brought back into local state by the commit.
   const tombstonesAtCommit = readTombstones(userId);
-  useStore.setState({ notes: merged.filter((n) => !tombstonesAtCommit.has(n.id)) });
+  // The commit is a functional update so it re-reads the CURRENT store. A note
+  // that was edited locally while the merge awaited its network calls must
+  // never be rolled back by a stale snapshot row, and a note created during the
+  // merge must never be dropped merely because it was absent from `merged`.
+  useStore.setState((s) => {
+    const currentById = new Map(s.notes.map((n) => [n.id, n]));
+    const seen = new Set<string>();
+    const next: Note[] = [];
+    // Preserve `merged` (snapshot/server) ordering for the normal no-concurrency
+    // path; only a strictly newer current local note wins over its candidate.
+    for (const cand of merged) {
+      if (tombstonesAtCommit.has(cand.id)) continue;
+      seen.add(cand.id);
+      const cur = currentById.get(cand.id);
+      if (cur && new Date(cur.updatedAt).getTime() > new Date(cand.updatedAt).getTime()) {
+        next.push(cur);
+      } else {
+        next.push(cand);
+      }
+    }
+    // Keep notes created while the merge was in flight (never drop, never add
+    // a duplicate id).
+    for (const cur of s.notes) {
+      if (!seen.has(cur.id) && !tombstonesAtCommit.has(cur.id)) next.push(cur);
+    }
+    return { notes: next };
+  });
 }
 
 /**
