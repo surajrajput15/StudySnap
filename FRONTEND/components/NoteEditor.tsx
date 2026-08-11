@@ -176,6 +176,13 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
   const initialContentRef = useRef<string>(activeNote?.content ?? '');
 
+  // Day 7 — Account-scope guard. Captured once when this editor instance is
+  // mounted: this editor may ONLY persist into the store scope that existed at
+  // mount time. It is intentionally immutable — an account/store-scope change
+  // under this editor (or its unmount/pagehide/beforeunload cleanup) must never
+  // rewrite the captured scope, or a stale draft could leak across accounts.
+  const scopeGuardRef = useRef<string>(getStoreScopeKey());
+
   // Mutable editor state lives behind refs so a keystroke never schedules a
   // render. Access is limited to event handlers and effects; the React Compiler
   // mutability rule is disabled above for this file because the editor must own
@@ -286,6 +293,15 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
   // Persist the latest editor state immediately (used by the debounce and by
   // leave/reload handlers so no edits are ever silently dropped).
   const persistNow = useCallback(() => {
+    // Day 7 — Account-scope guard: an editor instance may only persist into the
+    // account store scope that existed when it was mounted. When the current
+    // scope differs (an account switch changed the store while this editor was
+    // alive, or its unmount/pagehide/beforeunload cleanup fires after the scope
+    // already moved to another account), abort BEFORE any persistence: no
+    // Zustand mutation, no localStorage write, and no remote upsert — a stale
+    // draft from Account A must never land in Account B's store/storage or be
+    // sent with Account B's authentication.
+    if (getStoreScopeKey() !== scopeGuardRef.current) return false;
     const s = editorStateRef.current;
     if (s.isNew && !s.title.trim() && !s.content.trim() && s.tags.length === 0) {
       return; // empty draft — do not create a note
