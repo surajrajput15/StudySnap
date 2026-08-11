@@ -30,6 +30,47 @@ type NoteWithoutPinLock = Omit<MockNote, 'pinLock'>;
 
 let mockNotes: MockNote[] = [];
 
+/**
+ * Day 7 Task 2 — sticky delete guard.
+ *
+ * The frontend already invalidates in-flight upserts the instant a note is
+ * deleted, but a POST that survives a page reload can still reach this server
+ * AFTER the DELETE and re-insert the note (the id is client-generated, so the
+ * server cannot know the POST is stale). This bounded in-memory registry (keyed
+ * by userId + noteId, TTL-bounded, lazy-purged) makes a DELETE sticky for a
+ * short window: any upsert-by-id for a freshly-deleted note is rejected, so a
+ * stale POST can never resurrect a deleted note. Account isolation is preserved
+ * because every key carries the authenticated userId. Single-instance by design;
+ * the client-side race fix already covers all same-session races.
+ */
+const DELETED_NOTE_TTL_MS = 10 * 60 * 1000;
+const deletedNotes = new Map<string, number>();
+
+function deletedNoteKey(userId: string, noteId: string): string {
+  return `${userId}:${noteId}`;
+}
+
+function purgeExpiredDeletedNotes(): void {
+  const now = Date.now();
+  for (const [key, deletedAt] of deletedNotes) {
+    if (now - deletedAt >= DELETED_NOTE_TTL_MS) deletedNotes.delete(key);
+  }
+}
+
+function recordDeletedNote(userId: string, noteId: string): void {
+  purgeExpiredDeletedNotes();
+  deletedNotes.set(deletedNoteKey(userId, noteId), Date.now());
+}
+
+function isRecentlyDeleted(userId: string, noteId: string): boolean {
+  const key = deletedNoteKey(userId, noteId);
+  const deletedAt = deletedNotes.get(key);
+  if (deletedAt === undefined) return false;
+  if (Date.now() - deletedAt < DELETED_NOTE_TTL_MS) return true;
+  deletedNotes.delete(key);
+  return false;
+}
+
 router.use(authMiddleware);
 
 function stripPinLock(note: MockNote): NoteWithoutPinLock {
@@ -72,6 +113,13 @@ router.post('/', validate(noteSchema), async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
     const { id, title, content, tags, isPinned, isFavorite, pinLock, categoryId, folderId, createdAt } = req.body;
+
+    // Reject a stale upsert-by-id for a note deleted within the sticky-guard
+    // window so a late POST can never resurrect it after the DELETE.
+    if (id && isRecentlyDeleted(userId, id)) {
+      res.status(409).json({ success: false, error: 'This note was deleted.' });
+      return;
+    }
 
     const createdAtValue = createdAt ? new Date(createdAt) : undefined;
 
@@ -169,6 +217,10 @@ router.delete('/', async (req: Request, res: Response) => {
       return;
     }
 
+    // Record the sticky delete guard BEFORE issuing the delete so any in-flight
+    // upsert-by-id that lands afterwards (e.g. after a page reload) is rejected.
+    recordDeletedNote(userId, id);
+
     const db = getDb();
     if (!db) {
       mockNotes = mockNotes.filter(n => !(n.id === id && n.userId === userId));
@@ -181,6 +233,10 @@ router.delete('/', async (req: Request, res: Response) => {
     await invalidateUserCache(userId);
     res.json({ success: true });
   } catch {
+    // Roll back the sticky guard on a failed delete so a transient server error
+    // can never reject legitimate updates to a note that still exists.
+    const id = req.query.id;
+    if (typeof id === 'string') deletedNotes.delete(deletedNoteKey(req.userId!, id));
     res.status(500).json({ success: false, error: 'Failed to delete note' });
   }
 });

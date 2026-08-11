@@ -1,8 +1,9 @@
 import { create } from 'zustand';
-import { StateStorage, createJSONStorage, persist } from 'zustand/middleware';
+import { createJSONStorage, persist } from 'zustand/middleware';
+import type { StateStorage } from 'zustand/middleware';
 import type { StoreApi } from 'zustand';
-import { DAILY_GOAL, REVISION_INTERVAL_DAYS } from '../constants';
-import { dateKey } from '../utils';
+import { DAILY_GOAL, REVISION_INTERVAL_DAYS } from '../constants.ts';
+import { dateKey } from '../utils.ts';
 
 export interface Note {
   id: string;
