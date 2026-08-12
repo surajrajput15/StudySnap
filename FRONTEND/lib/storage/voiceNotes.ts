@@ -99,6 +99,16 @@ export async function getVoiceAudio(audioId: string): Promise<Blob | null> {
   }
 }
 
+/**
+ * Upload-source alias of getVoiceAudio: resolves the raw Blob backing an
+ * `audioId` so the sync layer can build the multipart upload payload. Returns
+ * null (never throws) when the blob is missing or unreadable — a note whose
+ * durable bytes are gone cannot be uploaded and must simply stay pending.
+ */
+export async function getVoiceAudioBlob(audioId: string): Promise<Blob | null> {
+  return getVoiceAudio(audioId);
+}
+
 /** Removes an audio Blob by id (idempotent). */
 export async function deleteVoiceAudio(audioId: string): Promise<void> {
   const database = await openDatabase();

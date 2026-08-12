@@ -4,6 +4,7 @@ import React, { useState, useEffect, useLayoutEffect, useSyncExternalStore } fro
 import dynamic from 'next/dynamic';
 import { useStore, switchStoreScopeForUser } from '@/lib/store/useStore';
 import { syncNotesForUser } from '@/lib/sync/notesSync';
+import { syncVoiceNotesForUser } from '@/lib/sync/voiceNotesSync';
 import HomeScreen from '@/components/HomeScreen';
 import MobileDrawer from '@/components/MobileDrawer';
 import OfflineBanner from '@/components/OfflineBanner';
@@ -86,6 +87,26 @@ export default function Page() {
     window.addEventListener('online', handleOnline);
     return () => {
       window.removeEventListener('online', handleOnline);
+    };
+  }, [isLoaded, isSignedIn, clerkId, getToken]);
+
+  // Day 8 Task 1 (Phase 3) — Voice-note hydration. Runs independently of note
+  // sync (voice notes round-trip through the Cloudinary-backed upload API), but
+  // with the same guard rails: after switchStoreScopeForUser, strict-mode safe,
+  // offline/guest no-op, and re-run on reconnect for pending uploads.
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn || !clerkId) return;
+
+    const runVoiceSync = () => {
+      void syncVoiceNotesForUser(clerkId, () => getToken());
+    };
+
+    runVoiceSync();
+
+    const handleVoiceOnline = () => runVoiceSync();
+    window.addEventListener('online', handleVoiceOnline);
+    return () => {
+      window.removeEventListener('online', handleVoiceOnline);
     };
   }, [isLoaded, isSignedIn, clerkId, getToken]);
 

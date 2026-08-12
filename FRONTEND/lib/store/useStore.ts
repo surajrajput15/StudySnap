@@ -24,11 +24,28 @@ export interface Note {
 
 export interface VoiceNote {
   id: string;
-  noteId: string;
+  /** Linked Note id, or null for a standalone (unlinked) memo. Records
+   *  persisted before this phase stored an empty string for standalone memos;
+   *  hydration/merge normalizes those to null. */
+  noteId: string | null;
   audioId: string | null; // durable IndexedDB blob reference
   /**
+   * Server-delivered Cloudinary URL, set once the backend confirms the audio
+   * upload. null/undefined until then — a local note always keeps its IndexedDB
+   * blob as the preferred playback source.
+   */
+  audioUrl?: string | null;
+  /** True once the server has confirmed this note's audio upload. */
+  synced?: boolean;
+  /**
+   * Last-modified timestamp used for LWW reconciliation with the server.
+   * Persisted records created before this phase derive it from createdAt.
+   */
+  updatedAt?: string;
+  /**
    * Deprecated: blob: URL kept for legacy same-session records that were
-   * created before IndexedDB persistence. Never the primary reference.
+   * created before IndexedDB persistence. Never the primary reference and never
+   * treated as a durable upload source.
    */
   legacyAudioUrl?: string;
   duration: number; // in seconds
@@ -300,13 +317,17 @@ function makeInitialState(set: SetStateFn): AppState {
     })),
 
     addVoiceNote: (voiceNoteData) => {
+      const now = new Date().toISOString();
       const newVoiceNote: VoiceNote = {
         id: voiceNoteData.id || crypto.randomUUID(),
-        noteId: voiceNoteData.noteId,
+        noteId: voiceNoteData.noteId === '' ? null : voiceNoteData.noteId,
         audioId: voiceNoteData.audioId,
+        audioUrl: voiceNoteData.audioUrl ?? null,
+        synced: !!voiceNoteData.synced,
+        updatedAt: voiceNoteData.updatedAt ?? now,
         duration: voiceNoteData.duration,
         transcript: voiceNoteData.transcript || null,
-        createdAt: new Date().toISOString(),
+        createdAt: now,
       };
       set((state) => {
         const today = dateKey();
@@ -471,24 +492,40 @@ export const useStore = create<AppState>()(
         dailyProgress: state.dailyProgress,
         lastDailyReset: state.lastDailyReset,
       }),
-      // Backward compatibility: records persisted before Day 6 stored a
-      // session-scoped blob: URL instead of a durable audioId. They keep the
-      // legacy URL so they can still play within this session, but get
-      // audioId: null so they fail gracefully after a reload instead of
-      // crashing hydration. We never invent fake audio IDs for old blobs.
+      // Backward compatibility across all persist phases:
+      //  - Day 6 (pre-audioId): records kept a session-scoped blob: URL in
+      //    `audioUrl` instead of a durable `audioId`. They keep the legacy URL
+      //    so they can still play within this session, get `audioId: null` so
+      //    they fail gracefully after a reload, and never get a fabricated ID.
+      //  - Phase 2 (audioId, no sync fields): records carry `audioId` but none
+      //    of the Day 8 Sync fields. `updatedAt` is derived from `createdAt`
+      //    (LWW basis), `synced` defaults to false (still pending upload), and
+      //    `audioUrl` defaults to null (no confirmed Cloudinary URL yet).
+      //  - Standalone memos persisted an empty-string `noteId`; normalized to
+      //    null here so sync treats them as unlinked.
       merge: (persistedState, currentState) => {
         const persisted = persistedState as Partial<AppState> | undefined;
         if (!persisted || typeof persisted !== 'object') return currentState;
         const merged: AppState = { ...currentState, ...persisted };
         if (Array.isArray(persisted.voiceNotes)) {
-          merged.voiceNotes = persisted.voiceNotes.map((vn) => {
-            const legacy = vn as Partial<VoiceNote> & { audioUrl?: string };
-            if (!('audioId' in vn) && typeof legacy.audioUrl === 'string') {
-              const { audioUrl, ...rest } = legacy;
-              void audioUrl;
-              return { ...rest, audioId: null, legacyAudioUrl: audioUrl } as VoiceNote;
-            }
-            return vn as VoiceNote;
+          merged.voiceNotes = persisted.voiceNotes.map((raw) => {
+            const vn = raw as Partial<VoiceNote> & { audioUrl?: string };
+            const createdAt = typeof vn.createdAt === 'string' ? vn.createdAt : new Date().toISOString();
+            const hasAudioId = 'audioId' in vn;
+            const legacy = !hasAudioId && typeof vn.audioUrl === 'string';
+            const normalized: VoiceNote = {
+              id: typeof vn.id === 'string' && vn.id ? vn.id : crypto.randomUUID(),
+              noteId: vn.noteId === '' ? null : vn.noteId ?? null,
+              audioId: legacy ? null : vn.audioId ?? null,
+              audioUrl: legacy ? null : typeof vn.audioUrl === 'string' ? vn.audioUrl : null,
+              synced: !legacy && typeof vn.synced === 'boolean' ? vn.synced : false,
+              updatedAt: typeof vn.updatedAt === 'string' ? vn.updatedAt : createdAt,
+              duration: typeof vn.duration === 'number' && Number.isFinite(vn.duration) ? vn.duration : 0,
+              transcript: typeof vn.transcript === 'string' ? vn.transcript : null,
+              createdAt,
+            };
+            if (legacy) normalized.legacyAudioUrl = vn.audioUrl;
+            return normalized;
           });
         }
         return merged;

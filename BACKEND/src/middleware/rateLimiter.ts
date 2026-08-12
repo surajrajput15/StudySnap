@@ -36,3 +36,10 @@ export const pinLimiter = rateLimit({
   max: 20,
   message: { success: false, error: 'Too many PIN attempts. Please try again later.' },
 });
+
+export const voiceUploadLimiter = rateLimit({
+  ...limits,
+  windowMs: 15 * MINUTE,
+  max: 20,
+  message: { success: false, error: 'Too many voice uploads. Please try again later.' },
+});

@@ -9,6 +9,8 @@ import {
   isVoiceRecordingScopeValid,
   finalizeVoiceNoteTranscript,
 } from '@/lib/storage/voiceNotes';
+import { uploadVoiceNote, deleteRemoteVoiceNote } from '@/lib/sync/voiceNotesSync';
+import { useAuth } from '@clerk/nextjs';
 import {
   Mic, Square, Play, Pause, Trash2, FileText, Volume2,
   ArrowLeft, Check, X, Edit3, ChevronUp, AlertTriangle
@@ -140,6 +142,7 @@ export default function VoiceNotes({ onBack, onLinkToNote }: VoiceNotesProps) {
   const addNote = useStore((s) => s.addNote);
   const persistenceError = useStore((s) => s.persistenceError);
   const setPersistenceError = useStore((s) => s.setPersistenceError);
+  const { getToken } = useAuth();
 
   const [isRecording, setIsRecording] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -424,14 +427,22 @@ export default function VoiceNotes({ onBack, onLinkToNote }: VoiceNotesProps) {
       void deleteVoiceAudio(audioId).catch(() => { /* best-effort orphan cleanup */ });
       return;
     }
-    addVoiceNote({
-      noteId: '',
+    const created = addVoiceNote({
+      // Standalone memo — the recording is never implicitly linked to a note
+      // (noteId stays null; the user links it explicitly by creating a note
+      // from it). Linked note ids go through the dedicated onLinkToNote path.
+      noteId: null,
       audioId,
       duration: ctx.duration,
       transcript: finalizeVoiceNoteTranscript(ctx.transcript),
     });
     // A successful save implies storage is writable again.
     setPersistenceError(false);
+    // Day 8 — upload after the local IndexedDB save: the record is durable
+    // first, then the sync layer sends the bytes to the server (multipart) so
+    // the row can be marked synced. The upload is fire-and-forget; a failure
+    // leaves the note pending and a later sync retries. Never blocks local UI.
+    void uploadVoiceNote(created, () => getToken());
     confetti({ particleCount: 40, colors: ['#0061A4', '#bdc7dc'] });
   };
 
@@ -483,8 +494,11 @@ export default function VoiceNotes({ onBack, onLinkToNote }: VoiceNotesProps) {
       activeAudioRef.current = null;
       revokeActivePlayback();
 
-      // Resolve the audio: durable IndexedDB blob first, legacy same-session
-      // blob: URL second — so playback keeps working across reloads.
+      // Resolve the audio: durable IndexedDB blob first, confirmed Cloudinary
+      // URL second, legacy same-session blob: URL last — so playback keeps
+      // working across reloads and multi-device syncs. The server URL is not an
+      // object URL we created, so it is never added to objectUrlsRef (the
+      // cleanup that revokes blobs must not revoke a remote href).
       let source: string | null = null;
       if (vn.audioId) {
         try {
@@ -498,7 +512,11 @@ export default function VoiceNotes({ onBack, onLinkToNote }: VoiceNotesProps) {
         } catch {
           source = null;
         }
-      } else if (vn.legacyAudioUrl) {
+      }
+      if (!source && vn.audioUrl) {
+        source = vn.audioUrl;
+      }
+      if (!source && vn.legacyAudioUrl) {
         source = vn.legacyAudioUrl;
       }
 
@@ -616,6 +634,10 @@ export default function VoiceNotes({ onBack, onLinkToNote }: VoiceNotesProps) {
     if (vn.audioId) {
       void deleteVoiceAudio(vn.audioId).catch(() => { /* best-effort orphan cleanup */ });
     }
+    // Day 8 — local-first remote delete: the tombstone is recorded inside the
+    // sync layer BEFORE any network write so an offline/failed DELETE cannot
+    // let the server resurrect this note on the next hydration.
+    void deleteRemoteVoiceNote(vn.id, () => getToken());
   };
 
   const recordingWaveform = isRecording && !isPaused ? waveformLevels : new Array(WAVEFORM_BARS).fill(0.05);
@@ -746,6 +768,11 @@ export default function VoiceNotes({ onBack, onLinkToNote }: VoiceNotesProps) {
                         <span>{formatTime(vn.duration)}</span>
                         <span className="voice-meta-dot">·</span>
                         <span>{formatShortDate(vn.createdAt)}</span>
+                        {vn.synced ? (
+                          <span className="voice-sync-status synced" title="Backed up to the cloud">Synced</span>
+                        ) : vn.audioId ? (
+                          <span className="voice-sync-status pending" title="Waiting to upload to the cloud">Pending</span>
+                        ) : null}
                       </div>
                     </div>
 

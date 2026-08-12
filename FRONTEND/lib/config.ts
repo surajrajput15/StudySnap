@@ -97,3 +97,56 @@ export async function apiFetch<T = ApiResponse>(
     clearTimeout(timer);
   }
 }
+
+/**
+ * Day 8 Task 1 (Phase 3) — multipart POST helper for voice-audio uploads.
+ *
+ * Deliberately separate from apiFetch so the JSON-only contract of apiFetch is
+ * never violated: multipart bodies must NOT carry a `Content-Type: application/json`
+ * header (the browser boundary is only correct when the header is left to
+ * `fetch`). Failures mirror apiFetch's shape — the abort/timeout and the
+ * generic network error — so sync callers can react uniformly, and a 401 still
+ * broadcasts the shared session-expired event.
+ */
+export async function apiFetchMultipart<T = ApiResponse>(
+  url: string,
+  formData: FormData,
+  options: { token?: string; returnTo?: string; timeoutMs?: number } = {}
+): Promise<T> {
+  const { token, returnTo, timeoutMs = 60000, ...rest } = options;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: formData,
+      signal: controller.signal,
+      ...rest,
+    });
+
+    clearTimeout(timer);
+
+    if (res.status === 401) {
+      const event = new CustomEvent('studysnap:session-expired', { detail: { returnTo } });
+      window.dispatchEvent(event);
+      return { success: false, error: 'Your session has expired. Please sign in again.', sessionExpired: true } as T;
+    }
+
+    const json = await res.json();
+
+    return json;
+  } catch {
+    if (controller.signal.aborted) {
+      return { success: false, error: 'The upload timed out. Please check your connection and try again.', _timedOut: true } as T;
+    }
+
+    return { success: false, error: 'We could not reach the server. Please check your connection and try again.' } as T;
+  } finally {
+    clearTimeout(timer);
+  }
+}

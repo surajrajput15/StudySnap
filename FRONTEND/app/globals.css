@@ -1983,6 +1983,31 @@ textarea:focus-visible,
 .voice-meta-dot {
   opacity: 0.4;
 }
+.voice-sync-status {
+  margin-left: 4px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  line-height: 1.5;
+}
+.voice-sync-status.synced {
+  color: var(--success-contrast, var(--on-surface-variant));
+  background: var(--success-container, var(--surface-variant));
+  border: 1px solid var(--success, #10B981);
+}
+.voice-sync-status.pending {
+  color: var(--on-surface-variant);
+  background: var(--surface-variant);
+  border: 1px solid var(--outline-variant);
+  animation: voice-sync-pulse 2s ease-in-out infinite;
+}
+@keyframes voice-sync-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
 
 .voice-recording-actions {
   display: flex;

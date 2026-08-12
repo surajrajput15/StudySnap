@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, integer, uuid } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, boolean, integer, uuid, index } from 'drizzle-orm/pg-core';
 
 export const users = pgTable('users', {
   id: text('id').primaryKey(),
@@ -47,12 +47,17 @@ export const notes = pgTable('notes', {
 
 export const voiceNotes = pgTable('voice_notes', {
   id: uuid('id').defaultRandom().primaryKey(),
-  noteId: uuid('note_id').references(() => notes.id, { onDelete: 'cascade' }).notNull(),
+  userId: text('user_id').notNull(),
+  noteId: uuid('note_id').references(() => notes.id, { onDelete: 'cascade' }),
   audioUrl: text('audio_url').notNull(),
   duration: integer('duration').notNull(),
   transcript: text('transcript'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => [
+  // User-scoped listing: WHERE user_id = ? ORDER BY created_at DESC
+  index('voice_notes_user_created_idx').on(table.userId, table.createdAt),
+]);
 
 export const revisionLogs = pgTable('revision_logs', {
   id: uuid('id').defaultRandom().primaryKey(),

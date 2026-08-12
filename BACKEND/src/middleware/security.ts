@@ -22,7 +22,7 @@ const prodCSP = {
     'https://*',
     'http://localhost:4000',
   ],
-  mediaSrc: ["'self'", 'blob:'],
+  mediaSrc: ["'self'", 'blob:', 'https://res.cloudinary.com'],
   objectSrc: ["'none'"],
   baseUri: ["'self'"],
   frameAncestors: ["'self'"],
