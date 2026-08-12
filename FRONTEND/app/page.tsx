@@ -1,13 +1,20 @@
 'use client';
 
-import React, { useState, useEffect, useLayoutEffect, useSyncExternalStore } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useSyncExternalStore } from 'react';
 import dynamic from 'next/dynamic';
 import { useStore, switchStoreScopeForUser } from '@/lib/store/useStore';
 import { syncNotesForUser } from '@/lib/sync/notesSync';
 import { syncVoiceNotesForUser } from '@/lib/sync/voiceNotesSync';
+import {
+  createSyncEngine,
+  SyncThrottledError,
+  type SyncChildStatusEvent,
+  type SyncEngine,
+} from '@/lib/sync/syncEngine';
 import HomeScreen from '@/components/HomeScreen';
 import MobileDrawer from '@/components/MobileDrawer';
 import OfflineBanner from '@/components/OfflineBanner';
+import SyncStatusIndicator from '@/components/SyncStatusIndicator';
 
 const NoteEditor = dynamic(() => import('@/components/NoteEditor'), { ssr: false });
 const VoiceNotes = dynamic(() => import('@/components/VoiceNotes'), { ssr: false });
@@ -68,45 +75,47 @@ export default function Page() {
     }
   }, [isLoaded, isSignedIn, clerkUser, syncProfileNameFromClerk]);
 
-  // Day 5 — Notes hydration. Runs only after switchStoreScopeForUser (see the
-  // useLayoutEffect above) so the store is already scoped to this account.
-  // The sync layer itself guards against account switches mid-flight and
-  // against React StrictMode double-invocations. Offline/guest sessions no-op.
+  // Day 8 Task 3 (Phases A+B) — single-flight sync engine + observability.
+  // The engine owns WHEN sync runs (mount, reconnect, visibility, manual retry)
+  // and single-flights the notes + voice-note hydration passes, which are the
+  // injected `runTasks`. A 429 reported by either layer surfaces as a
+  // SyncThrottledError so the engine honors Retry-After. `syncStatus` is written
+  // into the ephemeral store slice for the SyncStatusIndicator.
+  const engineRef = useRef<SyncEngine | null>(null);
+
   useEffect(() => {
-    if (!isLoaded || !isSignedIn || !clerkId) return;
+    if (!isLoaded || !isSignedIn || !clerkId) {
+      engineRef.current?.stop();
+      engineRef.current = null;
+      useStore.getState().setSyncStatus(null);
+      return;
+    }
 
-    const runSync = () => {
-      void syncNotesForUser(clerkId, () => getToken());
-    };
+    const engine = createSyncEngine(`studysnap:sync:${clerkId}`, {
+      runTasks: () => {
+        let throttled: SyncThrottledError | null = null;
+        const report: (event: SyncChildStatusEvent) => void = (event) => {
+          if (event.type === 'rateLimited') {
+            throttled = new SyncThrottledError(event.status, event.retryAfterMs);
+          }
+        };
+        return Promise.all([
+          syncNotesForUser(clerkId, () => getToken(), { onStatus: report }),
+          syncVoiceNotesForUser(clerkId, () => getToken(), { onStatus: report }),
+        ]).then(() => {
+          // A 429 in either layer makes this whole run back off per Retry-After.
+          if (throttled) throw throttled;
+        });
+      },
+      onStatus: (status) => useStore.getState().setSyncStatus(status),
+    });
+    engineRef.current = engine;
+    engine.start();
 
-    runSync();
-
-    // Re-run hydration when the connection returns so offline changes get a
-    // chance to reach the server without requiring a page reload.
-    const handleOnline = () => runSync();
-    window.addEventListener('online', handleOnline);
     return () => {
-      window.removeEventListener('online', handleOnline);
-    };
-  }, [isLoaded, isSignedIn, clerkId, getToken]);
-
-  // Day 8 Task 1 (Phase 3) — Voice-note hydration. Runs independently of note
-  // sync (voice notes round-trip through the Cloudinary-backed upload API), but
-  // with the same guard rails: after switchStoreScopeForUser, strict-mode safe,
-  // offline/guest no-op, and re-run on reconnect for pending uploads.
-  useEffect(() => {
-    if (!isLoaded || !isSignedIn || !clerkId) return;
-
-    const runVoiceSync = () => {
-      void syncVoiceNotesForUser(clerkId, () => getToken());
-    };
-
-    runVoiceSync();
-
-    const handleVoiceOnline = () => runVoiceSync();
-    window.addEventListener('online', handleVoiceOnline);
-    return () => {
-      window.removeEventListener('online', handleVoiceOnline);
+      engine.stop();
+      engineRef.current = null;
+      useStore.getState().setSyncStatus(null);
     };
   }, [isLoaded, isSignedIn, clerkId, getToken]);
 
@@ -220,6 +229,7 @@ export default function Page() {
             </span>
           </div>
           <div className="header-right">
+            <SyncStatusIndicator onRetry={() => engineRef.current?.requestSync()} />
             <button onClick={toggleTheme} className="header-icon-btn" aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}>
               {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
             </button>

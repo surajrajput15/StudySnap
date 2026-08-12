@@ -6472,3 +6472,60 @@ textarea:focus-visible,
     top: 33px;
   }
 }
+
+/* ─── Sync Status Indicator ─── */
+.sync-status-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  color: var(--on-surface-variant);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+.sync-status-indicator:hover:not(:disabled) {
+  border-color: var(--primary);
+  background: var(--surface-variant);
+}
+.sync-status-indicator:disabled {
+  cursor: default;
+  opacity: 0.85;
+}
+.sync-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--outline);
+  flex-shrink: 0;
+}
+.sync-status-busy .sync-status-dot {
+  background: var(--primary);
+  animation: sync-pulse 1.2s ease-in-out infinite;
+}
+.sync-status-retrying .sync-status-dot {
+  background: #d97706;
+}
+.sync-status-offline .sync-status-dot {
+  background: var(--outline);
+}
+.sync-status-label {
+  white-space: nowrap;
+}
+@keyframes sync-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+@media (max-width: 480px) {
+  .sync-status-indicator {
+    padding: 0 8px;
+  }
+  .sync-status-label {
+    display: none;
+  }
+}

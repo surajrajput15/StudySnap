@@ -54,6 +54,26 @@ export interface ApiResponse {
   message?: { content?: string };
   response?: string;
   text?: string;
+  /** HTTP status of the response (present only for actual HTTP round-trips). */
+  status?: number;
+  /** Server-provided delay (ms) before the caller may retry, parsed from the
+   *  `Retry-After` response header. Absent when no header was sent. */
+  retryAfterMs?: number;
+}
+
+/** Parses the `Retry-After` header into milliseconds. Accepts either a
+ *  delta-seconds value or the RFC 7231 HTTP-date form. Returns null for values
+ *  that cannot be parsed so callers can fall back to default backoff. */
+export function parseRetryAfterMs(value: string | null): number | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (/^\d+$/.test(trimmed)) {
+    const seconds = Number(trimmed);
+    return Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : null;
+  }
+  const dateMs = Date.parse(trimmed);
+  if (!Number.isNaN(dateMs)) return Math.max(0, dateMs - Date.now());
+  return null;
 }
 
 export async function apiFetch<T = ApiResponse>(
@@ -81,12 +101,23 @@ export async function apiFetch<T = ApiResponse>(
     if (res.status === 401) {
       const event = new CustomEvent('studysnap:session-expired', { detail: { returnTo } });
       window.dispatchEvent(event);
-      return { success: false, error: 'Your session has expired. Please sign in again.', sessionExpired: true } as T;
+      return {
+        success: false,
+        error: 'Your session has expired. Please sign in again.',
+        sessionExpired: true,
+        status: res.status,
+      } as T;
     }
 
+    const retryAfterMs = parseRetryAfterMs(res.headers?.get?.('retry-after') ?? null);
     const json = await res.json();
 
-    return json;
+    // Preserve the exact JSON body contract while ADDITIVELY exposing the HTTP
+    // status and any Retry-After hint, so sync layers can detect 429 throttling.
+    return retryAfterMs !== null
+      ? { ...json, status: res.status, retryAfterMs }
+      : { ...json, status: res.status };
+
   } catch {
     if (controller.signal.aborted) {
       return { success: false, error: 'The request timed out. Please try again or make your question shorter.', _timedOut: true } as T;
@@ -134,12 +165,21 @@ export async function apiFetchMultipart<T = ApiResponse>(
     if (res.status === 401) {
       const event = new CustomEvent('studysnap:session-expired', { detail: { returnTo } });
       window.dispatchEvent(event);
-      return { success: false, error: 'Your session has expired. Please sign in again.', sessionExpired: true } as T;
+      return {
+        success: false,
+        error: 'Your session has expired. Please sign in again.',
+        sessionExpired: true,
+        status: res.status,
+      } as T;
     }
 
+    const retryAfterMs = parseRetryAfterMs(res.headers?.get?.('retry-after') ?? null);
     const json = await res.json();
 
-    return json;
+    return retryAfterMs !== null
+      ? { ...json, status: res.status, retryAfterMs }
+      : { ...json, status: res.status };
+
   } catch {
     if (controller.signal.aborted) {
       return { success: false, error: 'The upload timed out. Please check your connection and try again.', _timedOut: true } as T;

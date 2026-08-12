@@ -28,7 +28,32 @@ function getErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
+/**
+ * Day 8 Task 3 (Phase C) — production AI fail-fast.
+ *
+ * Thrown (status 503) when an AI call is made in PRODUCTION without a Groq key.
+ * The backend never serves mock study content to production users, so the guard
+ * is checked at call time (read of `process.env.NODE_ENV` — not the cached env
+ * snapshot) before any mock path can run. Development keeps its mock behavior.
+ */
+export class AIUnavailableError extends Error {
+  readonly status = 503;
+  constructor() {
+    super(
+      'AI is not configured. GROQ_API_KEY is required in production; AI features are unavailable.'
+    );
+    this.name = 'AIUnavailableError';
+  }
+}
+
+function ensureAIAllowed(): void {
+  if (!groq && process.env.NODE_ENV === 'production') {
+    throw new AIUnavailableError();
+  }
+}
+
 export async function chatCompletion(messages: ChatCompletionMessageParam[]) {
+  ensureAIAllowed();
   if (!groq) {
     console.log('[ai] mock → chatCompletion');
     return mockChatReply(messages);
@@ -58,6 +83,7 @@ export async function chatCompletion(messages: ChatCompletionMessageParam[]) {
 }
 
 export async function summarizeNote(title: string, content: string) {
+  ensureAIAllowed();
   if (!groq) {
     console.log('[ai] mock → summarizeNote');
     return mockSummary(title);
@@ -83,6 +109,7 @@ export async function summarizeNote(title: string, content: string) {
 }
 
 export async function generateMcqs(title: string, content: string): Promise<MockMcq[]> {
+  ensureAIAllowed();
   if (!groq) {
     console.log('[ai] mock → generateMcqs');
     return mockMcqs();
@@ -108,6 +135,7 @@ export async function generateMcqs(title: string, content: string): Promise<Mock
 }
 
 export async function generateFlashcards(title: string, content: string): Promise<MockFlashcard[]> {
+  ensureAIAllowed();
   if (!groq) {
     console.log('[ai] mock → generateFlashcards');
     return mockFlashcards();
@@ -133,6 +161,7 @@ export async function generateFlashcards(title: string, content: string): Promis
 }
 
 export async function translateText(content: string, lang: 'hindi' | 'english') {
+  ensureAIAllowed();
   if (!groq) {
     console.log('[ai] mock → translateText', { lang });
     return mockTranslation(content, lang);

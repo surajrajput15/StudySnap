@@ -33,6 +33,17 @@ function logAIError(endpoint: string, userId: string | undefined, error: unknown
   });
 }
 
+// Day 8 Task 3 (Phase C) — an unanswered production AI call surfaces as an
+// explicit 503 ("not configured") instead of a generic 500, so the client and
+// operators can tell "misconfigured" apart from "upstream failed".
+function aiErrorBody(error: unknown, fallback: string): { status: number; body: { success: boolean; error: string } } {
+  const err = error as { status?: number };
+  if (err.status === 503) {
+    return { status: 503, body: { success: false, error: 'AI is not configured in this environment.' } };
+  }
+  return { status: 500, body: { success: false, error: fallback } };
+}
+
 router.post('/chat', validate(aiChatSchema), async (req, res) => {
   const start = Date.now();
   try {
@@ -44,10 +55,8 @@ router.post('/chat', validate(aiChatSchema), async (req, res) => {
     res.json({ success: true, message: { role: 'assistant', content: reply }, _duration: duration });
   } catch (error) {
     logAIError('chat', req.userId, error);
-    res.status(500).json({
-      success: false,
-      error: 'AI chat failed',
-    });
+    const { status, body } = aiErrorBody(error, 'AI chat failed');
+    res.status(status).json(body);
   }
 });
 
@@ -62,7 +71,8 @@ router.post('/summarize', validate(aiContentSchema), async (req, res) => {
     res.json({ success: true, summary, _duration: duration });
   } catch (error) {
     logAIError('summarize', req.userId, error);
-    res.status(500).json({ success: false, error: 'Summarization failed' });
+    const { status, body } = aiErrorBody(error, 'Summarization failed');
+    res.status(status).json(body);
   }
 });
 
@@ -84,7 +94,8 @@ router.post('/mcqs', validate(aiContentSchema), async (req, res) => {
     res.json({ success: true, mcqs, _duration: duration });
   } catch (error) {
     logAIError('mcqs', req.userId, error);
-    res.status(500).json({ success: false, error: 'MCQ generation failed' });
+    const { status, body } = aiErrorBody(error, 'MCQ generation failed');
+    res.status(status).json(body);
   }
 });
 
@@ -100,7 +111,8 @@ router.post('/translate', validate(translateSchema), async (req, res) => {
     res.json({ success: true, translatedText, _duration: duration });
   } catch (error) {
     logAIError('translate', req.userId, error);
-    res.status(500).json({ success: false, error: 'Translation failed' });
+    const { status, body } = aiErrorBody(error, 'Translation failed');
+    res.status(status).json(body);
   }
 });
 

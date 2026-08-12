@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import type { StateStorage } from 'zustand/middleware';
 import type { StoreApi } from 'zustand';
+import type { SyncEngineStatus } from '../sync/syncEngine.ts';
 import { DAILY_GOAL, REVISION_INTERVAL_DAYS } from '../constants.ts';
 import { dateKey } from '../utils.ts';
 
@@ -119,6 +120,10 @@ interface AppState {
   // Storage health (ephemeral — never persisted)
   persistenceError: boolean;
 
+  // Sync observability (ephemeral — never persisted). Mirrors the state of the
+  // per-account sync engine; null when no engine is active (guest or signed out).
+  syncStatus: SyncEngineStatus | null;
+
   // Theme Actions
   toggleTheme: () => void;
 
@@ -168,6 +173,9 @@ interface AppState {
 
   // Storage health action
   setPersistenceError: (hasError: boolean) => void;
+
+  // Sync observability action
+  setSyncStatus: (status: SyncEngineStatus | null) => void;
 }
 
 const DEFAULT_CATEGORIES: Category[] = [
@@ -234,6 +242,7 @@ function makeInitialState(set: SetStateFn): AppState {
     searchQuery: '',
     activeAiTool: null,
     persistenceError: false,
+    syncStatus: null,
 
     toggleTheme: () => set((state) => ({ theme: state.theme === 'light' ? 'dark' : 'light' })),
 
@@ -430,6 +439,7 @@ function makeInitialState(set: SetStateFn): AppState {
     setSearchQuery: (query) => set({ searchQuery: query }),
     setActiveAiTool: (tool) => set({ activeAiTool: tool }),
     setPersistenceError: (hasError) => set((state) => (state.persistenceError === hasError ? state : { persistenceError: hasError })),
+    setSyncStatus: (status) => set((state) => (state.syncStatus === status ? state : { syncStatus: status })),
   };
 }
 

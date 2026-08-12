@@ -1,6 +1,7 @@
 import { useStore, getStoreScopeKey, type VoiceNote } from '../store/useStore.ts';
 import { API, apiFetch, apiFetchMultipart } from '../config.ts';
 import { getVoiceAudioBlob, purgeOrphanedVoiceAudio } from '../storage/voiceNotes.ts';
+import type { SyncChildStatusEvent } from './syncEngine.ts';
 
 /**
  * Day 8 Task 1 (Phase 3) — Voice-note sync layer.
@@ -98,15 +99,25 @@ interface VoiceNotesResponse {
   success?: boolean;
   voiceNotes?: ServerVoiceNoteRow[];
   error?: string;
+  /** Additively exposed by apiFetch: HTTP status + Retry-After hint. */
+  status?: number;
+  retryAfterMs?: number;
 }
 
 interface VoiceNoteSaveResponse {
   success?: boolean;
   voiceNote?: ServerVoiceNoteRow;
   error?: string;
+  status?: number;
+  retryAfterMs?: number;
 }
 
 type TokenFn = () => Promise<string | null>;
+
+/** Optional per-run status reporting (Day 8 Task 3 Phase B — additive). */
+export interface SyncStatusOptions {
+  onStatus?: (event: SyncChildStatusEvent) => void;
+}
 
 // Prevents duplicate hydration under React StrictMode: module-level in-flight
 // set keyed by clerk user id (voice sync runs independently from note sync).
@@ -183,7 +194,12 @@ async function flushPendingVoiceDeletes(userId: string, getToken: TokenFn): Prom
  * with the server `audioUrl` and `updatedAt`, while the IndexedDB `audioId` is
  * deliberately kept as the preferred playback source.
  */
-async function performVoiceUpload(voiceNote: VoiceNote, userId: string, token: string): Promise<void> {
+async function performVoiceUpload(
+  voiceNote: VoiceNote,
+  userId: string,
+  token: string,
+  onStatus?: (event: SyncChildStatusEvent) => void
+): Promise<void> {
   // A row the server already holds does not need re-uploading.
   if (voiceNote.synced && voiceNote.audioUrl) return;
   if (!voiceNote.audioId) return;
@@ -202,6 +218,10 @@ async function performVoiceUpload(voiceNote: VoiceNote, userId: string, token: s
   if (voiceNote.transcript) formData.append('transcript', voiceNote.transcript);
 
   const res = await apiFetchMultipart<VoiceNoteSaveResponse>(API.voiceNotes, formData, { token });
+  if (res && res.status === 429) {
+    onStatus?.({ type: 'rateLimited', status: 429, retryAfterMs: res.retryAfterMs ?? 0 });
+    return;
+  }
   if (!res || res.success !== true || !res.voiceNote) return;
 
   // The account switched while the upload was in flight: never write the
@@ -305,7 +325,8 @@ function timeValue(at: string | undefined | null): number {
 async function mergeServerVoiceNotes(
   serverRows: ServerVoiceNoteRow[],
   userId: string,
-  token: string
+  token: string,
+  onStatus?: (event: SyncChildStatusEvent) => void
 ): Promise<void> {
   const tombstones = readVTombstones(userId);
   const localNotes = useStore.getState().voiceNotes.filter((vn) => !tombstones.has(vn.id));
@@ -351,7 +372,7 @@ async function mergeServerVoiceNotes(
 
   for (const note of toUpload) {
     if (!isVoiceScopeActive(userId)) return;
-    await performVoiceUpload(note, userId, token);
+    await performVoiceUpload(note, userId, token, onStatus);
   }
 
   if (!isVoiceScopeActive(userId)) return;
@@ -448,7 +469,12 @@ export async function sweepOrphanedVoiceAudio(): Promise<number> {
  * the store is already scoped to the user. Any async step re-checks that the
  * store is still scoped to this user before touching Zustand.
  */
-export async function syncVoiceNotesForUser(clerkUserId: string, getToken: TokenFn): Promise<void> {
+export async function syncVoiceNotesForUser(
+  clerkUserId: string,
+  getToken: TokenFn,
+  options?: SyncStatusOptions
+): Promise<void> {
+  const onStatus = options?.onStatus;
   if (!clerkUserId || typeof window === 'undefined' || !isOnline()) return;
   if (voiceSyncInFlight.has(clerkUserId)) return;
   voiceSyncInFlight.add(clerkUserId);
@@ -456,6 +482,7 @@ export async function syncVoiceNotesForUser(clerkUserId: string, getToken: Token
   try {
     const token = await getToken();
     if (!token || !isVoiceScopeActive(syncUserId)) return;
+    onStatus?.({ type: 'syncing' });
 
     // Retry any previously-failed remote DELETEs BEFORE server rows can be
     // adopted, so a tombstoned voice note cannot be read back into local state.
@@ -463,10 +490,17 @@ export async function syncVoiceNotesForUser(clerkUserId: string, getToken: Token
     if (!isOnline() || !isVoiceScopeActive(syncUserId)) return;
 
     const res = await apiFetch<VoiceNotesResponse>(API.voiceNotes, { token });
-    if (!res || res.success !== true || !Array.isArray(res.voiceNotes)) return;
+    if (!res || res.success !== true || !Array.isArray(res.voiceNotes)) {
+      if (res && res.status === 429) {
+        onStatus?.({ type: 'rateLimited', status: 429, retryAfterMs: res.retryAfterMs ?? 0 });
+      } else {
+        onStatus?.({ type: 'error', message: res?.error ?? 'Voice-note sync failed' });
+      }
+      return;
+    }
     if (!isVoiceScopeActive(syncUserId)) return;
 
-    await mergeServerVoiceNotes(res.voiceNotes, syncUserId, token);
+    await mergeServerVoiceNotes(res.voiceNotes, syncUserId, token, onStatus);
 
     // Post-hydration safe orphan sweep (best-effort).
     if (isVoiceScopeActive(syncUserId)) {
@@ -474,8 +508,10 @@ export async function syncVoiceNotesForUser(clerkUserId: string, getToken: Token
         // never fail hydration because of a storage sweep
       });
     }
+    onStatus?.({ type: 'synced' });
   } catch {
     // Non-destructive: never clear/overwrite local voice notes on failure.
+    onStatus?.({ type: 'error', message: 'Voice-note sync failed' });
   } finally {
     voiceSyncInFlight.delete(clerkUserId);
   }

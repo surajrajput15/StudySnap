@@ -1,5 +1,6 @@
 import { useStore, getStoreScopeKey, type Note } from '../store/useStore.ts';
 import { API, apiFetch } from '../config.ts';
+import type { SyncChildStatusEvent } from './syncEngine.ts';
 
 /**
  * Day 5 — Notes sync layer (Phase 2).
@@ -155,15 +156,25 @@ interface NotesResponse {
   success?: boolean;
   notes?: ServerNoteRow[];
   error?: string;
+  /** Additively exposed by apiFetch: HTTP status + Retry-After hint. */
+  status?: number;
+  retryAfterMs?: number;
 }
 
 interface NoteSaveResponse {
   success?: boolean;
   note?: ServerNoteRow;
   error?: string;
+  status?: number;
+  retryAfterMs?: number;
 }
 
 type TokenFn = () => Promise<string | null>;
+
+/** Optional per-run status reporting (Day 8 Task 3 Phase B — additive). */
+export interface SyncStatusOptions {
+  onStatus?: (event: SyncChildStatusEvent) => void;
+}
 
 // Prevents duplicate hydration under React StrictMode: module-level in-flight
 // set keyed by clerk user id, alongside the persisted per-user completed flag.
@@ -632,7 +643,12 @@ async function mergeServerNotes(
  * to this user before touching Zustand, so a switched account can never
  * receive another account's server notes.
  */
-export async function syncNotesForUser(clerkUserId: string, getToken: TokenFn): Promise<void> {
+export async function syncNotesForUser(
+  clerkUserId: string,
+  getToken: TokenFn,
+  options?: SyncStatusOptions
+): Promise<void> {
+  const onStatus = options?.onStatus;
   if (!clerkUserId) return;
   if (typeof window === 'undefined') return;
   if (!isOnline()) return;
@@ -642,6 +658,7 @@ export async function syncNotesForUser(clerkUserId: string, getToken: TokenFn): 
   try {
     const token = await getToken();
     if (!token || !isUserScopeActive(syncUserId)) return;
+    onStatus?.({ type: 'syncing' });
 
     // Retry any previously-failed remote DELETEs BEFORE server rows can be
     // adopted, so a tombstoned note cannot be read back into local state.
@@ -649,7 +666,14 @@ export async function syncNotesForUser(clerkUserId: string, getToken: TokenFn): 
     if (!isOnline() || !isUserScopeActive(syncUserId)) return;
 
     const res = await apiFetch<NotesResponse>(API.notes, { token });
-    if (!res || res.success !== true || !Array.isArray(res.notes)) return;
+    if (!res || res.success !== true || !Array.isArray(res.notes)) {
+      if (res && res.status === 429) {
+        onStatus?.({ type: 'rateLimited', status: 429, retryAfterMs: res.retryAfterMs ?? 0 });
+      } else {
+        onStatus?.({ type: 'error', message: res?.error ?? 'Notes sync failed' });
+      }
+      return;
+    }
     if (!isUserScopeActive(syncUserId)) return;
 
     const serverNotes = res.notes;
@@ -660,15 +684,21 @@ export async function syncNotesForUser(clerkUserId: string, getToken: TokenFn): 
       // Never seed a note that was locally deleted — its tombstone keeps it out.
       const tombstones = readTombstones(syncUserId);
       const seedable = localNotes.filter((n) => !tombstones.has(n.id));
-      if (seedable.length === 0) return;
+      if (seedable.length === 0) {
+        onStatus?.({ type: 'synced' });
+        return;
+      }
       const seeded = await seedLocalNotes(seedable, syncUserId, token);
       if (seeded) setSyncFlag(syncUserId);
+      onStatus?.({ type: 'synced' });
       return;
     }
 
     await mergeServerNotes(localNotes, serverNotes, syncUserId, token);
+    onStatus?.({ type: 'synced' });
   } catch {
     // Non-destructive: never clear/overwrite local notes on failure.
+    onStatus?.({ type: 'error', message: 'Notes sync failed' });
   } finally {
     inFlight.delete(clerkUserId);
   }

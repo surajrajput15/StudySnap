@@ -2,10 +2,20 @@ import 'dotenv/config';
 import express from 'express';
 import { securityMiddleware, corsMiddleware } from './middleware/security';
 import { apiLimiter } from './middleware/rateLimiter';
-import { env } from './config/env';
+import { env, validateProductionEnv } from './config/env';
 import { JSON_BODY_LIMIT } from './config/constants';
 
 console.log(`[server] Starting with NODE_ENV=${env.NODE_ENV}`);
+
+// Day 8 Task 3 (Phase C) — production fail-fast. Validate the environment BEFORE
+// mounting routes / listening, so a misconfigured production box never boots
+// into a half-working mock mode.
+try {
+  validateProductionEnv();
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+}
 
 import notesRouter from './routes/notes';
 import voiceNotesRouter from './routes/voice-notes';
