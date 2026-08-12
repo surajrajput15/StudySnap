@@ -70,6 +70,61 @@ function removeTombstone(userId: string, noteId: string): void {
   writeTombstones(userId, tombstones);
 }
 
+const SUPERSEDE_KEY_PREFIX = 'studysnap:superseded';
+
+function getSupersedeKey(userId: string): string {
+  return `${SUPERSEDE_KEY_PREFIX}:${userId}`;
+}
+
+/** Reads the current user's superseded-push records. Each entry maps a note id
+ *  to the server `updatedAt` of a row the server currently holds which a newer
+ *  local edit has already superseded. Never throws. */
+function readSuperseded(userId: string): Map<string, string> {
+  try {
+    const raw = window.localStorage.getItem(getSupersedeKey(userId));
+    if (!raw) return new Map();
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return new Map();
+    const map = new Map<string, string>();
+    for (const [id, at] of Object.entries(parsed)) {
+      if (typeof at === 'string' && at.length > 0) map.set(id, at);
+    }
+    return map;
+  } catch {
+    return new Map();
+  }
+}
+
+/** Best-effort persistence of the superseded-push map. */
+function writeSuperseded(userId: string, superseded: Map<string, string>): void {
+  try {
+    window.localStorage.setItem(getSupersedeKey(userId), JSON.stringify(Object.fromEntries(superseded)));
+  } catch {
+    // ignore — best-effort durability
+  }
+}
+
+/** Records that the server row currently stamped `staleServerAt` for the note
+ *  is stale relative to a newer local edit, so a later sync can recognize the
+ *  local copy as the genuine winner even though the server clock is newer. */
+function recordSuperseded(userId: string, noteId: string, staleServerAt: string): void {
+  const map = readSuperseded(userId);
+  map.set(noteId, staleServerAt);
+  writeSuperseded(userId, map);
+}
+
+function clearSuperseded(userId: string, noteId: string): void {
+  const map = readSuperseded(userId);
+  if (!map.delete(noteId)) return;
+  writeSuperseded(userId, map);
+}
+
+/** The stale server `updatedAt` recorded for a note, or null when the server is
+ *  not known to be behind a newer local edit. */
+function supersededServerAt(userId: string, noteId: string): string | null {
+  return readSuperseded(userId).get(noteId) ?? null;
+}
+
 /** Extracts the Clerk user id from an active store scope key, or null when the
  *  scope is the guest/anonymous store. */
 function getActiveUserId(scope: string): string | null {
@@ -278,6 +333,36 @@ function pickWinner(local: Note, server: ServerNoteRow): Note {
   };
 }
 
+/** Day 7 Task 4 — local strictly beats server under the LWW rule. pickWinner
+ *  lets the server win ties, so this only matches a genuinely newer local note
+ *  (an offline edit) that exists on BOTH sides. */
+function isLocalStrictlyNewer(local: Note, server: ServerNoteRow): boolean {
+  const localTime = new Date(local.updatedAt).getTime();
+  const serverTime = new Date(server.updatedAt).getTime();
+  return !Number.isNaN(localTime) && !Number.isNaN(serverTime) && localTime > serverTime;
+}
+
+/**
+ * Day 7 Task 4 — payload-difference guard.
+ *
+ * Only the fields actually synchronized to the backend (see toRemotePayload)
+ * count as a reason to re-upload. Local-owned fields (folderId, categoryId,
+ * pinLock, and every revision field) deliberately never trigger an upload — a
+ * note edited only locally will simply win locally forever instead of causing
+ * POST churn. Server tags (comma-joined) are normalized back to an array, so
+ * both sides compare as the same string[].
+ */
+function syncedPayloadDiffers(local: Note, server: ServerNoteRow): boolean {
+  const remote = toLocalNote(server);
+  return (
+    local.title !== remote.title ||
+    local.content !== remote.content ||
+    local.isPinned !== remote.isPinned ||
+    local.isFavorite !== remote.isFavorite ||
+    JSON.stringify(local.tags) !== JSON.stringify(remote.tags)
+  );
+}
+
 async function postNote(payload: RemoteNotePayload, token: string): Promise<ServerNoteRow | null> {
   const res = await apiFetch<NoteSaveResponse>(API.notes, {
     method: 'POST',
@@ -370,6 +455,7 @@ async function guardedUpsert(userId: string, note: Note, token: string): Promise
       settled = true;
       endUpsert(userId, note.id);
       addTombstone(userId, note.id);
+      clearSuperseded(userId, note.id);
       if (isUserScopeActive(userId)) {
         await attemptRemoteDelete(userId, note.id, token);
       }
@@ -410,16 +496,40 @@ async function mergeServerNotes(
   const serverMap = new Map(serverNotesToMerge.map((n) => [n.id, n]));
   const merged: Note[] = [];
   const seen = new Set<string>();
-  const localOnly: Note[] = [];
+  // Every note that owes the server a write this sync: local-only notes NOT yet
+  // on the server (one-time seed / merge durability) AND existing notes whose
+  // strictly-newer local copy has a changed synced payload (Day 7 Task 4 —
+  // offline edits re-uploaded on reconnect). Both ride the single safe
+  // guardedUpsert path.
+  const toUpload: Note[] = [];
 
   for (const local of localNotesToMerge) {
     seen.add(local.id);
     const server = serverMap.get(local.id);
     if (!server) {
-      localOnly.push(local);
+      toUpload.push(local);
       merged.push(local);
-    } else {
-      merged.push(pickWinner(local, server));
+      continue;
+    }
+    // Day 7 Task 4 — a stale upload that a newer local edit superseded leaves the
+    // server holding OLD content stamped with a clock NEWER than the local edit
+    // (the server minted it when it processed our own stale write). If the server
+    // row is exactly the state we recorded as superseded, the local copy is the
+    // genuine winner regardless of the server timestamp — otherwise a pure LWW
+    // comparison would silently roll the local edit back on the next sync.
+    const staleServerAt = supersededServerAt(userId, local.id);
+    const serverIsSuperseded = staleServerAt !== null && server.updatedAt === staleServerAt;
+    if (staleServerAt !== null && !serverIsSuperseded) clearSuperseded(userId, local.id);
+    const diff = syncedPayloadDiffers(local, server);
+    if (serverIsSuperseded && diff) {
+      merged.push(local);
+      toUpload.push(local);
+      continue;
+    }
+    if (serverIsSuperseded && !diff) clearSuperseded(userId, local.id);
+    merged.push(pickWinner(local, server));
+    if (isLocalStrictlyNewer(local, server) && diff) {
+      toUpload.push(local);
     }
   }
 
@@ -429,26 +539,45 @@ async function mergeServerNotes(
     }
   }
 
-  for (const note of localOnly) {
+  for (const note of toUpload) {
     if (!isUserScopeActive(userId)) return;
     const server = await guardedUpsert(userId, note, token);
     if (!server) continue; // non-destructive: keep the local note for a later retry
     const idx = merged.findIndex((n) => n.id === note.id);
-    if (idx !== -1 && server.updatedAt) {
-      const serverTime = new Date(server.updatedAt).getTime();
-      const localTime = new Date(merged[idx].updatedAt).getTime();
-      // Adopt the server clock only when it is not older than the local note,
-      // so an in-flight newer local save is never rolled back invisibly.
-      if (Number.isNaN(localTime) || serverTime >= localTime) {
-        merged[idx] = { ...merged[idx], updatedAt: server.updatedAt };
-      }
+    if (idx === -1) continue;
+    const serverTime = new Date(server.updatedAt).getTime();
+    const localTime = new Date(merged[idx].updatedAt).getTime();
+    // Adopt the server clock only when it is not older than the snapshot local
+    // note, so an in-flight newer local save is never rolled back invisibly.
+    const canAdopt = Number.isNaN(localTime) || serverTime >= localTime;
+    if (!canAdopt) continue;
+    // Day 7 Task 4 — the functional commit below re-reads CURRENT store state,
+    // so a newer local edit made while this upload was in flight must survive.
+    // Never let this uploaded snapshot's server clock outrank such a live edit:
+    // if the live note is strictly newer, skip the timestamp adoption and record
+    // the server row we just wrote as superseded — the commit then keeps the
+    // live note, and the NEXT sync recognizes the live copy as the winner even
+    // though the server's clock is now newer.
+    const live = useStore.getState().notes.find((n) => n.id === note.id);
+    const liveTime = live ? new Date(live.updatedAt).getTime() : Number.NaN;
+    if (!Number.isNaN(liveTime) && liveTime > localTime) {
+      if (server.updatedAt) recordSuperseded(userId, note.id, server.updatedAt);
+      continue;
     }
+    // Otherwise the snapshot is still current: adopt the confirmed server clock
+    // so the note stops looking locally-newer and never ping-pongs, and any
+    // stale supersede record is void now that the server has this content.
+    merged[idx] = { ...merged[idx], updatedAt: server.updatedAt };
+    clearSuperseded(userId, note.id);
   }
 
   if (!isUserScopeActive(userId)) return;
   // Re-filter by the CURRENT tombstone set: a note deleted while this merge was
   // in flight must never be brought back into local state by the commit.
   const tombstonesAtCommit = readTombstones(userId);
+  // Ids that existed locally at snapshot time. Used at commit time to tell a
+  // locally-deleted note apart from a server-only note (see below).
+  const localSnapshotIds = new Set(localNotesToMerge.map((n) => n.id));
   // The commit is a functional update so it re-reads the CURRENT store. A note
   // that was edited locally while the merge awaited its network calls must
   // never be rolled back by a stale snapshot row, and a note created during the
@@ -461,9 +590,26 @@ async function mergeServerNotes(
     // path; only a strictly newer current local note wins over its candidate.
     for (const cand of merged) {
       if (tombstonesAtCommit.has(cand.id)) continue;
-      seen.add(cand.id);
       const cur = currentById.get(cand.id);
-      if (cur && new Date(cur.updatedAt).getTime() > new Date(cand.updatedAt).getTime()) {
+      // A candidate that WAS local at snapshot time but is ABSENT from the
+      // current store: the user deleted it while the merge was awaiting its
+      // network calls. Never re-adopt it — even when a later confirmed DELETE
+      // already cleared its tombstone (otherwise the note resurrects locally).
+      // Only store-removal paths (deleteNote / deleteFolder cascade) take a
+      // note out of the store, so absence reliably means a local delete intent.
+      if (!cur && localSnapshotIds.has(cand.id)) continue;
+      // A candidate absent from BOTH the current store and the local snapshot is
+      // a genuine server-only note (created on another device, or a server row
+      // that never existed locally): adopt it normally. It is not tombstoned
+      // here — tombstoned rows were filtered out of `merged` above — so this is
+      // the legitimate multi-device adoption path, never a delete resurrection.
+      if (!cur) {
+        seen.add(cand.id);
+        next.push(cand);
+        continue;
+      }
+      seen.add(cand.id);
+      if (new Date(cur.updatedAt).getTime() > new Date(cand.updatedAt).getTime()) {
         next.push(cur);
       } else {
         next.push(cand);
@@ -566,6 +712,7 @@ export async function upsertRemoteNote(note: Note, getToken: TokenFn): Promise<v
       settled = true;
       endUpsert(userId, note.id);
       addTombstone(userId, note.id);
+      clearSuperseded(userId, note.id);
       if (isUserScopeActive(userId)) {
         await attemptRemoteDelete(userId, note.id, token);
       }
@@ -573,17 +720,30 @@ export async function upsertRemoteNote(note: Note, getToken: TokenFn): Promise<v
     }
 
     const serverUpdatedAt = server.updatedAt;
-    useStore.setState((s) => ({
-      notes: s.notes.map((n) => {
-        if (n.id !== note.id) return n;
-        // Adopt the server clock only when it isn't older than the local note,
-        // so an overlapping local save is never rolled back invisibly.
-        const localTime = new Date(n.updatedAt).getTime();
-        const serverTime = new Date(serverUpdatedAt).getTime();
-        const geq = Number.isNaN(serverTime) || Number.isNaN(localTime) || serverTime >= localTime;
-        return geq ? { ...n, updatedAt: serverUpdatedAt } : n;
-      }),
-    }));
+    useStore.setState((s) => {
+      const current = s.notes.find((n) => n.id === note.id);
+      if (!current) return {};
+      // Day 7 Task 4 — the server row echoes the SNAPSHOT this upsert uploaded.
+      // If the live note has since diverged (a newer local edit), the server's
+      // newer clock belongs to STALE content. Adopting it would let the next
+      // sync roll the live edit back, so instead record the server row as
+      // superseded and keep the live note's own clock.
+      if (syncedPayloadDiffers(current, server)) {
+        recordSuperseded(userId, note.id, serverUpdatedAt);
+        return {};
+      }
+      // Adopt the server clock only when it isn't older than the local note,
+      // so an overlapping local save is never rolled back invisibly. Once the
+      // server confirms content matching the live note, any stale supersede
+      // record for it is void.
+      clearSuperseded(userId, note.id);
+      const localTime = new Date(current.updatedAt).getTime();
+      const serverTime = new Date(serverUpdatedAt).getTime();
+      const geq = Number.isNaN(serverTime) || Number.isNaN(localTime) || serverTime >= localTime;
+      return {
+        notes: s.notes.map((n) => (n.id === note.id && geq ? { ...n, updatedAt: serverUpdatedAt } : n)),
+      };
+    });
   } catch {
     // local data already committed — ignore
   } finally {
@@ -603,8 +763,10 @@ export async function deleteRemoteNote(noteId: string, getToken: TokenFn): Promi
   if (!userId) return;
 
   // Record the tombstone immediately so a failed/offline DELETE cannot let the
-  // server resurrect the deleted note on the next hydration/merge.
+  // server resurrect the deleted note on the next hydration/merge. Any stale
+  // supersede record for the note is void now that it is deleted.
   addTombstone(userId, noteId);
+  clearSuperseded(userId, noteId);
 
   // Invalidate every pending/in-flight upsert for this user+note BEFORE issuing
   // the remote DELETE, so a POST that races this delete can never recreate the

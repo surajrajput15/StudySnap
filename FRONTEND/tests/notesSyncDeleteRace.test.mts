@@ -435,3 +435,538 @@ test('Scenario F3 — normal hydration still adopts the newer server row when no
   assert.equal(after.content, '<p>Server body</p>', 'server row wins when its updatedAt is newer');
   assert.equal(after.updatedAt, NEWER, 'server timestamp adopted');
 });
+
+test('G1 — offline edit pushed on reconnect', async () => {
+  // Sync flag set → the MERGE path runs; the note exists on BOTH sides with the
+  // local copy strictly newer (an offline edit) and a changed payload.
+  g.window.localStorage.setItem('studysnap:notes-synced:userA', '1');
+  const SERVER_OLD = '2019-01-01T00:00:00.000Z';
+  const LOCAL_NEWER = '2020-01-01T00:00:00.000Z';
+  const ADOPTED = '2021-01-01T00:00:00.000Z';
+  const noteG1 = {
+    ...makeNote('note-g1-push'),
+    content: '<p>Newer offline content</p>',
+    updatedAt: LOCAL_NEWER,
+    createdAt: LOCAL_NEWER,
+  };
+  useStore.setState({ notes: [noteG1] });
+
+  const sync = syncNotesForUser('userA', tokenFn);
+  await flushMicrotasks();
+  const getReq = takePending('GET', '');
+  getReq.resolve({
+    success: true,
+    notes: [{ ...serverNote(noteG1.id, SERVER_OLD), content: '<p>Old server content</p>' }],
+  });
+  await flushMicrotasks();
+
+  // The reconnect push must be a single POST carrying the newer local content.
+  const postReq = takePending('POST', noteG1.id);
+  const body = JSON.parse(postReq.body ?? '{}') as { content: string };
+  assert.equal(body.content, '<p>Newer offline content</p>', 'POST body carries the newer local content');
+
+  postReq.resolve({ success: true, note: { ...serverNote(noteG1.id, ADOPTED), content: '<p>Newer offline content</p>' } });
+  await sync;
+  await flushMicrotasks();
+
+  assert.equal(sentPosts(noteG1.id).length, 1, 'exactly one POST for the offline-edited note');
+  assert.equal(sentDeletes(noteG1.id).length, 0, 'no delete interference');
+  const after = useStore.getState().notes.find((n) => n.id === noteG1.id);
+  assert.ok(after, 'note remains present');
+  assert.equal(after.content, '<p>Newer offline content</p>', 'newer local content retained');
+  assert.equal(after.updatedAt, ADOPTED, 'server clock adopted for the successfully pushed note');
+  assert.ok(!readTombstones('userA').has(noteG1.id), 'no tombstone for a live note');
+});
+
+test('G2 — failed reconnect upload is retryable', async () => {
+  g.window.localStorage.setItem('studysnap:notes-synced:userA', '1');
+  const SERVER_OLD = '2019-01-01T00:00:00.000Z';
+  const LOCAL_NEWER = '2020-01-01T00:00:00.000Z';
+  const ADOPTED = '2021-01-01T00:00:00.000Z';
+  const noteG2 = {
+    ...makeNote('note-g2-retry'),
+    content: '<p>Offline edit v2</p>',
+    updatedAt: LOCAL_NEWER,
+    createdAt: LOCAL_NEWER,
+  };
+  useStore.setState({ notes: [noteG2] });
+
+  // First reconnect: the POST fails. The newer local note must survive intact.
+  const sync1 = syncNotesForUser('userA', tokenFn);
+  await flushMicrotasks();
+  const getReq1 = takePending('GET', '');
+  getReq1.resolve({
+    success: true,
+    notes: [{ ...serverNote(noteG2.id, SERVER_OLD), content: '<p>Old server content</p>' }],
+  });
+  await flushMicrotasks();
+  const postReq1 = takePending('POST', noteG2.id);
+  const body1 = JSON.parse(postReq1.body ?? '{}') as { content: string };
+  assert.equal(body1.content, '<p>Offline edit v2</p>');
+  postReq1.resolve({ success: false });
+  await sync1;
+  await flushMicrotasks();
+
+  let after = useStore.getState().notes.find((n) => n.id === noteG2.id);
+  assert.ok(after, 'newer local note retained after a failed upload');
+  assert.equal(after.content, '<p>Offline edit v2</p>', 'content untouched by the failed POST');
+  assert.equal(after.updatedAt, LOCAL_NEWER, 'timestamp untouched by the failed POST');
+
+  // Second reconnect retries the same upload.
+  const sync2 = syncNotesForUser('userA', tokenFn);
+  await flushMicrotasks();
+  const getReq2 = takePending('GET', '');
+  getReq2.resolve({
+    success: true,
+    notes: [{ ...serverNote(noteG2.id, SERVER_OLD), content: '<p>Old server content</p>' }],
+  });
+  await flushMicrotasks();
+  const postReq2 = takePending('POST', noteG2.id);
+  const body2 = JSON.parse(postReq2.body ?? '{}') as { content: string };
+  assert.equal(body2.content, '<p>Offline edit v2</p>', 'retry POST carries the same newer content');
+  postReq2.resolve({ success: true, note: { ...serverNote(noteG2.id, ADOPTED), content: '<p>Offline edit v2</p>' } });
+  await sync2;
+  await flushMicrotasks();
+
+  assert.equal(sentPosts(noteG2.id).length, 2, 'first POST failed, second POST retried');
+  after = useStore.getState().notes.find((n) => n.id === noteG2.id);
+  assert.ok(after);
+  assert.equal(after.content, '<p>Offline edit v2</p>');
+});
+
+test('G3 — no ping-pong after successful reconnect', async () => {
+  g.window.localStorage.setItem('studysnap:notes-synced:userA', '1');
+  const SERVER_OLD = '2019-01-01T00:00:00.000Z';
+  const LOCAL_NEWER = '2020-01-01T00:00:00.000Z';
+  const ADOPTED = '2021-01-01T00:00:00.000Z';
+  const noteG3 = {
+    ...makeNote('note-g3-noping'),
+    content: '<p>Synced body</p>',
+    updatedAt: LOCAL_NEWER,
+    createdAt: LOCAL_NEWER,
+  };
+  useStore.setState({ notes: [noteG3] });
+
+  // First sync pushes the newer local note and adopts the server clock.
+  const sync1 = syncNotesForUser('userA', tokenFn);
+  await flushMicrotasks();
+  const getReq1 = takePending('GET', '');
+  getReq1.resolve({ success: true, notes: [{ ...serverNote(noteG3.id, SERVER_OLD), content: '<p>Old server content</p>' }] });
+  await flushMicrotasks();
+  const postReq1 = takePending('POST', noteG3.id);
+  postReq1.resolve({ success: true, note: { ...serverNote(noteG3.id, ADOPTED), content: '<p>Synced body</p>' } });
+  await sync1;
+  await flushMicrotasks();
+  assert.equal(sentPosts(noteG3.id).length, 1, 'one POST on the first sync');
+  const adopted = useStore.getState().notes.find((n) => n.id === noteG3.id);
+  assert.ok(adopted);
+  assert.equal(adopted.updatedAt, ADOPTED, 'server clock adopted, local no longer newer');
+
+  // Second sync: server copy is now as new as the local copy → nothing to push.
+  const sync2 = syncNotesForUser('userA', tokenFn);
+  await flushMicrotasks();
+  const getReq2 = takePending('GET', '');
+  getReq2.resolve({ success: true, notes: [{ ...serverNote(noteG3.id, ADOPTED), content: '<p>Synced body</p>' }] });
+  await sync2;
+  await flushMicrotasks();
+  assert.equal(sentPosts(noteG3.id).length, 1, 'no ping-pong POST after adoption');
+});
+
+test('G4 — delete vs reconnect push race: delete wins, nothing resurrects', async () => {
+  g.window.localStorage.setItem('studysnap:notes-synced:userA', '1');
+  const SERVER_OLD = '2019-01-01T00:00:00.000Z';
+  const LOCAL_NEWER = '2020-01-01T00:00:00.000Z';
+  const noteG4 = {
+    ...makeNote('note-g4-race'),
+    content: '<p>Local v2</p>',
+    updatedAt: LOCAL_NEWER,
+    createdAt: LOCAL_NEWER,
+  };
+  useStore.setState({ notes: [noteG4] });
+
+  const sync = syncNotesForUser('userA', tokenFn);
+  await flushMicrotasks();
+  const getReq = takePending('GET', '');
+  getReq.resolve({ success: true, notes: [{ ...serverNote(noteG4.id, SERVER_OLD), content: '<p>Old server content</p>' }] });
+  await flushMicrotasks();
+
+  // The reconnect push POST is now in flight.
+  const postReq = takePending('POST', noteG4.id);
+
+  // Delete happens while the push is in flight → tombstone + epoch bump + DELETE.
+  useStore.getState().deleteNote(noteG4.id);
+  const del = deleteRemoteNote(noteG4.id, tokenFn);
+  await flushMicrotasks();
+  const delReq1 = takePending('DELETE', noteG4.id);
+
+  // The stale push POST completes AFTER the delete. Task 2 must compensate:
+  // epoch mismatch + tombstone → never re-insert the note.
+  postReq.resolve({ success: true, note: { ...serverNote(noteG4.id, '2099-01-01T00:00:00.000Z'), content: '<p>Local v2</p>' } });
+  await flushMicrotasks();
+
+  // Compensating DELETE is queued behind the in-flight DELETE#1.
+  delReq1.resolve({ success: true });
+  await del;
+  await flushMicrotasks();
+  const compDelete = takePending('DELETE', noteG4.id);
+  compDelete.resolve({ success: true });
+
+  await sync;
+  await flushMicrotasks();
+
+  assert.equal(sentPosts(noteG4.id).length, 1, 'the reconnect push POST was sent once');
+  assert.equal(sentDeletes(noteG4.id).length, 2, 'original DELETE + compensating DELETE');
+  assert.equal(requestLog[requestLog.length - 1].method, 'DELETE', 'final network op must be a DELETE');
+  assert.ok(requestLog[requestLog.length - 1].url.includes(noteG4.id));
+  assert.ok(!readTombstones('userA').has(noteG4.id), 'tombstone cleared after the confirmed final DELETE');
+  assert.equal(useStore.getState().notes.some((n) => n.id === noteG4.id), false, 'no resurrection into the store');
+});
+
+test('G5 — newer local edit during reconnect push is never overwritten', async () => {
+  g.window.localStorage.setItem('studysnap:notes-synced:userA', '1');
+  const SERVER_OLD = '2019-01-01T00:00:00.000Z';
+  const SNAPSHOT = '2020-01-01T00:00:00.000Z';
+  const noteG5 = {
+    ...makeNote('note-g5-edit'),
+    content: '<p>K2</p>',
+    updatedAt: SNAPSHOT,
+    createdAt: SNAPSHOT,
+  };
+  useStore.setState({ notes: [noteG5] });
+
+  const sync = syncNotesForUser('userA', tokenFn);
+  await flushMicrotasks();
+  const getReq = takePending('GET', '');
+  getReq.resolve({ success: true, notes: [{ ...serverNote(noteG5.id, SERVER_OLD), content: '<p>Old server content</p>' }] });
+  await flushMicrotasks();
+  const postReq = takePending('POST', noteG5.id);
+  const body = JSON.parse(postReq.body ?? '{}') as { content: string };
+  assert.equal(body.content, '<p>K2</p>', 'push POST starts with the K2 snapshot');
+
+  // While the push POST is pending, the user makes a NEWER local edit (K3).
+  useStore.getState().updateNote(noteG5.id, { content: '<p>K3</p>' });
+  const edited = useStore.getState().notes.find((n) => n.id === noteG5.id)!;
+  assert.equal(edited.content, '<p>K3</p>');
+  const newerTs = edited.updatedAt;
+  assert.ok(new Date(newerTs).getTime() > new Date(SNAPSHOT).getTime(), 'K3 is strictly newer than the K2 snapshot');
+
+  // The K2 POST resolves; the commit must keep K3 — never roll back to K2.
+  postReq.resolve({ success: true, note: { ...serverNote(noteG5.id, '2099-01-01T00:00:00.000Z'), content: '<p>K2</p>' } });
+  await sync;
+  await flushMicrotasks();
+
+  const after = useStore.getState().notes.find((n) => n.id === noteG5.id);
+  assert.ok(after, 'note remains present');
+  assert.equal(after.content, '<p>K3</p>', 'newer local edit K3 is never overwritten by the stale K2 push');
+  assert.equal(after.updatedAt, newerTs, 'K3 timestamp retained');
+  assert.equal(sentPosts(noteG5.id).length, 1, 'only the K2 snapshot was pushed by the merge');
+});
+
+test('G6 — server-only note is adopted into the local store', async () => {
+  // Merge path: server already has rows, so the one-time seed is bypassed.
+  g.window.localStorage.setItem('studysnap:notes-synced:userA', '1');
+  const serverOnlyId = 'note-g6-server-only';
+  useStore.setState({ notes: [] });
+
+  const sync = syncNotesForUser('userA', tokenFn);
+  await flushMicrotasks();
+  const getReq = takePending('GET', '');
+  getReq.resolve({
+    success: true,
+    notes: [{ ...serverNote(serverOnlyId, LATER), content: '<p>Server-only body</p>' }],
+  });
+  await sync;
+  await flushMicrotasks();
+
+  const after = useStore.getState().notes.find((n) => n.id === serverOnlyId);
+  assert.ok(after, 'server-only note MUST be adopted into the local store');
+  assert.equal(after.content, '<p>Server-only body</p>', 'server content preserved');
+  assert.equal(after.updatedAt, LATER, 'server timestamp adopted');
+  assert.equal(useStore.getState().notes.filter((n) => n.id === serverOnlyId).length, 1, 'no duplicate id');
+  assert.equal(sentPosts(serverOnlyId).length, 0, 'server-only adoption issues no POST');
+  assert.equal(sentDeletes(serverOnlyId).length, 0, 'no delete interference');
+});
+
+test('G6b — server-only note is adopted alongside existing local notes', async () => {
+  g.window.localStorage.setItem('studysnap:notes-synced:userA', '1');
+  const localId = 'note-g6-local';
+  const serverOnlyId = 'note-g6b-server-only';
+  useStore.setState({ notes: [makeNote(localId)] });
+
+  const sync = syncNotesForUser('userA', tokenFn);
+  await flushMicrotasks();
+  const getReq = takePending('GET', '');
+  getReq.resolve({
+    success: true,
+    notes: [
+      { ...serverNote(localId, NOW), content: '<p>Body</p>' },
+      { ...serverNote(serverOnlyId, LATER), content: '<p>Server-only body</p>' },
+    ],
+  });
+  await sync;
+  await flushMicrotasks();
+
+  assert.ok(useStore.getState().notes.some((n) => n.id === localId), 'existing local note untouched');
+  const after = useStore.getState().notes.find((n) => n.id === serverOnlyId);
+  assert.ok(after, 'server-only note adopted alongside local notes');
+  assert.equal(after.content, '<p>Server-only body</p>');
+});
+
+test('G7 — tombstoned server-only note is never resurrected', async () => {
+  g.window.localStorage.setItem('studysnap:notes-synced:userA', '1');
+  const noteId = 'note-g7-deleted';
+  // A previously-deleted note: the tombstone exists locally, but the server still
+  // holds the row (the compensating DELETE has not succeeded yet).
+  g.window.localStorage.setItem(`${TOMBSTONE_KEY_PREFIX}:userA`, JSON.stringify([noteId]));
+  useStore.setState({ notes: [] });
+
+  const sync = syncNotesForUser('userA', tokenFn);
+  await flushMicrotasks();
+  // flushPendingDeletes retries the failed DELETE first; it fails again, so the
+  // tombstone must stay intact for the merge below.
+  const delReq = takePending('DELETE', noteId);
+  delReq.resolve({ success: false });
+  await flushMicrotasks();
+  assert.ok(readTombstones('userA').has(noteId), 'tombstone retained after a failed DELETE retry');
+
+  const getReq = takePending('GET', '');
+  getReq.resolve({ success: true, notes: [{ ...serverNote(noteId, LATER), content: '<p>Server body</p>' }] });
+  await sync;
+  await flushMicrotasks();
+
+  assert.equal(useStore.getState().notes.some((n) => n.id === noteId), false, 'tombstoned note never adopted');
+  assert.ok(readTombstones('userA').has(noteId), 'tombstone behavior intact');
+  assert.equal(sentPosts(noteId).length, 0, 'tombstoned note never re-seeded');
+});
+
+test('G8 — K3 survives the K2 in-flight upload and is uploaded on the next sync', async () => {
+  g.window.localStorage.setItem('studysnap:notes-synced:userA', '1');
+  const SERVER_OLD = '2019-01-01T00:00:00.000Z';
+  const SNAPSHOT = '2020-01-01T00:00:00.000Z';
+  // The server processes the stale K2 upload AFTER the K3 edit, so it stamps the
+  // row with a clock NEWER than K3 (realistic when clocks are in sync).
+  const K2_SERVER = '2099-01-01T00:00:00.000Z';
+  const K3_ADOPTED = '2099-01-01T00:00:01.000Z';
+  const noteG8 = {
+    ...makeNote('note-g8-k3'),
+    content: '<p>K2</p>',
+    updatedAt: SNAPSHOT,
+    createdAt: SNAPSHOT,
+  };
+  useStore.setState({ notes: [noteG8] });
+
+  // Sync 1 — reconnect push of the K2 snapshot; K3 is edited while it is in flight.
+  const sync1 = syncNotesForUser('userA', tokenFn);
+  await flushMicrotasks();
+  const getReq1 = takePending('GET', '');
+  getReq1.resolve({ success: true, notes: [{ ...serverNote(noteG8.id, SERVER_OLD), content: '<p>Old server content</p>' }] });
+  await flushMicrotasks();
+  const postReq1 = takePending('POST', noteG8.id);
+  assert.equal(JSON.parse(postReq1.body ?? '{}').content, '<p>K2</p>', 'sync 1 pushes the K2 snapshot');
+
+  useStore.getState().updateNote(noteG8.id, { content: '<p>K3</p>' });
+  const edited = useStore.getState().notes.find((n) => n.id === noteG8.id)!;
+  const newerTs = edited.updatedAt;
+  assert.ok(new Date(newerTs).getTime() > new Date(SNAPSHOT).getTime(), 'K3 strictly newer than the K2 snapshot');
+
+  postReq1.resolve({ success: true, note: { ...serverNote(noteG8.id, K2_SERVER), content: '<p>K2</p>' } });
+  await sync1;
+  await flushMicrotasks();
+
+  let after = useStore.getState().notes.find((n) => n.id === noteG8.id);
+  assert.ok(after, 'note remains present after sync 1');
+  assert.equal(after.content, '<p>K3</p>', 'K3 survives the stale K2 push');
+  assert.equal(after.updatedAt, newerTs, 'K3 timestamp retained after sync 1');
+
+  // Sync 2 — the server still holds stale K2 with a newer clock. The merge must
+  // recognize K3 as the genuine winner and push it.
+  const sync2 = syncNotesForUser('userA', tokenFn);
+  await flushMicrotasks();
+  const getReq2 = takePending('GET', '');
+  getReq2.resolve({ success: true, notes: [{ ...serverNote(noteG8.id, K2_SERVER), content: '<p>K2</p>' }] });
+  await flushMicrotasks();
+  const postReq2 = takePending('POST', noteG8.id);
+  const body2 = JSON.parse(postReq2.body ?? '{}') as { content: string };
+  assert.equal(body2.content, '<p>K3</p>', 'sync 2 uploads the newer K3 content');
+
+  postReq2.resolve({ success: true, note: { ...serverNote(noteG8.id, K3_ADOPTED), content: '<p>K3</p>' } });
+  await sync2;
+  await flushMicrotasks();
+
+  after = useStore.getState().notes.find((n) => n.id === noteG8.id);
+  assert.ok(after, 'note remains present after sync 2');
+  assert.equal(after.content, '<p>K3</p>', 'K3 still present after adoption');
+  assert.equal(after.updatedAt, K3_ADOPTED, 'server clock for K3 adopted');
+  assert.equal(sentPosts(noteG8.id).length, 2, 'exactly K2 then K3 were pushed');
+});
+
+test('G8b — a failed K3 upload on the supersede path is retried without rollback or ping-pong', async () => {
+  g.window.localStorage.setItem('studysnap:notes-synced:userA', '1');
+  const SERVER_OLD = '2019-01-01T00:00:00.000Z';
+  const SNAPSHOT = '2020-01-01T00:00:00.000Z';
+  const K2_SERVER = '2099-01-01T00:00:00.000Z';
+  const K3_ADOPTED = '2099-01-01T00:00:01.000Z';
+  const noteG8b = {
+    ...makeNote('note-g8b-retry'),
+    content: '<p>K2</p>',
+    updatedAt: SNAPSHOT,
+    createdAt: SNAPSHOT,
+  };
+  useStore.setState({ notes: [noteG8b] });
+
+  // Sync 1 — the usual K2-push-while-edited-to-K3 setup; K3 wins locally.
+  const sync1 = syncNotesForUser('userA', tokenFn);
+  await flushMicrotasks();
+  const getReq1 = takePending('GET', '');
+  getReq1.resolve({ success: true, notes: [{ ...serverNote(noteG8b.id, SERVER_OLD), content: '<p>Old server content</p>' }] });
+  await flushMicrotasks();
+  const postReq1 = takePending('POST', noteG8b.id);
+  useStore.getState().updateNote(noteG8b.id, { content: '<p>K3</p>' });
+  const newerTs = useStore.getState().notes.find((n) => n.id === noteG8b.id)!.updatedAt;
+  postReq1.resolve({ success: true, note: { ...serverNote(noteG8b.id, K2_SERVER), content: '<p>K2</p>' } });
+  await sync1;
+  await flushMicrotasks();
+  assert.equal(useStore.getState().notes.find((n) => n.id === noteG8b.id)?.content, '<p>K3</p>');
+
+  // Sync 2 — the K3 upload FAILS. K3 must survive with its own clock and the
+  // supersede record must persist for a later retry (no false server-clock
+  // adoption, no rollback).
+  const sync2 = syncNotesForUser('userA', tokenFn);
+  await flushMicrotasks();
+  const getReq2 = takePending('GET', '');
+  getReq2.resolve({ success: true, notes: [{ ...serverNote(noteG8b.id, K2_SERVER), content: '<p>K2</p>' }] });
+  await flushMicrotasks();
+  const postReq2 = takePending('POST', noteG8b.id);
+  assert.equal(JSON.parse(postReq2.body ?? '{}').content, '<p>K3</p>', 'sync 2 retries the K3 upload');
+  postReq2.resolve({ success: false });
+  await sync2;
+  await flushMicrotasks();
+  let after = useStore.getState().notes.find((n) => n.id === noteG8b.id);
+  assert.ok(after, 'note present after the failed K3 upload');
+  assert.equal(after.content, '<p>K3</p>', 'K3 content retained after a failed upload');
+  assert.equal(after.updatedAt, newerTs, 'no false server-clock adoption after a failed upload');
+
+  // Sync 3 — the supersede record still wins: K3 is uploaded again and its
+  // server clock is adopted.
+  const sync3 = syncNotesForUser('userA', tokenFn);
+  await flushMicrotasks();
+  const getReq3 = takePending('GET', '');
+  getReq3.resolve({ success: true, notes: [{ ...serverNote(noteG8b.id, K2_SERVER), content: '<p>K2</p>' }] });
+  await flushMicrotasks();
+  const postReq3 = takePending('POST', noteG8b.id);
+  postReq3.resolve({ success: true, note: { ...serverNote(noteG8b.id, K3_ADOPTED), content: '<p>K3</p>' } });
+  await sync3;
+  await flushMicrotasks();
+  after = useStore.getState().notes.find((n) => n.id === noteG8b.id);
+  assert.equal(after?.updatedAt, K3_ADOPTED, 'K3 clock adopted on the successful retry');
+
+  // Sync 4 — server and local agree: no further POST.
+  const sync4 = syncNotesForUser('userA', tokenFn);
+  await flushMicrotasks();
+  const getReq4 = takePending('GET', '');
+  getReq4.resolve({ success: true, notes: [{ ...serverNote(noteG8b.id, K3_ADOPTED), content: '<p>K3</p>' }] });
+  await sync4;
+  await flushMicrotasks();
+  assert.equal(sentPosts(noteG8b.id).length, 3, 'K2 + failed K3 + successful K3 — no ping-pong POST');
+});
+
+test('G9 — no ping-pong after K3 adoption', async () => {
+  g.window.localStorage.setItem('studysnap:notes-synced:userA', '1');
+  const SERVER_OLD = '2019-01-01T00:00:00.000Z';
+  const SNAPSHOT = '2020-01-01T00:00:00.000Z';
+  const K2_SERVER = '2099-01-01T00:00:00.000Z';
+  const K3_ADOPTED = '2099-01-01T00:00:01.000Z';
+  const noteG9 = {
+    ...makeNote('note-g9-noping'),
+    content: '<p>K2</p>',
+    updatedAt: SNAPSHOT,
+    createdAt: SNAPSHOT,
+  };
+  useStore.setState({ notes: [noteG9] });
+
+  // Sync 1 — K2 push held, K3 edited, K2 resolves with a newer server clock.
+  const sync1 = syncNotesForUser('userA', tokenFn);
+  await flushMicrotasks();
+  const getReq1 = takePending('GET', '');
+  getReq1.resolve({ success: true, notes: [{ ...serverNote(noteG9.id, SERVER_OLD), content: '<p>Old server content</p>' }] });
+  await flushMicrotasks();
+  const postReq1 = takePending('POST', noteG9.id);
+  useStore.getState().updateNote(noteG9.id, { content: '<p>K3</p>' });
+  postReq1.resolve({ success: true, note: { ...serverNote(noteG9.id, K2_SERVER), content: '<p>K2</p>' } });
+  await sync1;
+  await flushMicrotasks();
+  assert.equal(useStore.getState().notes.find((n) => n.id === noteG9.id)?.content, '<p>K3</p>');
+
+  // Sync 2 — K3 is uploaded and its server clock adopted.
+  const sync2 = syncNotesForUser('userA', tokenFn);
+  await flushMicrotasks();
+  const getReq2 = takePending('GET', '');
+  getReq2.resolve({ success: true, notes: [{ ...serverNote(noteG9.id, K2_SERVER), content: '<p>K2</p>' }] });
+  await flushMicrotasks();
+  const postReq2 = takePending('POST', noteG9.id);
+  postReq2.resolve({ success: true, note: { ...serverNote(noteG9.id, K3_ADOPTED), content: '<p>K3</p>' } });
+  await sync2;
+  await flushMicrotasks();
+  assert.equal(useStore.getState().notes.find((n) => n.id === noteG9.id)?.updatedAt, K3_ADOPTED, 'K3 server clock adopted');
+
+  // Sync 3 — server and local are identical now: nothing may be re-uploaded.
+  const sync3 = syncNotesForUser('userA', tokenFn);
+  await flushMicrotasks();
+  const getReq3 = takePending('GET', '');
+  getReq3.resolve({ success: true, notes: [{ ...serverNote(noteG9.id, K3_ADOPTED), content: '<p>K3</p>' }] });
+  await sync3;
+  await flushMicrotasks();
+
+  const after = useStore.getState().notes.find((n) => n.id === noteG9.id);
+  assert.ok(after, 'note present after sync 3');
+  assert.equal(after.content, '<p>K3</p>');
+  assert.equal(after.updatedAt, K3_ADOPTED, 'adopted clock retained');
+  assert.equal(sentPosts(noteG9.id).length, 2, 'no unnecessary POST after K3 adoption');
+});
+
+test('G10 — delete vs reconnect push race: compensating DELETE wins, nothing resurrects', async () => {
+  g.window.localStorage.setItem('studysnap:notes-synced:userA', '1');
+  const SERVER_OLD = '2019-01-01T00:00:00.000Z';
+  const SNAPSHOT = '2020-01-01T00:00:00.000Z';
+  const noteG10 = {
+    ...makeNote('note-g10-race'),
+    content: '<p>K2</p>',
+    updatedAt: SNAPSHOT,
+    createdAt: SNAPSHOT,
+  };
+  useStore.setState({ notes: [noteG10] });
+
+  const sync = syncNotesForUser('userA', tokenFn);
+  await flushMicrotasks();
+  const getReq = takePending('GET', '');
+  getReq.resolve({ success: true, notes: [{ ...serverNote(noteG10.id, SERVER_OLD), content: '<p>Old server content</p>' }] });
+  await flushMicrotasks();
+  const postReq = takePending('POST', noteG10.id);
+
+  // Delete happens while the reconnect push POST is in flight.
+  useStore.getState().deleteNote(noteG10.id);
+  const del = deleteRemoteNote(noteG10.id, tokenFn);
+  await flushMicrotasks();
+  const delReq1 = takePending('DELETE', noteG10.id);
+
+  // The stale POST resolves FIRST; Task 2 must compensate with a DELETE queued
+  // behind the in-flight DELETE#1, and never let the note back into state.
+  postReq.resolve({ success: true, note: { ...serverNote(noteG10.id, '2099-01-01T00:00:00.000Z'), content: '<p>K2</p>' } });
+  await flushMicrotasks();
+
+  delReq1.resolve({ success: true });
+  await del;
+  await flushMicrotasks();
+  const compDelete = takePending('DELETE', noteG10.id);
+  compDelete.resolve({ success: true });
+
+  await sync;
+  await flushMicrotasks();
+
+  assert.equal(sentPosts(noteG10.id).length, 1, 'the reconnect push POST was sent once');
+  assert.equal(sentDeletes(noteG10.id).length, 2, 'original DELETE + compensating DELETE');
+  assert.equal(requestLog[requestLog.length - 1].method, 'DELETE', 'final network op must be a DELETE');
+  assert.ok(requestLog[requestLog.length - 1].url.includes(noteG10.id));
+  assert.ok(!readTombstones('userA').has(noteG10.id), 'tombstone cleared after the confirmed compensating DELETE');
+  assert.equal(useStore.getState().notes.some((n) => n.id === noteG10.id), false, 'no resurrection into the store');
+});
