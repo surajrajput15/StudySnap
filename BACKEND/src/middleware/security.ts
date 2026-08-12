@@ -94,6 +94,23 @@ const corsOrigins = [...new Set([...configuredOrigins, ...environmentOrigins])].
 
 console.log(`[cors] ${env.isProd() ? 'PRODUCTION' : 'DEV'} allowed origins:`, corsOrigins);
 
+// ─── Rate-limit response visibility (Day 8 Task 4 Phase B) ──────────────
+// express-rate-limit (v7) is configured with `standardHeaders: true` (draft-6)
+// and `legacyHeaders: false`, so every response carries `RateLimit-Policy` /
+// `RateLimit-Limit` / `RateLimit-Remaining` / `RateLimit-Reset` and every 429
+// carries `Retry-After`. `Retry-After` is NOT a CORS-safelisted response
+// header, so without explicit exposure a browser's fetch() can never read it
+// and the frontend sync engine silently falls back to its own backoff. Expose
+// exactly the headers the middleware actually emits so the
+// 429 → Retry-After → apiFetch → syncEngine chain works end-to-end.
+export const CORS_EXPOSED_HEADERS = [
+  'Retry-After',
+  'RateLimit-Policy',
+  'RateLimit-Limit',
+  'RateLimit-Remaining',
+  'RateLimit-Reset',
+] as const;
+
 export const corsMiddleware = cors({
   origin: (origin, callback) => {
     // Non-browser / server-to-server callers (Clerk webhooks, health checks,
@@ -109,5 +126,5 @@ export const corsMiddleware = cors({
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  exposedHeaders: ['X-RateLimit-Limit', 'X-RateLimit-Remaining'],
+  exposedHeaders: [...CORS_EXPOSED_HEADERS],
 });

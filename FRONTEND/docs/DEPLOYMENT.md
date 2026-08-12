@@ -20,12 +20,26 @@ Configure the following environment variables across Vercel and Render dashboard
 
 | Variable | Scope | Description |
 | --- | --- | --- |
-| `DATABASE_URL` | Server | Connection URI to Neon Serverless PostgreSQL instance. |
-| `GROQ_API_KEY` | Server | Groq API access token for Llama 3 summarizer and chatbots. |
-| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Client/Server | Clerk Identity authentication token. |
-| `CLERK_SECRET_KEY` | Server | Clerk private API credentials. |
-| `UPSTASH_REDIS_REST_URL` | Server | Upstash Redis connection endpoint. |
-| `UPSTASH_REDIS_REST_TOKEN` | Server | Upstash Redis authentication token. |
+| `DATABASE_URL` | Server | Connection URI to Neon Serverless PostgreSQL instance. **Required in production — the backend refuses to boot without it.** |
+| `CLERK_SECRET_KEY` | Server | Clerk private API credentials (must be a live `sk_live_` key). **Required in production — the backend refuses to boot without it.** |
+| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Client/Server | Clerk Identity authentication token (public `pk_live_` key). |
+| `NEXT_PUBLIC_BACKEND_URL` | Client | Your Render backend URL (e.g. `https://studysnap-api.onrender.com`). Required in production — the frontend calls this origin, and the production Content-Security-Policy `connect-src` allows only it. |
+| `FRONTEND_URL` | Server | Your Vercel frontend URL (e.g. `https://studysnap-sigma.vercel.app`). The list of browser origins CORS allows. |
+| `GROQ_API_KEY` | Server | Groq API access token for AI summarizer and chatbots. Non-blocking at boot: AI requests return `503` until it is set. |
+| `CLERK_WEBHOOK_SECRET` | Server | Svix signing secret from Clerk Dashboard → Webhooks → Endpoint. |
+| `CLOUDINARY_CLOUD_NAME` | Server | Cloudinary cloud name used to store voice-note audio. |
+| `CLOUDINARY_API_KEY` | Server | Cloudinary API key. |
+| `CLOUDINARY_API_SECRET` | Server | Cloudinary API secret. |
+| `UPSTASH_REDIS_URL` | Server | Upstash Redis connection endpoint (variable name as read by the backend). |
+| `UPSTASH_REDIS_TOKEN` | Server | Upstash Redis authentication token. |
+| `PORT` | Server | Backend port (default `4000`). |
+| `NODE_ENV` | Server | `production` on Render. |
+
+> **Production fail-fast:** in `NODE_ENV=production` the backend aborts startup when
+> `DATABASE_URL` or `CLERK_SECRET_KEY` is missing or blank — it never silently
+> degrades to mock/dev behavior. Missing `GROQ_API_KEY`, Cloudinary credentials,
+> `FRONTEND_URL`, or `CLERK_WEBHOOK_SECRET` do NOT block boot; AI calls respond
+> `503` and voice-note audio uploads respond `503` until they are configured.
 
 ---
 
