@@ -63,7 +63,7 @@ export async function summarizeNote(title: string, content: string) {
     return mockSummary(title);
   }
   try {
-    console.log('[ai] groq → summarizeNote', { title: title.substring(0, 40), contentLength: content.length });
+    console.log('[ai] groq → summarizeNote', { contentLength: content.length, titleLength: title.length });
     const response = await groq.chat.completions.create({
       model: AI_MODEL,
       messages: [
@@ -88,7 +88,7 @@ export async function generateMcqs(title: string, content: string): Promise<Mock
     return mockMcqs();
   }
   try {
-    console.log('[ai] groq → generateMcqs', { label: title, contentLength: content.length });
+    console.log('[ai] groq → generateMcqs', { contentLength: content.length, titleLength: title.length });
     const response = await groq.chat.completions.create({
       model: AI_MODEL,
       messages: [
@@ -113,7 +113,7 @@ export async function generateFlashcards(title: string, content: string): Promis
     return mockFlashcards();
   }
   try {
-    console.log('[ai] groq → generateFlashcards', { label: title, contentLength: content.length });
+    console.log('[ai] groq → generateFlashcards', { contentLength: content.length, titleLength: title.length });
     const response = await groq.chat.completions.create({
       model: AI_MODEL,
       messages: [

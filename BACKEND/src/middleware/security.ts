@@ -34,31 +34,75 @@ export const securityMiddleware = helmet({
   crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
 });
 
-const knownFrontendURLs = [
-  env.FRONTEND_URL,
-  'http://localhost:3000',
-  'http://localhost:5173',
-  'https://studysnap-sigma.vercel.app',
-  'https://studysnap.vercel.app',
-].filter(Boolean);
+// ─── CORS ──────────────────────────────────────────────────────────────
+// Day 8 Task 2 Phase 1 (B-3) — exact-origin validation.
+//
+// The previous matcher allowed any origin whose string merely CONTAINED
+// "localhost" (e.g. https://localhost.evil.com) via substring comparison.
+// Origins are now compared EXACTLY (scheme://host[:port]) after URL
+// normalization. No substring, prefix, suffix, or partial-domain matching
+// is performed anywhere.
 
-const corsOrigins = [...new Set(knownFrontendURLs)];
+const PRODUCTION_ORIGINS = ['https://studysnap-sigma.vercel.app'] as const;
+
+const DEVELOPMENT_ORIGINS = ['http://localhost:3000', 'http://127.0.0.1:3000'] as const;
+
+/**
+ * Exact hostname equality used ONLY to detect a local-development host in a
+ * configured value. This is a single hostname comparison — never substring /
+ * partial-host matching — so production can never honor a leftover
+ * FRONTEND_URL that still points at localhost.
+ */
+function isLocalDevelopmentOrigin(origin: string): boolean {
+  try {
+    const host = new URL(origin).hostname;
+    return host === 'localhost' || host === '127.0.0.1';
+  } catch {
+    return false;
+  }
+}
+
+/** Normalizes a browser `Origin` header value to its canonical form. Real
+ *  browsers only ever send scheme://host[:port]; crafted values that carry a
+ *  path, query string, or trailing slash are reduced so they still compare as
+ *  exact host-level identities. Invalid values are returned unchanged (and so
+ *  simply fail the allow-list). */
+export function normalizeOrigin(origin: string): string {
+  try {
+    return new URL(origin).origin;
+  } catch {
+    return origin;
+  }
+}
+
+/** Exact-origin allow-list check. Never matches on substrings/partial hosts. */
+export function isOriginAllowed(origin: string, allowedOrigins: readonly string[]): boolean {
+  const normalized = normalizeOrigin(origin);
+  return allowedOrigins.some((o) => normalizeOrigin(o) === normalized);
+}
+
+// env.FRONTEND_URL is the primary configured origin (honored in every mode),
+// but in production a value that still names a local-development host is
+// ignored: only explicitly trusted production origins may be allowed.
+const configuredOrigins =
+  env.FRONTEND_URL && (!env.isProd() || !isLocalDevelopmentOrigin(env.FRONTEND_URL))
+    ? [env.FRONTEND_URL]
+    : [];
+
+const environmentOrigins = env.isProd() ? PRODUCTION_ORIGINS : DEVELOPMENT_ORIGINS;
+const corsOrigins = [...new Set([...configuredOrigins, ...environmentOrigins])].filter(Boolean);
 
 console.log(`[cors] ${env.isProd() ? 'PRODUCTION' : 'DEV'} allowed origins:`, corsOrigins);
 
 export const corsMiddleware = cors({
   origin: (origin, callback) => {
+    // Non-browser / server-to-server callers (Clerk webhooks, health checks,
+    // cron jobs) send no Origin header and must keep working.
     if (!origin) return callback(null, true);
-    const allowed = corsOrigins.some((o) => {
-      if (!o) return false;
-      if (origin === o) return true;
-      if (o.includes('localhost') && origin.includes('localhost')) return true;
-      return false;
-    });
-    if (allowed || env.isDev()) {
+    if (isOriginAllowed(origin, corsOrigins)) {
       callback(null, true);
     } else {
-      console.warn(`[cors] Blocked origin: ${origin}. Allowed:`, corsOrigins);
+      console.warn(`[cors] Blocked origin: ${normalizeOrigin(origin)}. Allowed:`, corsOrigins);
       callback(null, false);
     }
   },

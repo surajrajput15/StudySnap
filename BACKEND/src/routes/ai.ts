@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { authMiddleware } from '../middleware/auth';
 import { aiLimiter } from '../middleware/rateLimiter';
 import { validate, aiChatSchema, aiContentSchema, translateSchema } from '../middleware/validate';
+import { aiRequestLogMeta } from '../utils/aiLogging';
 import {
   chatCompletion,
   summarizeNote,
@@ -16,14 +17,11 @@ const router = Router();
 router.use(authMiddleware);
 router.use(aiLimiter);
 
-function logAIRequest(endpoint: string, userId: string | undefined, body: Record<string, unknown>) {
-  const content = body.content;
-  const messages = body.messages;
-  console.log(`[ai] 🧠 /${endpoint} userId=${userId || 'anonymous'} body=`, {
-    ...body,
-    content: (typeof content === 'string' ? content.substring(0, 80) : undefined) + '...',
-    messages: Array.isArray(messages) ? messages.length : 0,
-  });
+// Day 8 Task 2 Phase 1 (B-7) — request/response logs carry operational
+// metadata ONLY. User content is never logged: no messages, no message.content,
+// no note content, no prompts, no titles, no conversation text.
+function logAIRequest(endpoint: string, userId: string | undefined, meta: Record<string, unknown>) {
+  console.log(`[ai] 🧠 /${endpoint} userId=${userId || 'anonymous'}`, meta);
 }
 
 function logAIError(endpoint: string, userId: string | undefined, error: unknown) {
@@ -39,10 +37,10 @@ router.post('/chat', validate(aiChatSchema), async (req, res) => {
   const start = Date.now();
   try {
     const { messages } = req.body as z.infer<typeof aiChatSchema>;
-    logAIRequest('chat', req.userId, req.body);
+    logAIRequest('chat', req.userId, aiRequestLogMeta(req.body));
     const reply = await chatCompletion(messages);
     const duration = Date.now() - start;
-    console.log(`[ai] ✓ /chat ${duration}ms — ${reply.substring(0, 60)}...`);
+    console.log(`[ai] ✓ /chat ${duration}ms — ${reply.length} chars`);
     res.json({ success: true, message: { role: 'assistant', content: reply }, _duration: duration });
   } catch (error) {
     logAIError('chat', req.userId, error);
@@ -57,7 +55,7 @@ router.post('/summarize', validate(aiContentSchema), async (req, res) => {
   const start = Date.now();
   try {
     const { title, content } = req.body as z.infer<typeof aiContentSchema>;
-    logAIRequest('summarize', req.userId, req.body);
+    logAIRequest('summarize', req.userId, aiRequestLogMeta(req.body));
     const summary = await summarizeNote(title || 'Untitled', content);
     const duration = Date.now() - start;
     console.log(`[ai] ✓ /summarize ${duration}ms`);
@@ -72,7 +70,7 @@ router.post('/mcqs', validate(aiContentSchema), async (req, res) => {
   const start = Date.now();
   try {
     const { title, content, type } = req.body as z.infer<typeof aiContentSchema> & { type?: string };
-    logAIRequest('mcqs', req.userId, req.body);
+    logAIRequest('mcqs', req.userId, aiRequestLogMeta(req.body));
     if (type === 'flashcard') {
       const flashcards = await generateFlashcards(title || 'Untitled', content);
       const duration = Date.now() - start;
@@ -94,7 +92,7 @@ router.post('/translate', validate(translateSchema), async (req, res) => {
   const start = Date.now();
   try {
     const { content, targetLanguage } = req.body as z.infer<typeof translateSchema>;
-    logAIRequest('translate', req.userId, req.body);
+    logAIRequest('translate', req.userId, aiRequestLogMeta(req.body));
     const lang = targetLanguage === 'hindi' ? 'hindi' : 'english';
     const translatedText = await translateText(content, lang);
     const duration = Date.now() - start;

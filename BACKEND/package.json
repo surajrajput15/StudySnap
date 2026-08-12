@@ -6,6 +6,7 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "lint": "eslint src/",
+    "test": "node --no-warnings --import tsx --test tests/corsSecurity.test.ts tests/aiLogging.test.ts",
     "start": "node dist/index.js",
     "db:push": "drizzle-kit push",
     "db:generate": "drizzle-kit generate",
