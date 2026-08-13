@@ -195,6 +195,11 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
   const notes = useStore((s) => s.notes);
   // Day 9 Task 15 — the header badge previously claimed "Online" unconditionally.
   const isOffline = useStore((s) => s.isOffline);
+  // Day 10 Task 1 — request-outcome signal for the badge: navigator.onLine can
+  // be true while the AI service is unreachable (no internet on Wi-Fi, backend
+  // down). Reset to false on a network-layer failure and back to true on the
+  // next successful response, so the badge never claims "Online" mid-outage.
+  const [tutorReachable, setTutorReachable] = useState(true);
   const [authTimedOut, setAuthTimedOut] = useState(false);
 
   useEffect(() => {
@@ -233,6 +238,18 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
   const noteContextRef = useRef<Note | null>(null);
   const attachedFileRef = useRef<{ name: string; content: string } | null>(null);
   const pendingToolRef = useRef<string | null>(null);
+  // Day 10 Task 1 — stream lifecycle guard. The character-reveal interval keeps
+  // ticking until it finishes, so it MUST be cancelled when the component
+  // unmounts (navigation) or when a new chat replaces the in-flight turn;
+  // otherwise chunks keep being appended to a dead/new conversation and the
+  // answer is lost. The error-bubble timeout is tracked for the same reason.
+  const streamCleanupRef = useRef<(() => void) | null>(null);
+  const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const messagesRef = useRef(messages);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   useEffect(() => {
     noteContextRef.current = noteContext;
@@ -269,6 +286,23 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
       messages.filter((m) => !m.isError).map(({ role, content }) => ({ role, content }))
     );
   }, [messages]);
+
+  // Day 10 Task 1 — on unmount (navigation / tab switch) cancel any in-flight
+  // character-reveal interval and pending error bubble, then persist whatever
+  // was settled so an unanswered turn is not silently lost on return.
+  useEffect(() => {
+    return () => {
+      streamCleanupRef.current?.();
+      streamCleanupRef.current = null;
+      if (errorTimerRef.current) {
+        clearTimeout(errorTimerRef.current);
+        errorTimerRef.current = null;
+      }
+      useStore.getState().setAiMessages(
+        messagesRef.current.map(({ role, content }) => ({ role, content }))
+      );
+    };
+  }, []);
 
   useEffect(() => {
     const vv = window.visualViewport;
@@ -368,7 +402,9 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
 
   const renderErrorBubble = useCallback((content: string) => {
     addStreamingMessage('');
-    setTimeout(() => {
+    if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+    errorTimerRef.current = setTimeout(() => {
+      errorTimerRef.current = null;
       setMessages(prev => {
         const last = prev[prev.length - 1];
         if (last?.isStreaming) {
@@ -391,12 +427,17 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
       });
 
       if (data.success) {
+        setTutorReachable(true);
         const fullResponse = data.message?.content || data.response || data.text || JSON.stringify(data);
-        streamText(
+        // Cancel any prior stream before starting a new one so a stale interval
+        // can never write into a conversation it no longer belongs to.
+        streamCleanupRef.current?.();
+        streamCleanupRef.current = streamText(
           fullResponse,
           (chunk) => addStreamingMessage(chunk),
           () => {
             finalizeStreaming();
+            streamCleanupRef.current = null;
             isSendingRef.current = false;
             setIsLoading(false);
           }
@@ -427,6 +468,9 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
           message: data.error ?? null,
           timedOut: data._timedOut,
         });
+        if (kind === 'network' || kind === 'timeout' || kind === 'invalidResponse') {
+          setTutorReachable(false);
+        }
         renderErrorBubble(
           kind === 'badRequest' && cleanError ? cleanError : aiErrorMessage(kind, data.retryAfterMs ?? null)
         );
@@ -448,6 +492,9 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
       // response path, so CORS, timeouts and plain network drops each get a
       // distinct, honest message.
       const kind = classifyAiError({ isOffline, status: null, retryAfterMs: null, message: rawMessage });
+      if (kind === 'network' || kind === 'timeout' || kind === 'invalidResponse') {
+        setTutorReachable(false);
+      }
       renderErrorBubble(aiErrorMessage(kind));
     }
   }, [addStreamingMessage, finalizeStreaming, getToken, isOffline, renderErrorBubble]);
@@ -603,7 +650,18 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
   // Day 9 Task 7 — start a fresh conversation: clear the persisted history and
   // reset the in-memory chat to the greeting. Attached note/file context is
   // also dropped so the new chat does not silently operate on old material.
+  // Day 10 Task 1 — a running stream (or a pending error bubble) is cancelled
+  // first so the old turn can never leak into the new conversation, and the
+  // sending latch is reset so the input is immediately usable again.
   const handleNewChat = () => {
+    streamCleanupRef.current?.();
+    streamCleanupRef.current = null;
+    if (errorTimerRef.current) {
+      clearTimeout(errorTimerRef.current);
+      errorTimerRef.current = null;
+    }
+    isSendingRef.current = false;
+    setIsLoading(false);
     useStore.getState().clearAiMessages();
     setMessages([{ role: 'assistant', content: GREETING_MESSAGE }]);
     noteContextRef.current = null;
@@ -652,9 +710,9 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
           <button className="tutor-new-chat-btn" onClick={handleNewChat} title="Start a new chat" aria-label="Start a new chat">
             <MessageSquarePlus size={16} />
           </button>
-          <div className={`tutor-status${tutorConnectionClass(isOffline)}`} title={isOffline ? 'You are offline — answers may be limited' : undefined}>
+          <div className={`tutor-status${tutorConnectionClass(isOffline, tutorReachable)}`} title={isOffline ? 'You are offline — answers may be limited' : !tutorReachable ? 'SnapAI is unreachable right now — check your internet connection' : undefined}>
             <span className="tutor-status-dot" />
-            {tutorConnectionLabel(isOffline)}
+            {tutorConnectionLabel(isOffline, tutorReachable)}
           </div>
         </div>
       </div>

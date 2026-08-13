@@ -93,16 +93,20 @@ export async function apiFetch<T = ApiResponse>(
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
     const res = await fetch(url, {
-      headers: { ...headers, ...(fetchOptions.headers as Record<string, string> || {}) },
       ...fetchOptions,
+      // Auth/JSON headers are merged BELOW the caller's headers so an options
+      // object can never silently drop the Authorization or Content-Type.
+      headers: { ...headers, ...(fetchOptions.headers as Record<string, string> || {}) },
       signal: controller.signal,
     });
 
     clearTimeout(timer);
 
     if (res.status === 401) {
-      const event = new CustomEvent('studysnap:session-expired', { detail: { returnTo } });
-      window.dispatchEvent(event);
+      if (typeof window !== 'undefined') {
+        const event = new CustomEvent('studysnap:session-expired', { detail: { returnTo } });
+        window.dispatchEvent(event);
+      }
       return {
         success: false,
         error: 'Your session has expired. Please sign in again.',
@@ -112,7 +116,10 @@ export async function apiFetch<T = ApiResponse>(
     }
 
     const retryAfterMs = parseRetryAfterMs(res.headers?.get?.('retry-after') ?? null);
-    const json = await res.json();
+    // A gateway/CDN error page or an empty body is NOT JSON; falling back to {}
+    // keeps `status` / `retryAfterMs` attached so sync layers still react to a
+    // 429 and the error message stays useful.
+    const json = await res.json().catch(() => ({}));
 
     // Preserve the exact JSON body contract while ADDITIVELY exposing the HTTP
     // status and any Retry-After hint, so sync layers can detect 429 throttling.
@@ -165,8 +172,10 @@ export async function apiFetchMultipart<T = ApiResponse>(
     clearTimeout(timer);
 
     if (res.status === 401) {
-      const event = new CustomEvent('studysnap:session-expired', { detail: { returnTo } });
-      window.dispatchEvent(event);
+      if (typeof window !== 'undefined') {
+        const event = new CustomEvent('studysnap:session-expired', { detail: { returnTo } });
+        window.dispatchEvent(event);
+      }
       return {
         success: false,
         error: 'Your session has expired. Please sign in again.',
@@ -176,7 +185,7 @@ export async function apiFetchMultipart<T = ApiResponse>(
     }
 
     const retryAfterMs = parseRetryAfterMs(res.headers?.get?.('retry-after') ?? null);
-    const json = await res.json();
+    const json = await res.json().catch(() => ({}));
 
     return retryAfterMs !== null
       ? { ...json, status: res.status, retryAfterMs }

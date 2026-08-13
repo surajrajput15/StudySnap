@@ -43,9 +43,32 @@ export const securityMiddleware = helmet({
 // normalization. No substring, prefix, suffix, or partial-domain matching
 // is performed anywhere.
 
-const PRODUCTION_ORIGINS = ['https://studysnap-sigma.vercel.app'] as const;
+const PRODUCTION_ORIGINS = [
+  'https://studysnap-sigma.vercel.app',
+  'https://studysnap.vercel.app',
+] as const;
 
 const DEVELOPMENT_ORIGINS = ['http://localhost:3000', 'http://127.0.0.1:3000'] as const;
+
+/**
+ * True when the origin hostname ends in `.vercel.app` (exact hostname suffix
+ * match — never a substring/prefix match on the full origin). `vercel.app` is a
+ * public suffix controlled by Vercel, so arbitrary sites cannot register a
+ * subdomain of it; this safely admits Vercel PR/preview deploys
+ * (`<project>-git-<branch>-<owner>.vercel.app`) and the canonical Vercel domain
+ * without reopening the old `localhost.evil.com`-style spoof.
+ */
+function isVercelPreviewOrigin(origin: string): boolean {
+  try {
+    const host = new URL(origin).hostname;
+    return host === 'vercel.app' || host.endsWith('.vercel.app');
+  } catch {
+    return false;
+  }
+}
+
+/** Exported for the CORS unit tests. */
+export { isVercelPreviewOrigin };
 
 /**
  * Exact hostname equality used ONLY to detect a local-development host in a
@@ -116,6 +139,12 @@ export const corsMiddleware = cors({
     // Non-browser / server-to-server callers (Clerk webhooks, health checks,
     // cron jobs) send no Origin header and must keep working.
     if (!origin) return callback(null, true);
+    // Vercel PR/preview deployments share the production backend; their
+    // generated `<project>-git-<branch>-<owner>.vercel.app` hosts can never be
+    // listed up front, so the safe `.vercel.app` suffix is honored here.
+    if (env.isProd() && isVercelPreviewOrigin(origin)) {
+      return callback(null, true);
+    }
     if (isOriginAllowed(origin, corsOrigins)) {
       callback(null, true);
     } else {

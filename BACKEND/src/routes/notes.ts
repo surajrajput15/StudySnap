@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { eq, and, desc } from 'drizzle-orm';
-import { getDb, notes, categories } from '../db';
+import { getDb, notes, categories, voiceNotes } from '../db';
 import { authMiddleware } from '../middleware/auth';
 import { pinLimiter } from '../middleware/rateLimiter';
 import { generateId } from '../utils/helpers';
@@ -8,6 +8,7 @@ import { hashPin, verifyPin } from '../utils/pin';
 import { validate, noteSchema, verifyPinSchema } from '../middleware/validate';
 import { cacheGet, cacheSet, invalidateUserCache } from '../services/cache';
 import { CACHE_TTL_NOTES_SECONDS, DEFAULT_CATEGORIES } from '../config/constants';
+import { destroyVoiceAudio, isStorageConfigured, buildVoiceAudioPublicId } from '../services/storage';
 
 const router = Router();
 
@@ -229,6 +230,26 @@ router.delete('/', async (req: Request, res: Response) => {
       return;
     }
 
+    // Day 10 Task 1 — deleting a note cascade-deletes its voice_notes rows, but
+    // the CLOUDINARY AUDIO survives unless destroyed explicitly. Purge the linked
+    // assets first (best-effort: a storage failure must never block the note
+    // delete). The public ID is deterministic: voice/<userId>/<voiceNoteId>.
+    const cleanupAudio = async (): Promise<void> => {
+      if (!isStorageConfigured()) return;
+      try {
+        const linked = await db
+          .select({ id: voiceNotes.id })
+          .from(voiceNotes)
+          .where(and(eq(voiceNotes.noteId, id), eq(voiceNotes.userId, userId)));
+        await Promise.allSettled(
+          linked.map((vn) => destroyVoiceAudio(buildVoiceAudioPublicId(userId, vn.id)))
+        );
+      } catch (e) {
+        console.warn(`[notes] Audio cleanup for deleted note ${id} failed:`, e);
+      }
+    };
+
+    await cleanupAudio();
     await db.delete(notes).where(and(eq(notes.id, id), eq(notes.userId, userId)));
     await invalidateUserCache(userId);
     res.json({ success: true });

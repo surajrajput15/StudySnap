@@ -2,7 +2,11 @@ import 'dotenv/config';
 
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const isDev = NODE_ENV === 'development';
-const isProd = NODE_ENV === 'production';
+// Any environment that is NOT explicitly "development" is treated as production:
+// it must never serve mock content, use permissive CORS, or skip fail-fast env
+// validation. A deploy that sets NODE_ENV=staging or =test now behaves safely
+// instead of silently degrading to mock/dev behavior.
+const isProd = NODE_ENV !== 'development';
 
 if (!process.env.FRONTEND_URL && isProd) {
   console.warn('[env] ⚠️ FRONTEND_URL not set in production. Set it to your Vercel frontend URL.');
@@ -34,7 +38,10 @@ const PRODUCTION_REQUIRED_ENV: ReadonlyArray<readonly [name: string, value: () =
 ];
 
 export function validateProductionEnv(): string[] {
-  if ((process.env.NODE_ENV || 'development') !== 'production') return [];
+  // Read at CALL time: every non-"development" NODE_ENV is treated as
+  // production-safe, so staging/test deployments fail fast too. Only an
+  // explicitly development environment may boot without the required vars.
+  if ((process.env.NODE_ENV || 'development') === 'development') return [];
   const missing = PRODUCTION_REQUIRED_ENV.filter(([, value]) => {
     const v = value();
     return !v || v.trim() === '';

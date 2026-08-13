@@ -8,10 +8,32 @@ import { buildProductionCspHeader, originOf } from "./lib/security/csp";
 // statically verified by tests, and it allows exactly the required resources:
 // the frontend origin ('self'), the configured backend API origin, Clerk, and
 // Cloudinary audio.
+// Day 10 Task 1 — production fail-fast for the one env the CSP depends on.
+// Without NEXT_PUBLIC_BACKEND_URL the emitted connect-src omits the API origin
+// while lib/config.ts keeps calling http://localhost:4000, so every request is
+// silently blocked by the browser with only a console warning — the app looks
+// fine but never syncs. Mirroring the backend's fail-fast rule (see
+// BACKEND/src/config/env.ts), a production build ABORTS instead of shipping a
+// build whose API calls are guaranteed to be CSP-blocked.
+function resolveProductionCspHeader(): string {
+  if (!process.env.NEXT_PUBLIC_BACKEND_URL) {
+    throw new Error(
+      "[StudySnap] ❌ Production build aborted — NEXT_PUBLIC_BACKEND_URL is not set. " +
+        "Without it the Content-Security-Policy cannot allow the API origin and every " +
+        "request would be blocked. Set it to your backend URL (e.g. https://<backend>.railway.app)."
+    );
+  }
+  const backendOrigin = originOf(process.env.NEXT_PUBLIC_BACKEND_URL);
+  if (!backendOrigin) {
+    throw new Error(
+      `[StudySnap] ❌ Production build aborted — NEXT_PUBLIC_BACKEND_URL ("${process.env.NEXT_PUBLIC_BACKEND_URL}") is not a valid URL.`
+    );
+  }
+  return buildProductionCspHeader({ backendOrigin });
+}
+
 const productionCspHeader =
-  process.env.NODE_ENV === "production"
-    ? buildProductionCspHeader({ backendOrigin: originOf(process.env.NEXT_PUBLIC_BACKEND_URL) })
-    : null;
+  process.env.NODE_ENV === "production" ? resolveProductionCspHeader() : null;
 
 const nextConfig: NextConfig = {
   turbopack: { root: process.cwd() },

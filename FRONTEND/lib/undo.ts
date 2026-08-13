@@ -29,10 +29,16 @@ function clearPendingTimer(): void {
   }
 }
 
-/** Schedules `perform` to run after `windowMs` unless undone first. Replaces any
- *  earlier pending deletion (its undo window closes). */
+/** Schedules `perform` to run after `windowMs` unless undone first. A previous
+ *  pending deletion that is superseded is STILL honored: its `perform` runs
+ *  immediately instead of being silently dropped, so an item the user already
+ *  saw a "deleted" toast for can never stay on-screen AND on the server. */
 export function deferDelete(label: string, perform: () => void, windowMs: number = DELETE_UNDO_WINDOW_MS): void {
-  clearPendingTimer();
+  if (pendingDelete) {
+    clearTimeout(pendingDelete.timer);
+    pendingDelete.perform();
+    pendingDelete = null;
+  }
   const timer = setTimeout(() => {
     perform();
     pendingDelete = null;

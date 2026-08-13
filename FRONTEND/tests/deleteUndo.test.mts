@@ -41,14 +41,14 @@ test('undo cancels the deletion without performing it', async () => {
   assert.equal(getPendingDelete(), null);
 });
 
-test('deferring a new delete closes the previous undo window', async () => {
+test('deferring a new delete performs the superseded one immediately', async () => {
   undoDelete();
   let ranA = 0;
   let ranB = 0;
   deferDelete('Note "A" deleted', () => { ranA += 1; }, 20);
   deferDelete('Note "B" deleted', () => { ranB += 1; }, 20);
+  assert.equal(ranA, 1, 'superseded pending deletion must still perform');
   await wait(60);
-  assert.equal(ranA, 0, 'first pending deletion must be cancelled');
   assert.equal(ranB, 1, 'second pending deletion must perform');
   assert.equal(getPendingDelete(), null);
 });

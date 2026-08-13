@@ -237,11 +237,25 @@ async function performVoiceUpload(
 
   const server = res.voiceNote;
   useStore.setState((s) => ({
-    voiceNotes: s.voiceNotes.map((vn) =>
-      vn.id === voiceNote.id
-        ? { ...vn, synced: true, audioUrl: server.audioUrl, updatedAt: server.updatedAt }
-        : vn
-    ),
+    voiceNotes: s.voiceNotes.map((vn) => {
+      if (vn.id !== voiceNote.id) return vn;
+      // Day 10 Task 1 — if the LIVE row changed since the upload snapshot
+      // (e.g. the user renamed the transcript while the multipart upload was in
+      // flight), the server clock belongs to STALE content. Adopting it would
+      // let the next merge treat the old server row as newer and silently roll
+      // the rename back. Keep the local clock instead, so the next sync sees
+      // local as newer and re-uploads the updated row.
+      const liveDiverged =
+        vn.transcript !== voiceNote.transcript ||
+        vn.noteId !== voiceNote.noteId ||
+        vn.duration !== voiceNote.duration;
+      return {
+        ...vn,
+        synced: true,
+        audioUrl: server.audioUrl,
+        ...(liveDiverged ? {} : { updatedAt: server.updatedAt }),
+      };
+    }),
   }));
 }
 
@@ -493,10 +507,12 @@ export async function syncVoiceNotesForUser(
     if (!res || res.success !== true || !Array.isArray(res.voiceNotes)) {
       if (res && res.status === 429) {
         onStatus?.({ type: 'rateLimited', status: 429, retryAfterMs: res.retryAfterMs ?? 0 });
-      } else {
-        onStatus?.({ type: 'error', message: res?.error ?? 'Voice-note sync failed' });
+        return;
       }
-      return;
+      // Day 10 Task 1 — same fix as notesSync: a failed fetch is thrown so the
+      // sync engine's backoff/retry actually runs instead of being recorded as
+      // a successful (but empty) run.
+      throw new Error(res?.error ?? 'Voice-note sync failed: server did not return voice notes');
     }
     if (!isVoiceScopeActive(syncUserId)) return;
 
@@ -509,9 +525,12 @@ export async function syncVoiceNotesForUser(
       });
     }
     onStatus?.({ type: 'synced' });
-  } catch {
+  } catch (err) {
     // Non-destructive: never clear/overwrite local voice notes on failure.
-    onStatus?.({ type: 'error', message: 'Voice-note sync failed' });
+    // Re-thrown so the engine backoff/retry machinery engages.
+    const message = err instanceof Error ? err.message : 'Voice-note sync failed';
+    onStatus?.({ type: 'error', message });
+    throw err;
   } finally {
     voiceSyncInFlight.delete(clerkUserId);
   }

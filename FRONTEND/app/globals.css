@@ -2983,6 +2983,12 @@ textarea:focus-visible,
 .tutor-status-offline {
   color: #F59E0B;
 }
+.tutor-status-unreachable .tutor-status-dot {
+  background: #EF4444;
+}
+.tutor-status-unreachable {
+  color: #EF4444;
+}
 
 .tutor-header-actions {
   display: flex;

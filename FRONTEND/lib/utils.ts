@@ -60,12 +60,19 @@ export function isValidAppTab(id: string): id is AppTabId {
 }
 
 // Day 9 Task 15 — the AI tutor header badge must reflect real connectivity.
-export function tutorConnectionLabel(isOffline: boolean): string {
-  return isOffline ? 'Offline' : 'Online';
+// Day 10 Task 1 — `reachable` is the request-outcome signal: navigator.onLine
+// only reports that ANY network interface is up, so a Wi-Fi-without-internet
+// (or backend-down) state previously showed "Online" right as requests failed.
+// The badge now degrades to "Unreachable" when a request fails at the network
+// layer, and returns to "Online" only after the next successful response.
+export function tutorConnectionLabel(isOffline: boolean, reachable = true): string {
+  if (isOffline) return 'Offline';
+  return reachable ? 'Online' : 'Unreachable';
 }
 
-export function tutorConnectionClass(isOffline: boolean): string {
-  return isOffline ? ' tutor-status-offline' : '';
+export function tutorConnectionClass(isOffline: boolean, reachable = true): string {
+  if (isOffline) return ' tutor-status-offline';
+  return reachable ? '' : ' tutor-status-unreachable';
 }
 
 // True when the browser's local/session storage is usable

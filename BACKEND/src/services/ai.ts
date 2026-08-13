@@ -47,7 +47,9 @@ export class AIUnavailableError extends Error {
 }
 
 function ensureAIAllowed(): void {
-  if (!groq && process.env.NODE_ENV === 'production') {
+  // Every non-"development" environment (production, staging, test) must fail
+  // fast instead of serving mock study content to real users.
+  if (!groq && process.env.NODE_ENV !== 'development') {
     throw new AIUnavailableError();
   }
 }

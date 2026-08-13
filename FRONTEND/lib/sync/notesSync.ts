@@ -669,10 +669,13 @@ export async function syncNotesForUser(
     if (!res || res.success !== true || !Array.isArray(res.notes)) {
       if (res && res.status === 429) {
         onStatus?.({ type: 'rateLimited', status: 429, retryAfterMs: res.retryAfterMs ?? 0 });
-      } else {
-        onStatus?.({ type: 'error', message: res?.error ?? 'Notes sync failed' });
+        return;
       }
-      return;
+      // Day 10 Task 1 — a failed fetch (network drop, timeout, 5xx) is THROWN so
+      // the sync engine's exponential backoff actually engages. Previously the
+      // failure was swallowed here and the run was recorded as a success, so
+      // notes stayed unsynced until a manual reload/retry.
+      throw new Error(res?.error ?? 'Notes sync failed: server did not return notes');
     }
     if (!isUserScopeActive(syncUserId)) return;
 
@@ -696,9 +699,12 @@ export async function syncNotesForUser(
 
     await mergeServerNotes(localNotes, serverNotes, syncUserId, token);
     onStatus?.({ type: 'synced' });
-  } catch {
-    // Non-destructive: never clear/overwrite local notes on failure.
-    onStatus?.({ type: 'error', message: 'Notes sync failed' });
+  } catch (err) {
+    // Non-destructive: never clear/overwrite local notes on failure. Re-thrown
+    // so the engine backoff/retry machinery engages (see the GET failure above).
+    const message = err instanceof Error ? err.message : 'Notes sync failed';
+    onStatus?.({ type: 'error', message });
+    throw err;
   } finally {
     inFlight.delete(clerkUserId);
   }

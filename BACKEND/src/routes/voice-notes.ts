@@ -36,27 +36,42 @@ const upload = multer({
 
 // MIME types produced by the frontend MediaRecorder (audio/webm on Chromium,
 // audio/mp4 on Safari) plus safe common containers. The client filename and
-// extension are never trusted — only this allowlist is checked.
+// extension are never trusted — only this allowlist is checked. Real-world
+// browsers occasionally label mp4 audio as `audio/x-m4a` or `audio/aac`, so
+// those aliases are normalized into the canonical container before checking.
 const ALLOWED_AUDIO_MIME_TYPES = new Set([
   'audio/webm',
   'audio/mp4',
   'audio/ogg',
   'audio/mpeg',
+  'audio/wav',
 ]);
+
+function normalizeAudioMimeType(mime: string): string {
+  const base = mime.split(';')[0].trim().toLowerCase();
+  if (base === 'audio/x-m4a' || base === 'audio/x-mp4' || base === 'audio/aac') return 'audio/mp4';
+  if (base === 'audio/x-wav') return 'audio/wav';
+  return base;
+}
 
 // Multipart fields arrive as strings, so the shared JSON `validate` middleware
 // cannot be used here; this route-local schema coerces/validates in place.
+// `noteId` is preprocessed BEFORE the UUID check: standalone memos are sent
+// with an empty string for the linked-note id, which must map to null instead
+// of failing validation (the old `.transform` ran after `.uuid()` and was dead
+// code, rejecting every standalone recording with a 400).
 const voiceNoteUploadSchema = z.object({
   id: z.string().uuid('Voice note id must be a UUID'),
-  noteId: z
-    .string()
-    .uuid('Linked note id must be a UUID')
-    .nullable()
-    .optional()
-    .transform(v => (v === '' ? null : v)),
+  noteId: z.preprocess(
+    (v) => (v === '' || v === null || v === undefined ? null : v),
+    z.string().uuid('Linked note id must be a UUID').nullable()
+  ),
   duration: z.coerce.number().int('duration must be an integer').min(0).max(86400).optional(),
   transcript: z.string().max(50000, 'transcript must be at most 50,000 characters').optional(),
 });
+
+/** Exported for unit tests (standalone-memo validation, MIME normalization). */
+export { voiceNoteUploadSchema, normalizeAudioMimeType };
 
 router.use(authMiddleware);
 
@@ -112,7 +127,8 @@ async function handleVoiceNoteUpload(req: Request, res: Response): Promise<void>
       res.status(400).json({ success: false, error: 'Audio file is required (field: file)' });
       return;
     }
-    if (!ALLOWED_AUDIO_MIME_TYPES.has(file.mimetype)) {
+    const normalizedMime = normalizeAudioMimeType(file.mimetype);
+    if (!ALLOWED_AUDIO_MIME_TYPES.has(normalizedMime)) {
       res.status(415).json({ success: false, error: `Unsupported audio type: ${file.mimetype}` });
       return;
     }
