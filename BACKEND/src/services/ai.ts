@@ -29,6 +29,28 @@ function getErrorMessage(error: unknown, fallback: string): string {
 }
 
 /**
+ * Day 10 Task 3 — re-throw a Groq failure carrying its REAL upstream status so
+ * the route layer (`aiErrorBody`) can report a Groq rate-limit (429) or a Groq
+ * outage (5xx) truthfully instead of collapsing everything into a generic 500.
+ * The client's classifier then shows "SnapAI is busy" / "temporary error"
+ * instead of misreading the failure as a bad-request or unknown.
+ */
+function wrapAIError(error: unknown, fallback: string): Error {
+  const message = getErrorMessage(error, fallback);
+  const upstreamStatus = (error as { status?: unknown })?.status;
+  const status =
+    typeof upstreamStatus === 'number' &&
+    Number.isInteger(upstreamStatus) &&
+    upstreamStatus >= 400 &&
+    upstreamStatus < 600
+      ? upstreamStatus
+      : undefined;
+  const wrapped = new Error(message, { cause: error });
+  if (status !== undefined) (wrapped as { status?: number }).status = status;
+  return wrapped;
+}
+
+/**
  * Day 8 Task 3 (Phase C) — production AI fail-fast.
  *
  * Thrown (status 503) when an AI call is made in PRODUCTION without a Groq key.
@@ -80,7 +102,7 @@ export async function chatCompletion(messages: ChatCompletionMessageParam[]) {
     return content;
   } catch (error) {
     console.error('[ai] groq → chatCompletion ❌', getErrorMessage(error, 'Groq request failed'));
-    throw new Error(getErrorMessage(error, 'Groq AI request failed'), { cause: error });
+    throw wrapAIError(error, 'Groq AI request failed');
   }
 }
 
@@ -106,7 +128,7 @@ export async function summarizeNote(title: string, content: string) {
     return response.choices[0]?.message?.content || 'Could not generate summary.';
   } catch (error) {
     console.error('[ai] groq → summarizeNote ❌', getErrorMessage(error, 'Summary generation failed'));
-    throw new Error(getErrorMessage(error, 'Summary generation failed'), { cause: error });
+    throw wrapAIError(error, 'Summary generation failed');
   }
 }
 
@@ -132,7 +154,7 @@ export async function generateMcqs(title: string, content: string): Promise<Mock
     return parseJsonArray<MockMcq>(response.choices[0]?.message?.content);
   } catch (error) {
     console.error('[ai] groq → generateMcqs ❌', getErrorMessage(error, 'MCQ generation failed'));
-    throw new Error(getErrorMessage(error, 'MCQ generation failed'), { cause: error });
+    throw wrapAIError(error, 'MCQ generation failed');
   }
 }
 
@@ -158,7 +180,7 @@ export async function generateFlashcards(title: string, content: string): Promis
     return parseJsonArray<MockFlashcard>(response.choices[0]?.message?.content);
   } catch (error) {
     console.error('[ai] groq → generateFlashcards ❌', getErrorMessage(error, 'Flashcard generation failed'));
-    throw new Error(getErrorMessage(error, 'Flashcard generation failed'), { cause: error });
+    throw wrapAIError(error, 'Flashcard generation failed');
   }
 }
 
@@ -185,7 +207,7 @@ export async function translateText(content: string, lang: 'hindi' | 'english') 
     return response.choices[0]?.message?.content || 'Translation failed.';
   } catch (error) {
     console.error('[ai] groq → translateText ❌', getErrorMessage(error, 'Translation failed'));
-    throw new Error(getErrorMessage(error, 'Translation failed'), { cause: error });
+    throw wrapAIError(error, 'Translation failed');
   }
 }
 

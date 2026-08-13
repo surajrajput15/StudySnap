@@ -57,8 +57,25 @@ app.use((_req, res) => {
 });
 
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error('Unhandled error:', err?.message || err);
-  res.status(500).json({ success: false, error: 'Internal server error' });
+  // Day 10 Task 3 — respect body-parser / framework error statuses so a
+  // malformed JSON body (400 SyntaxError) or an oversized payload (413
+  // PayloadTooLargeError) is reported with the CORRECT status instead of being
+  // collapsed into a misleading 500 that the frontend classifies as a server
+  // outage. Anything without a meaningful status stays a 500.
+  const status = (err as { status?: number; statusCode?: number }).status
+    ?? (err as { statusCode?: number }).statusCode
+    ?? 500;
+  const clientStatus = Number.isInteger(status) && status >= 400 && status < 600 ? status : 500;
+  if (clientStatus >= 500) {
+    console.error('Unhandled error:', err?.message || err);
+  }
+  const message =
+    clientStatus === 400
+      ? 'Malformed request body'
+      : clientStatus === 413
+        ? 'Request body too large'
+        : 'Internal server error';
+  res.status(clientStatus).json({ success: false, error: message });
 });
 
 app.listen(env.PORT, () => {

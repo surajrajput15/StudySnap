@@ -36,10 +36,16 @@ function logAIError(endpoint: string, userId: string | undefined, error: unknown
 // Day 8 Task 3 (Phase C) — an unanswered production AI call surfaces as an
 // explicit 503 ("not configured") instead of a generic 500, so the client and
 // operators can tell "misconfigured" apart from "upstream failed".
-function aiErrorBody(error: unknown, fallback: string): { status: number; body: { success: boolean; error: string } } {
+// Day 10 Task 3 — an upstream Groq 429 (carried through by services/ai.ts)
+// is ALSO surfaced as a real 429 with Retry-After absent, so the client's
+// classifier shows a rate-limit message instead of a server-error one.
+export function aiErrorBody(error: unknown, fallback: string): { status: number; body: { success: boolean; error: string } } {
   const err = error as { status?: number };
   if (err.status === 503) {
     return { status: 503, body: { success: false, error: 'AI is not configured in this environment.' } };
+  }
+  if (err.status === 429) {
+    return { status: 429, body: { success: false, error: 'The AI service is busy. Please wait a moment and try again.' } };
   }
   return { status: 500, body: { success: false, error: fallback } };
 }

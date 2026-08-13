@@ -45,14 +45,6 @@ export const translateSchema = z.object({
   targetLanguage: z.enum(['hindi', 'english']).optional(),
 });
 
-export const voiceNoteSchema = z.object({
-  id: z.string().max(100).optional(),
-  noteId: z.string().max(200).optional(),
-  audioUrl: z.string().min(1).max(2048),
-  duration: z.number().int().min(0).max(86400).optional(),
-  transcript: z.string().max(50000).optional(),
-});
-
 export const revisionSchema = z.object({
   noteId: z.string().uuid('Invalid note ID'),
   rating: z.enum(['easy', 'medium', 'hard']),
