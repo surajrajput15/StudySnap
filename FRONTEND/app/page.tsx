@@ -15,6 +15,7 @@ import HomeScreen from '@/components/HomeScreen';
 import MobileDrawer from '@/components/MobileDrawer';
 import OfflineBanner from '@/components/OfflineBanner';
 import SyncStatusIndicator from '@/components/SyncStatusIndicator';
+import DeleteUndoToast from '@/components/DeleteUndoToast';
 import { RECORDING_NAV_CONFIRM_MESSAGE, shouldConfirmRecordingNav } from '@/lib/utils';
 
 const NoteEditor = dynamic(() => import('@/components/NoteEditor'), { ssr: false });
@@ -174,6 +175,7 @@ export default function Page() {
   return (
     <div className="app-root">
       <OfflineBanner />
+      <DeleteUndoToast />
 
       {/* ─── Mobile Drawer ─── */}
       <MobileDrawer

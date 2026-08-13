@@ -16,6 +16,7 @@ import { WEEKDAYS, DAILY_GOAL, AI_TOOLS } from '@/lib/constants';
 import { formatShortDate, stripHtml, hasActiveSearch, noteMatchesSearch, SEARCH_EMPTY_MESSAGE, SEARCH_EMPTY_TIP } from '@/lib/utils';
 import { pinMatchesStored } from '@/lib/pin';
 import { deleteRemoteNote, deleteFolderWithNotes } from '@/lib/sync/notesSync';
+import { deferDelete } from '@/lib/undo';
 import { useAuth } from '@clerk/nextjs';
 
 interface HomeScreenProps {
@@ -145,11 +146,16 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
     confetti({ particleCount: 120, spread: 80, origin: { y: 0.5 } });
   };
 
-  // Day 5 — delete locally immediately, then fire-and-forget the remote
-  // DELETE. A network failure must never restore the deleted local note.
+  // Day 9 Task 9 — a single-click note delete is deferred so a mistaken tap can
+  // be undone. The real deletion (local removal + tombstone + remote DELETE)
+  // runs only after the undo window expires.
   const handleDeleteNote = (noteId: string) => {
-    deleteNote(noteId);
-    void deleteRemoteNote(noteId, () => getToken());
+    const target = notes.find(n => n.id === noteId);
+    const label = `Note "${target?.title?.trim() || 'Untitled'}" deleted`;
+    deferDelete(label, () => {
+      deleteNote(noteId);
+      void deleteRemoteNote(noteId, () => getToken());
+    });
   };
 
   // Day 9 Task 3 — open the confirmation dialog. Nothing is deleted here.

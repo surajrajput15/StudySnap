@@ -10,6 +10,7 @@ import {
   finalizeVoiceNoteTranscript,
 } from '@/lib/storage/voiceNotes';
 import { uploadVoiceNote, deleteRemoteVoiceNote } from '@/lib/sync/voiceNotesSync';
+import { deferDelete } from '@/lib/undo';
 import { useAuth } from '@clerk/nextjs';
 import {
   Mic, Square, Play, Pause, Trash2, FileText, Volume2,
@@ -652,16 +653,21 @@ export default function VoiceNotes({ onBack, onLinkToNote, onRecordingChange }: 
       setPlayingId(null);
       setPlaybackProgress(0);
     }
-    // Remove the metadata first; only then tear down the underlying audio,
-    // so the delete is acknowledged before any storage cleanup runs.
-    deleteVoiceNote(vn.id);
-    if (vn.audioId) {
-      void deleteVoiceAudio(vn.audioId).catch(() => { /* best-effort orphan cleanup */ });
-    }
-    // Day 8 — local-first remote delete: the tombstone is recorded inside the
-    // sync layer BEFORE any network write so an offline/failed DELETE cannot
-    // let the server resurrect this note on the next hydration.
-    void deleteRemoteVoiceNote(vn.id, () => getToken());
+    // Day 9 Task 9 — playback stops now, but the memo itself is only removed
+    // (metadata + IndexedDB audio + remote DELETE) after the undo window
+    // expires, so a mistaken delete can be undone.
+    deferDelete('Voice memo deleted', () => {
+      // Remove the metadata first; only then tear down the underlying audio,
+      // so the delete is acknowledged before any storage cleanup runs.
+      deleteVoiceNote(vn.id);
+      if (vn.audioId) {
+        void deleteVoiceAudio(vn.audioId).catch(() => { /* best-effort orphan cleanup */ });
+      }
+      // Day 8 — local-first remote delete: the tombstone is recorded inside the
+      // sync layer BEFORE any network write so an offline/failed DELETE cannot
+      // let the server resurrect this note on the next hydration.
+      void deleteRemoteVoiceNote(vn.id, () => getToken());
+    });
   };
 
   const recordingWaveform = isRecording && !isPaused ? waveformLevels : new Array(WAVEFORM_BARS).fill(0.05);
