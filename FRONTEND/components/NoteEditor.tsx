@@ -15,6 +15,7 @@ import confetti from 'canvas-confetti';
 import { SpeechRecognition, SpeechRecognitionEvent, SpeechRecognitionErrorEvent } from '@/lib/speech';
 import { PIN_LENGTH } from '@/lib/constants';
 import { stripHtml } from '@/lib/utils';
+import { buildStudyContext, buildContextMessages } from '@/lib/ai';
 import { API, apiFetch } from '@/lib/config';
 import { useAuth } from '@clerk/nextjs';
 import { hashPinClient } from '@/lib/pin';
@@ -214,6 +215,27 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
   const [aiPrompt, setAiPrompt] = useState('');
   const [aiResponse, setAiResponse] = useState('');
   const [isAiLoading, setIsAiLoading] = useState(false);
+  // Day 9 Task 2 — any text the user had selected inside the editor when they
+  // opened the AI assistant becomes the primary AI context (full note otherwise).
+  const [selectedText, setSelectedText] = useState('');
+
+  // Capture the editor selection before the FAB click moves focus away. The
+  // selection is only used when it lives inside the editor; otherwise SnapAI
+  // falls back to the full note content.
+  const captureSelection = useCallback(() => {
+    const sel = window.getSelection();
+    if (
+      sel &&
+      sel.rangeCount > 0 &&
+      sel.anchorNode &&
+      editorRef.current &&
+      editorRef.current.contains(sel.anchorNode)
+    ) {
+      setSelectedText(sel.toString().trim());
+    } else {
+      setSelectedText('');
+    }
+  }, []);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -714,12 +736,26 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
 
   const handleAiAssist = async () => {
     if (!aiPrompt.trim() || isAiLoading) return;
+    // Day 9 Task 2 — SnapAI now works on the student's actual material: selected
+    // text when present, otherwise the full note content. The editor DOM is the
+    // authoritative source (state only mirrors it). Nothing is sent when there
+    // is no material to process.
+    const editorText = editorRef.current
+      ? ((editorRef.current as HTMLElement).innerText || editorRef.current.textContent || '').trim()
+      : '';
+    const noteText = (selectedText || editorText || stripHtml(content)).trim();
+    if (!noteText) {
+      setAiResponse('Add some content to your note first, then ask SnapAI.');
+      return;
+    }
     setIsAiLoading(true);
     setAiResponse('');
     try {
+      const context = buildStudyContext({ note: { title: title || activeNote?.title, content: noteText } });
+      const contextMessages = buildContextMessages(context, aiPrompt.trim());
       const data = await apiFetch(API.ai.chat, {
         method: 'POST',
-        body: JSON.stringify({ messages: [{ role: 'user', content: aiPrompt }] }),
+        body: JSON.stringify({ messages: contextMessages }),
         token: (await getToken()) ?? undefined,
       });
       if (data.success) {
@@ -920,6 +956,14 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
               </button>
             </div>
             <div className="editor-ai-body">
+              <div className="editor-ai-context">
+                <Sparkles size={12} />
+                {selectedText
+                  ? `Using selected text${title ? ` from "${title}"` : ''}`
+                  : title
+                    ? `Using note: ${title}`
+                    : 'Using full note content'}
+              </div>
               <textarea
                 placeholder="Ask AI to write, rewrite, or improve content..."
                 value={aiPrompt}
@@ -945,7 +989,7 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
       )}
 
       {/* ─── AI FAB ─── */}
-      <button onClick={() => setShowAiAssistant(true)} className="editor-ai-fab" aria-label="Open AI Assistant">
+      <button onClick={() => setShowAiAssistant(true)} onMouseDown={captureSelection} className="editor-ai-fab" aria-label="Open AI Assistant">
         <Sparkles size={20} />
       </button>
 

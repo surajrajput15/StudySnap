@@ -3353,6 +3353,79 @@ textarea:focus-visible,
   background: rgba(0,0,0,0.18);
 }
 
+/* ─── AI Chat Context Bar ─── */
+.tutor-context-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.tutor-attach-error {
+  padding: 8px 16px;
+  background: rgba(220, 38, 38, 0.12);
+  color: var(--error);
+  font-size: 12px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+/* ─── Note Picker ─── */
+.tutor-note-picker-modal {
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.tutor-note-picker {
+  max-height: 48vh;
+  overflow-y: auto;
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tutor-note-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--on-surface);
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--transition-fast);
+}
+.tutor-note-picker-item:hover {
+  background: var(--surface-variant);
+}
+.tutor-note-picker-item > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.tutor-note-picker-title {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tutor-note-picker-snippet {
+  font-size: 11px;
+  color: var(--on-surface-variant);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* ─── Input Bar ─── */
 .tutor-input-bar {
   display: flex;
@@ -4586,6 +4659,21 @@ textarea:focus-visible,
   flex-direction: column;
   gap: 12px;
   overflow-y: auto;
+}
+
+.editor-ai-context {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--on-surface-variant);
+  background: var(--surface-variant);
+  border-radius: 8px;
+  padding: 6px 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .editor-ai-input {

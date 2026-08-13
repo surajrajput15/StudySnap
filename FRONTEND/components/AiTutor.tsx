@@ -2,8 +2,10 @@
 
 import React, { useState, useRef, useEffect, useCallback, memo } from 'react';
 import { useAuth } from '@clerk/nextjs';
-import { useStore } from '@/lib/store/useStore';
+import { useStore, type Note } from '@/lib/store/useStore';
 import { API, apiFetch } from '@/lib/config';
+import { buildStudyContext, buildContextMessages } from '@/lib/ai';
+import { stripHtml } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -125,6 +127,16 @@ const TOOL_PROMPTS: Record<string, string> = {
   pdf: 'I have a PDF document. Please help me analyze, summarize, and extract key information from it.',
 };
 
+const TOOL_LABELS: Record<string, string> = {
+  summarize: 'Summarize',
+  mcq: 'MCQ Generator',
+  flashcards: 'Flashcards',
+  quiz: 'Quiz Mode',
+  translate: 'Translate',
+  explain: 'Explain Simply',
+  mindmap: 'Mind Map',
+};
+
 function MessageMarkdown({ content }: { content: string }) {
   return (
     <ReactMarkdown
@@ -177,6 +189,7 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
   const { getToken, isSignedIn, isLoaded } = useAuth();
   const activeAiTool = useStore((s) => s.activeAiTool);
   const setActiveAiTool = useStore((s) => s.setActiveAiTool);
+  const notes = useStore((s) => s.notes);
   const [authTimedOut, setAuthTimedOut] = useState(false);
 
   useEffect(() => {
@@ -191,12 +204,31 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
   const [isLoading, setIsLoading] = useState(false);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [attachedFile, setAttachedFile] = useState<{ name: string; content: string } | null>(null);
+  const [attachError, setAttachError] = useState<string | null>(null);
+  // Day 9 Task 2 — the note the AI is currently working on. Explicitly chosen by
+  // the user (never silently selected) and kept for the whole mounted session so
+  // follow-up chat turns keep operating on the same material.
+  const [noteContext, setNoteContext] = useState<Note | null>(null);
+  const [showNotePicker, setShowNotePicker] = useState(false);
+  const [pendingTool, setPendingTool] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const isSendingRef = useRef(false);
+  // Mutable mirrors so async send paths always read the CURRENT context even
+  // when a setState has not committed yet (e.g. note picked → tool sent).
+  const noteContextRef = useRef<Note | null>(null);
+  const attachedFileRef = useRef<{ name: string; content: string } | null>(null);
+  const pendingToolRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    noteContextRef.current = noteContext;
+  }, [noteContext]);
+  useEffect(() => {
+    attachedFileRef.current = attachedFile;
+  }, [attachedFile]);
 
   const scrollToBottom = useCallback(() => {
     requestAnimationFrame(() => {
@@ -328,7 +360,7 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
     }, 100);
   }, [addStreamingMessage]);
 
-  const runAIChat = useCallback(async (contextMessages: { role: 'user' | 'assistant'; content: string }[]) => {
+  const runAIChat = useCallback(async (contextMessages: { role: 'user' | 'assistant' | 'system'; content: string }[]) => {
     try {
       const data = await apiFetch(API.ai.chat, {
         method: 'POST',
@@ -395,23 +427,34 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
     }
   }, [addStreamingMessage, finalizeStreaming, getToken, renderErrorBubble]);
 
+  // Day 9 Task 2 — the request always carries the CURRENT study context (note or
+  // attached file). Material is attached to the latest user message only, so the
+  // full content is never duplicated across historical turns. When no note/file
+  // is selected, buildContextMessages falls back to the plain user request.
   const handleSend = useCallback(async (text?: string) => {
     const msg = (text || input).trim();
     if (!msg || isSendingRef.current) return;
     isSendingRef.current = true;
+    pendingToolRef.current = null;
+    setPendingTool(null);
+    setShowNotePicker(false);
+    setAttachError(null);
 
     setInput('');
-    setAttachedFile(null);
     inputRef.current?.focus();
     const userMsg: Message = { role: 'user', content: msg };
     setMessages(prev => [...prev, userMsg]);
     setIsLoading(true);
     scrollToBottom();
 
-    const contextMessages = [...messages, userMsg].map(m => ({
-      role: m.role,
-      content: m.content
-    }));
+    const context = buildStudyContext({
+      note: noteContextRef.current,
+      file: attachedFileRef.current,
+    });
+    const contextMessages: { role: 'user' | 'assistant' | 'system'; content: string }[] = [
+      ...messages.map((m) => ({ role: m.role, content: m.content })),
+      ...buildContextMessages(context, msg),
+    ];
     runAIChat(contextMessages);
   }, [input, messages, runAIChat, scrollToBottom]);
 
@@ -429,7 +472,14 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
     setIsLoading(true);
     scrollToBottom();
     setMessages(prev => [...prev.slice(0, idx), { role: 'user', content: prompt }]);
-    const ctx = arr.slice(0, idx).map(m => ({ role: m.role, content: m.content })).concat([{ role: 'user' as const, content: prompt }]);
+    const context = buildStudyContext({
+      note: noteContextRef.current,
+      file: attachedFileRef.current,
+    });
+    const ctx: { role: 'user' | 'assistant' | 'system'; content: string }[] = [
+      ...arr.slice(0, idx).map((m) => ({ role: m.role, content: m.content })),
+      ...buildContextMessages(context, prompt),
+    ];
     runAIChat(ctx);
   }, [messages, runAIChat, scrollToBottom]);
 
@@ -448,23 +498,92 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
     retryLastRef.current();
   }, []);
 
+  // Day 9 Task 2 — a dashboard AI Study Tool now asks the user which material to
+  // use instead of firing a generic prompt into the void. Material tools open the
+  // note picker; the PDF tool opens the attach menu and waits for a real file.
+  // The store flag is consumed synchronously; the picker/menu UI state is
+  // scheduled on the next tick so the effect only synchronizes external state.
   useEffect(() => {
-    if (activeAiTool && TOOL_PROMPTS[activeAiTool]) {
-      handleSendRef.current(TOOL_PROMPTS[activeAiTool]);
-      setActiveAiTool(null);
-    }
+    if (!activeAiTool || !TOOL_PROMPTS[activeAiTool]) return;
+    const tool = activeAiTool;
+    setActiveAiTool(null);
+    pendingToolRef.current = tool;
+    queueMicrotask(() => {
+      if (tool === 'pdf') {
+        setPendingTool(tool);
+        setShowAttachMenu(true);
+      } else {
+        setPendingTool(tool);
+        setShowNotePicker(true);
+      }
+    });
   }, [activeAiTool, setActiveAiTool]);
 
   const handleQuickChip = (chip: typeof QUICK_CHIPS[0]) => {
     handleSend(chip.prompt);
   };
 
+  const selectNote = (note: Note) => {
+    const tool = pendingToolRef.current;
+    const snapshot: Note = { ...note };
+    noteContextRef.current = snapshot;
+    setNoteContext(snapshot);
+    setShowNotePicker(false);
+    pendingToolRef.current = null;
+    setPendingTool(null);
+    if (tool && TOOL_PROMPTS[tool]) {
+      handleSendRef.current(TOOL_PROMPTS[tool]);
+    }
+  };
+
   const handleAttachFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const text = await file.text();
-    setAttachedFile({ name: file.name, content: text.slice(0, 5000) });
+    e.target.value = '';
     setShowAttachMenu(false);
+    setAttachError(null);
+    try {
+      let content: string;
+      if (/\.pdf$/i.test(file.name)) {
+        const { extractTextFromPdf } = await import('@/lib/pdf');
+        content = await extractTextFromPdf(file);
+      } else {
+        content = await file.text();
+      }
+      if (!content || !content.trim()) {
+        setAttachError('No readable text was found in this file. Try a .txt or .md file, or copy-paste the text.');
+        return;
+      }
+      const nextFile = { name: file.name, content };
+      attachedFileRef.current = nextFile;
+      setAttachedFile(nextFile);
+      if (pendingToolRef.current === 'pdf') {
+        const tool = pendingToolRef.current;
+        pendingToolRef.current = null;
+        setPendingTool(null);
+        handleSendRef.current(TOOL_PROMPTS[tool]);
+      }
+    } catch {
+      attachedFileRef.current = null;
+      setAttachedFile(null);
+      setAttachError('Could not read this file. Try a .txt or .md file, or copy-paste the text.');
+    }
+  };
+
+  const clearNoteContext = () => {
+    noteContextRef.current = null;
+    setNoteContext(null);
+  };
+
+  const clearFileContext = () => {
+    attachedFileRef.current = null;
+    setAttachedFile(null);
+  };
+
+  const closeNotePicker = () => {
+    setShowNotePicker(false);
+    pendingToolRef.current = null;
+    setPendingTool(null);
   };
 
   const handleInputFocus = () => {
@@ -571,15 +690,32 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
             <div ref={chatEndRef} />
           </div>
 
-          {hasMessages && attachedFile && (
-            <div className="tutor-attached">
-              <Paperclip size={14} />
-              <span className="tutor-attached-name">{attachedFile.name}</span>
-              <button className="tutor-attached-remove" onClick={() => setAttachedFile(null)} aria-label="Remove attached file">
-                <X size={14} />
-              </button>
+          {/* Day 9 Task 2 — always-visible context bar: tells the user exactly
+              which note / file the AI is working on. */}
+          {(noteContext || attachedFile) && (
+            <div className="tutor-context-bar">
+              {noteContext && (
+                <div className="tutor-attached">
+                  <BookOpen size={14} />
+                  <span className="tutor-attached-name">Using note: {noteContext.title || 'Untitled note'}</span>
+                  <button className="tutor-attached-remove" onClick={clearNoteContext} aria-label="Remove note context">
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
+              {attachedFile && (
+                <div className="tutor-attached">
+                  <Paperclip size={14} />
+                  <span className="tutor-attached-name">Attached: {attachedFile.name}</span>
+                  <button className="tutor-attached-remove" onClick={clearFileContext} aria-label="Remove attached file">
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
             </div>
           )}
+
+          {attachError && <div className="tutor-attach-error">{attachError}</div>}
 
           <div className="tutor-input-area">
             <form
@@ -592,7 +728,7 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
               <button
                 type="button"
                 className="tutor-input-btn"
-                aria-label="Attach a file"
+                aria-label="Attach a note or file"
                 onClick={() => setShowAttachMenu(!showAttachMenu)}
               >
                 <Paperclip size={20} />
@@ -648,6 +784,10 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
 
             {showAttachMenu && (
               <div className="tutor-attach-menu">
+                <button className="tutor-attach-option" onClick={() => { setShowAttachMenu(false); setShowNotePicker(true); }}>
+                  <BookOpen size={16} />
+                  Attach a note
+                </button>
                 <button className="tutor-attach-option" onClick={() => fileInputRef.current?.click()}>
                   <Paperclip size={16} />
                   Upload PDF or Text
@@ -662,6 +802,40 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
               </div>
             )}
           </div>
+
+          {/* Day 9 Task 2 — explicit note selection. Never auto-picks a note. */}
+          {showNotePicker && (
+            <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="note-picker-title" onClick={closeNotePicker}>
+              <div className="modal-content tutor-note-picker-modal" onClick={(e) => e.stopPropagation()}>
+                <h3 id="note-picker-title" style={{ fontSize: '16px', fontWeight: 700 }}>
+                  {pendingTool ? `Select a note for ${TOOL_LABELS[pendingTool] || 'the AI'}` : 'Attach a note'}
+                </h3>
+                <p style={{ fontSize: '12px', color: 'var(--on-surface-variant)', marginTop: '4px' }}>
+                  Only the note you pick is sent to the AI — never your other notes.
+                </p>
+                {notes.length === 0 ? (
+                  <p style={{ fontSize: '13px', color: 'var(--on-surface-variant)', marginTop: '12px' }}>
+                    You don&apos;t have any notes yet. Create a note first.
+                  </p>
+                ) : (
+                  <div className="tutor-note-picker">
+                    {notes.map((note) => (
+                      <button key={note.id} className="tutor-note-picker-item" onClick={() => selectNote(note)}>
+                        <BookOpen size={15} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+                        <span style={{ minWidth: 0 }}>
+                          <span className="tutor-note-picker-title">{note.title || 'Untitled note'}</span>
+                          <span className="tutor-note-picker-snippet">{stripHtml(note.content).substring(0, 80) || 'No content yet'}</span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
+                  <button type="button" className="md3-btn md3-btn-text" onClick={closeNotePicker}>Cancel</button>
+                </div>
+              </div>
+            </div>
+          )}
         </>
       ) : (
         <SignInPrompt />
