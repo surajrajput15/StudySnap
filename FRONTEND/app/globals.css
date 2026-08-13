@@ -2978,6 +2978,30 @@ textarea:focus-visible,
   background: #10B981;
 }
 
+.tutor-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.tutor-new-chat-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--on-surface);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.tutor-new-chat-btn:hover {
+  background: var(--surface-variant);
+}
+
 /* ─── Chat ─── */
 .tutor-chat {
   flex: 1;

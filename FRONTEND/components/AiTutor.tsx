@@ -14,7 +14,7 @@ import {
   Sparkles, Send, Paperclip, Mic, Bot, User, BookOpen,
   FileText, LayoutGrid, HelpCircle, Languages, Lightbulb,
   Copy, Check, X, Loader2,
-  ArrowLeft
+  ArrowLeft, MessageSquarePlus
 } from 'lucide-react';
 import SignInPrompt from '@/components/SignInPrompt';
 import { getSpeechRecognitionCtor } from '@/lib/speech';
@@ -27,6 +27,8 @@ const QUICK_CHIPS = [
   { id: 'translate', label: 'Translate', icon: Languages, color: '#EC4899', prompt: 'Translate this content.' },
   { id: 'solve', label: 'Solve Doubts', icon: Lightbulb, color: '#06B6D4', prompt: 'Help me solve my doubts about this topic.' },
 ];
+
+const GREETING_MESSAGE = '👋 Hi! I\'m your AI Tutor. Ask me anything about your studies, or try one of the quick actions below!';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -197,9 +199,15 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
     const timer = setTimeout(() => setAuthTimedOut(true), 10000);
     return () => clearTimeout(timer);
   }, [isLoaded]);
-  const [messages, setMessages] = useState<Message[]>([
-    { role: 'assistant', content: '👋 Hi! I\'m your AI Tutor. Ask me anything about your studies, or try one of the quick actions below!' }
-  ]);
+  const [messages, setMessages] = useState<Message[]>(() => {
+    // Day 9 Task 7 — resume the durable conversation on mount. A brand-new (or
+    // cleared) chat falls back to the greeting; transient flags never persisted.
+    const persisted = useStore.getState().aiMessages;
+    if (persisted.length > 0) {
+      return persisted.map((m) => ({ role: m.role, content: m.content }));
+    }
+    return [{ role: 'assistant', content: GREETING_MESSAGE }];
+  });
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
@@ -247,6 +255,16 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
     if (chatEndRef.current && !messages.some(m => m.isStreaming)) {
       chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
+  }, [messages]);
+
+  // Day 9 Task 7 — persist the durable conversation (role + content only) as it
+  // settles. In-flight streaming chunks are skipped and transient error bubbles
+  // are never written, so a reload restores the real chat, not UI noise.
+  useEffect(() => {
+    if (messages.some((m) => m.isStreaming)) return;
+    useStore.getState().setAiMessages(
+      messages.filter((m) => !m.isError).map(({ role, content }) => ({ role, content }))
+    );
   }, [messages]);
 
   useEffect(() => {
@@ -575,6 +593,20 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
     setNoteContext(null);
   };
 
+  // Day 9 Task 7 — start a fresh conversation: clear the persisted history and
+  // reset the in-memory chat to the greeting. Attached note/file context is
+  // also dropped so the new chat does not silently operate on old material.
+  const handleNewChat = () => {
+    useStore.getState().clearAiMessages();
+    setMessages([{ role: 'assistant', content: GREETING_MESSAGE }]);
+    noteContextRef.current = null;
+    setNoteContext(null);
+    attachedFileRef.current = null;
+    setAttachedFile(null);
+    pendingToolRef.current = null;
+    setPendingTool(null);
+  };
+
   const clearFileContext = () => {
     attachedFileRef.current = null;
     setAttachedFile(null);
@@ -609,9 +641,14 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
             <div className="tutor-subtitle">Your personal AI study assistant</div>
           </div>
         </div>
-        <div className="tutor-status">
-          <span className="tutor-status-dot" />
-          Online
+        <div className="tutor-header-actions">
+          <button className="tutor-new-chat-btn" onClick={handleNewChat} title="Start a new chat" aria-label="Start a new chat">
+            <MessageSquarePlus size={16} />
+          </button>
+          <div className="tutor-status">
+            <span className="tutor-status-dot" />
+            Online
+          </div>
         </div>
       </div>
 

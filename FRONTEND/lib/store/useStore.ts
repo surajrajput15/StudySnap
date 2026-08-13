@@ -60,6 +60,13 @@ export interface Category {
   color: string;
 }
 
+/** A durable AI tutor chat message. Only role + content are stored — transient
+ *  UI flags (streaming, error) are never persisted. Day 9 Task 7. */
+export interface AiChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 export interface Folder {
   id: string;
   name: string;
@@ -108,6 +115,8 @@ interface AppState {
   activeCategoryId: string | null;
   searchQuery: string;
   activeAiTool: string | null;
+  // Day 9 Task 7 — durable AI tutor conversation history (per user).
+  aiMessages: AiChatMessage[];
 
   // Gamification
   coins: number;
@@ -146,6 +155,10 @@ interface AppState {
   addVoiceNote: (voiceNote: Omit<VoiceNote, 'id' | 'createdAt'> & { id?: string }) => VoiceNote;
   updateVoiceNote: (id: string, updates: Partial<Pick<VoiceNote, 'transcript' | 'noteId'>>) => void;
   deleteVoiceNote: (id: string) => void;
+
+  // AI Tutor Chat Actions
+  setAiMessages: (messages: AiChatMessage[]) => void;
+  clearAiMessages: () => void;
 
   // Categories Actions
   addCategory: (category: Omit<Category, 'id'>) => Category;
@@ -227,6 +240,7 @@ function makeInitialState(set: SetStateFn): AppState {
     },
     notes: [],
     voiceNotes: [],
+    aiMessages: [],
     categories: DEFAULT_CATEGORIES,
     folders: [],
     revisionLogs: [],
@@ -358,6 +372,9 @@ function makeInitialState(set: SetStateFn): AppState {
         vn.id === id ? { ...vn, ...updates, updatedAt: new Date().toISOString() } : vn
       )
     })),
+
+    setAiMessages: (messages) => set({ aiMessages: messages }),
+    clearAiMessages: () => set({ aiMessages: [] }),
 
     addCategory: (categoryData) => {
       const newCategory: Category = {
@@ -498,6 +515,7 @@ export const useStore = create<AppState>()(
         user: state.user,
         notes: state.notes,
         voiceNotes: state.voiceNotes,
+        aiMessages: state.aiMessages,
         categories: state.categories,
         folders: state.folders,
         revisionLogs: state.revisionLogs,
@@ -543,6 +561,14 @@ export const useStore = create<AppState>()(
             if (legacy) normalized.legacyAudioUrl = vn.audioUrl;
             return normalized;
           });
+        }
+        if (Array.isArray(persisted.aiMessages)) {
+          // Only durable role/content pairs survive; anything malformed is
+          // dropped so a corrupt row can never crash the chat.
+          merged.aiMessages = (persisted.aiMessages as Partial<AiChatMessage>[]).filter(
+            (m): m is AiChatMessage =>
+              !!m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string'
+          );
         }
         return merged;
       },
@@ -605,6 +631,7 @@ function scopedDefaults(): Partial<AppState> {
     },
     notes: [],
     voiceNotes: [],
+    aiMessages: [],
     categories: DEFAULT_CATEGORIES,
     folders: [],
     revisionLogs: [],
