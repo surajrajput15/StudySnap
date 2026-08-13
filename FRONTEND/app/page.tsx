@@ -15,6 +15,7 @@ import HomeScreen from '@/components/HomeScreen';
 import MobileDrawer from '@/components/MobileDrawer';
 import OfflineBanner from '@/components/OfflineBanner';
 import SyncStatusIndicator from '@/components/SyncStatusIndicator';
+import { RECORDING_NAV_CONFIRM_MESSAGE, shouldConfirmRecordingNav } from '@/lib/utils';
 
 const NoteEditor = dynamic(() => import('@/components/NoteEditor'), { ssr: false });
 const VoiceNotes = dynamic(() => import('@/components/VoiceNotes'), { ssr: false });
@@ -43,12 +44,29 @@ export default function Page() {
     return params.get('returnTo') === 'ai' ? 'ai' : 'home';
   });
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // Day 9 Task 4 — mirrors VoiceNotes' isRecording so navigation can guard
+  // against silently discarding an active recording.
+  const [voiceRecording, setVoiceRecording] = useState(false);
 
   const mounted = useSyncExternalStore(
     () => () => {},
     () => true,
     () => false,
   );
+
+  // Day 9 Task 4 — the single navigation chokepoint. Every in-app tab switch
+  // goes through here so leaving the voice tab while recording asks first
+  // instead of silently discarding the recording on unmount. Cancel keeps the
+  // recording alive; confirm navigates (VoiceNotes' own unmount cleanup then
+  // discards the uncommitted recording). The VoiceNotes back button keeps its
+  // self-guard and calls setActiveTab directly to avoid a double confirmation.
+  const navigate = (nextTab: string) => {
+    if (shouldConfirmRecordingNav(activeTab, nextTab, voiceRecording)) {
+      const leave = window.confirm(RECORDING_NAV_CONFIRM_MESSAGE);
+      if (!leave) return;
+    }
+    setActiveTab(nextTab);
+  };
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -121,17 +139,17 @@ export default function Page() {
 
   const handleEditNote = (noteId: string) => {
     setActiveNoteId(noteId);
-    setActiveTab('editor');
+    navigate('editor');
   };
 
   const handleCreateNote = () => {
     setActiveNoteId(null);
-    setActiveTab('editor');
+    navigate('editor');
   };
 
   const handleLinkToNote = (noteId: string) => {
     setActiveNoteId(noteId);
-    setActiveTab('editor');
+    navigate('editor');
   };
 
   const handleDrawerNav = (tab: string) => {
@@ -142,7 +160,7 @@ export default function Page() {
       settings: 'profile',
       about: 'profile',
     };
-    setActiveTab(routing[tab] || tab);
+    navigate(routing[tab] || tab);
   };
 
   const navItems = [
@@ -171,7 +189,7 @@ export default function Page() {
 
       {/* ─── Desktop Sidebar ─── */}
       <aside className="app-sidebar">
-        <div className="sidebar-brand" role="button" tabIndex={0} onClick={() => setActiveTab('home')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setActiveTab('home'); } }}>
+        <div className="sidebar-brand" role="button" tabIndex={0} onClick={() => navigate('home')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate('home'); } }}>
           <Image src="/window.svg" alt="" className="sidebar-logo" width={512} height={512} unoptimized />
           <span className="sidebar-name">StudySnap</span>
         </div>
@@ -183,7 +201,7 @@ export default function Page() {
               <button
                 key={tab.id}
                 className={`sidebar-link ${isActive ? 'active' : ''}`}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => navigate(tab.id)}
               >
                 <Icon size={18} strokeWidth={isActive ? 2.5 : 1.5} />
                 <span>{tab.label}</span>
@@ -206,7 +224,7 @@ export default function Page() {
             <button
               key={tab.id}
               className={`rail-link ${isActive ? 'active' : ''}`}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => navigate(tab.id)}
               title={tab.label}
             >
               <Icon size={20} strokeWidth={isActive ? 2.5 : 1.5} />
@@ -222,7 +240,7 @@ export default function Page() {
             <button className="header-hamburger" onClick={() => setDrawerOpen(true)} aria-label="Open menu" aria-expanded={drawerOpen} aria-controls="mobile-menu">
               <Menu size={22} />
             </button>
-            <span className="header-title" role="button" tabIndex={0} onClick={() => setActiveTab('home')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setActiveTab('home'); } }}>
+            <span className="header-title" role="button" tabIndex={0} onClick={() => navigate('home')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate('home'); } }}>
               <Image src="/window.svg" alt="" className="header-mobile-logo" width={512} height={512} unoptimized />
               <span className="header-brand-text">StudySnap</span>
               <span className="header-tab-name">{navItems.find(t => t.id === activeTab)?.label}</span>
@@ -254,23 +272,24 @@ export default function Page() {
             <HomeScreen 
               onEditNote={handleEditNote} 
               onCreateNote={handleCreateNote} 
-              onNavigate={(tab) => setActiveTab(tab)}
+              onNavigate={(tab) => navigate(tab)}
             />
           )}
           {activeTab === 'editor' && (
             <NoteEditor 
               noteId={activeNoteId} 
-              onBack={() => setActiveTab('home')}
+              onBack={() => navigate('home')}
             />
           )}
           {activeTab === 'voice' && (
             <VoiceNotes 
               onBack={() => setActiveTab('home')}
               onLinkToNote={handleLinkToNote}
+              onRecordingChange={setVoiceRecording}
             />
           )}
           {activeTab === 'calendar' && <RevisionCalendar />}
-          {activeTab === 'ai' && <AiTutor onBack={() => setActiveTab('home')} />}
+          {activeTab === 'ai' && <AiTutor onBack={() => navigate('home')} />}
           {activeTab === 'gamification' && <GamificationHub />}
           {activeTab === 'profile' && <ProfileView />}
         </div>
@@ -285,7 +304,7 @@ export default function Page() {
             <button
               key={tab.id}
               className={`bottom-nav-link ${isActive ? 'active' : ''}`}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => navigate(tab.id)}
             >
               <div className="bottom-nav-icon-wrap">
                 <Icon size={20} strokeWidth={isActive ? 2.5 : 1.5} />
@@ -296,7 +315,7 @@ export default function Page() {
         })}
         <button
           className={`bottom-nav-link ${activeTab === 'gamification' || activeTab === 'profile' ? 'active' : ''}`}
-          onClick={() => setActiveTab(activeTab === 'gamification' || activeTab === 'profile' ? activeTab : 'profile')}
+          onClick={() => navigate(activeTab === 'gamification' || activeTab === 'profile' ? activeTab : 'profile')}
         >
           <div className="bottom-nav-icon-wrap">
             <User size={20} />

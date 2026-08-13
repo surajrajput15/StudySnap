@@ -18,11 +18,15 @@ import {
 import confetti from 'canvas-confetti';
 import EmptyState, { EmptyVoiceIllustration } from './EmptyState';
 import { SpeechRecognition, SpeechRecognitionEvent } from '@/lib/speech';
-import { formatShortDate } from '@/lib/utils';
+import { formatShortDate, RECORDING_NAV_CONFIRM_MESSAGE } from '@/lib/utils';
 
 interface VoiceNotesProps {
   onBack: () => void;
   onLinkToNote: (noteId: string) => void;
+  // Day 9 Task 4 — reports the live recording flag so the app shell can guard
+  // navigation (sidebar, drawer, bottom nav, ...) against silently discarding
+  // an active recording. Fires on every isRecording transition.
+  onRecordingChange?: (recording: boolean) => void;
 }
 
 // Per-recording session state. MediaRecorder fires its events asynchronously,
@@ -133,7 +137,7 @@ function NoiseMeter({ level }: { level: number }) {
   );
 }
 
-export default function VoiceNotes({ onBack, onLinkToNote }: VoiceNotesProps) {
+export default function VoiceNotes({ onBack, onLinkToNote, onRecordingChange }: VoiceNotesProps) {
   const voiceNotes = useStore((s) => s.voiceNotes);
   const notes = useStore((s) => s.notes);
   const addVoiceNote = useStore((s) => s.addVoiceNote);
@@ -264,6 +268,19 @@ export default function VoiceNotes({ onBack, onLinkToNote }: VoiceNotesProps) {
     }
     return () => { if (durationTimerRef.current) clearInterval(durationTimerRef.current); };
   }, [isRecording, isPaused]);
+
+  // Day 9 Task 4 — keep the app shell's recording flag in sync so it can guard
+  // navigation that would otherwise unmount (and discard) the active recording
+  // without confirmation. The callback goes through a ref so a parent that
+  // passes a fresh closure each render still gets notified, without forcing the
+  // notification effect to re-run on every render.
+  const onRecordingChangeRef = useRef(onRecordingChange);
+  useEffect(() => {
+    onRecordingChangeRef.current = onRecordingChange;
+  }, [onRecordingChange]);
+  useEffect(() => {
+    onRecordingChangeRef.current?.(isRecording);
+  }, [isRecording]);
 
   useEffect(() => {
     return () => {
@@ -613,7 +630,7 @@ export default function VoiceNotes({ onBack, onLinkToNote }: VoiceNotesProps) {
 
   const handleBack = () => {
     if (isRecording) {
-      const leave = window.confirm('You are still recording. Leave and discard this recording?');
+      const leave = window.confirm(RECORDING_NAV_CONFIRM_MESSAGE);
       if (!leave) return;
       discardRecording();
     }
