@@ -844,7 +844,6 @@ textarea:focus-visible,
   align-items: center;
   gap: 10px;
   padding: 10px 20px;
-  cursor: pointer;
   border: 1px solid rgba(255, 255, 255, 0.2);
   background: rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(12px);
@@ -853,9 +852,10 @@ textarea:focus-visible,
   color: #fff;
   transition: all var(--transition-fast);
 }
+/* Day 9 Task 13 — display-only: the streak is earned through activity, not by
+   clicking it, so the pill no longer looks or behaves interactive. */
 .streak-btn:hover {
-  transform: scale(1.05);
-  background: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .streak-count {

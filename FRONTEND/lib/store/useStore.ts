@@ -139,7 +139,6 @@ interface AppState {
   // Profile Actions
   updateProfile: (profile: Partial<UserProfile>) => void;
   syncProfileNameFromClerk: (fullName: string | null | undefined) => void;
-  incrementStreak: () => void;
 
   // Notes Actions
   addNote: (note: Omit<Note, 'id' | 'createdAt' | 'updatedAt' | 'lastRevisedAt' | 'nextRevisionAt' | 'revisionStreak'> & { 
@@ -226,6 +225,26 @@ let activeStoreUserId: string | null = null;
 
 type SetStateFn = StoreApi<AppState>['setState'];
 
+// Day 9 Task 13 — the streak only advances through REAL study activity (note
+// creation, revision, voice recording). It is called from those actions, never
+// from tapping the streak display (the old public `incrementStreak` let a click
+// fabricate a streak). The once-per-day guard is date-based, and a missing or
+// stale lastActiveDate resets the streak instead of continuing it.
+function bumpStreak(state: Pick<AppState, 'user'>): { user: UserProfile } {
+  const today = dateKey();
+  const lastActive = state.user.lastActiveDate;
+  if (lastActive === today) return { user: state.user }; // already counted today
+  let newStreak = state.user.streakCount;
+  if (lastActive) {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    newStreak = lastActive === dateKey(yesterday) ? state.user.streakCount + 1 : 1;
+  } else {
+    newStreak = 1; // first day of activity
+  }
+  return { user: { ...state.user, streakCount: newStreak, lastActiveDate: today } };
+}
+
 function makeInitialState(set: SetStateFn): AppState {
   return {
     theme: 'light',
@@ -235,8 +254,9 @@ function makeInitialState(set: SetStateFn): AppState {
       field: '',
       semester: '',
       studyGoals: 'Complete my daily study goals and revise consistently!',
-      streakCount: 1,
-      lastActiveDate: dateKey(),
+      // Day 9 Task 13 — a fresh account earns no streak until real activity.
+      streakCount: 0,
+      lastActiveDate: null,
     },
     notes: [],
     voiceNotes: [],
@@ -272,38 +292,6 @@ function makeInitialState(set: SetStateFn): AppState {
       if (state.user.name && state.user.name !== 'Student') return {};
       return { user: { ...state.user, name } };
     }),
-    incrementStreak: () => set((state) => {
-      const today = dateKey();
-      const lastActive = state.user.lastActiveDate;
-
-      if (lastActive === today) {
-        return {}; // Already incremented today
-      }
-
-      let newStreak = state.user.streakCount;
-      if (lastActive) {
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
-        const yesterdayStr = dateKey(yesterday);
-
-        if (lastActive === yesterdayStr) {
-          newStreak += 1;
-        } else {
-          newStreak = 1; // Streak broken, reset to 1
-        }
-      } else {
-        newStreak = 1; // First day
-      }
-
-      return {
-        user: {
-          ...state.user,
-          streakCount: newStreak,
-          lastActiveDate: today,
-        }
-      };
-    }),
-
     addNote: (noteData) => {
       const newNote: Note = {
         id: noteData.id || crypto.randomUUID(),
@@ -328,6 +316,8 @@ function makeInitialState(set: SetStateFn): AppState {
           notes: [newNote, ...state.notes],
           dailyProgress: isNewDay ? 1 : state.dailyProgress + 1,
           lastDailyReset: today,
+          // Day 9 Task 13 — creating a note is real study activity.
+          ...bumpStreak(state),
         };
       });
       return newNote;
@@ -360,6 +350,8 @@ function makeInitialState(set: SetStateFn): AppState {
           voiceNotes: [newVoiceNote, ...state.voiceNotes],
           dailyProgress: isNewDay ? 1 : state.dailyProgress + 1,
           lastDailyReset: today,
+          // Day 9 Task 13 — recording a voice note is real study activity.
+          ...bumpStreak(state),
         };
       });
       return newVoiceNote;
@@ -438,6 +430,8 @@ function makeInitialState(set: SetStateFn): AppState {
         notes: updatedNotes,
         dailyProgress: isNewDay ? 1 : state.dailyProgress + 1,
         lastDailyReset: dayKey,
+        // Day 9 Task 13 — completing a revision is real study activity.
+        ...bumpStreak(state),
       };
     }),
 
@@ -626,8 +620,9 @@ function scopedDefaults(): Partial<AppState> {
       field: '',
       semester: '',
       studyGoals: 'Complete my daily study goals and revise consistently!',
-      streakCount: 1,
-      lastActiveDate: today,
+      // Day 9 Task 13 — no earned streak on a fresh account.
+      streakCount: 0,
+      lastActiveDate: null,
     },
     notes: [],
     voiceNotes: [],

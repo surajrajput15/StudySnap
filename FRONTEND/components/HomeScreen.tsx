@@ -75,7 +75,6 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
   const setSearchQuery = useStore((s) => s.setSearchQuery);
   const deleteNote = useStore((s) => s.deleteNote);
   const markAsRevised = useStore((s) => s.markAsRevised);
-  const incrementStreak = useStore((s) => s.incrementStreak);
   const setActiveAiTool = useStore((s) => s.setActiveAiTool);
   const storedDailyProgress = useStore((s) => s.dailyProgress);
   const checkAndResetDaily = useStore((s) => s.checkAndResetDaily);
@@ -141,10 +140,9 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
 
   const lastEditedNote = useMemo(() => [...notes].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0], [notes]);
 
-  const handleStreakClick = () => {
-    incrementStreak();
-    confetti({ particleCount: 120, spread: 80, origin: { y: 0.5 } });
-  };
+  // Day 9 Task 13 — the streak is display-only. It grows exclusively through
+  // real study activity (creating notes, recording voice notes, completing
+  // revisions); clicking the counter must never increment it.
 
   // Day 9 Task 9 — a single-click note delete is deferred so a mistaken tap can
   // be undone. The real deletion (local removal + tombstone + remote DELETE)
@@ -239,13 +237,13 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
               <p className="hero-subtitle">{user.studyGoals}</p>
             </div>
             <div className="hero-actions-row">
-              <button onClick={handleStreakClick} className="streak-btn">
+              <div className="streak-btn" title="Grows when you create notes, record voice notes, or complete revisions.">
                 <Flame size={22} color="#FBBF24" fill="#FBBF24" />
                 <div>
                   <div className="streak-count">{user.streakCount}</div>
                   <div className="streak-label">day streak</div>
                 </div>
-              </button>
+              </div>
               <button onClick={() => onNavigate('ai')} className="hero-ghost-btn">
                 <Sparkles size={15} /> Ask SnapAI
               </button>
