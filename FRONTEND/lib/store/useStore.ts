@@ -144,6 +144,7 @@ interface AppState {
 
   // Voice Notes Actions
   addVoiceNote: (voiceNote: Omit<VoiceNote, 'id' | 'createdAt'> & { id?: string }) => VoiceNote;
+  updateVoiceNote: (id: string, updates: Partial<Pick<VoiceNote, 'transcript' | 'noteId'>>) => void;
   deleteVoiceNote: (id: string) => void;
 
   // Categories Actions
@@ -351,6 +352,11 @@ function makeInitialState(set: SetStateFn): AppState {
     },
     deleteVoiceNote: (id) => set((state) => ({
       voiceNotes: state.voiceNotes.filter((vn) => vn.id !== id)
+    })),
+    updateVoiceNote: (id, updates) => set((state) => ({
+      voiceNotes: state.voiceNotes.map((vn) =>
+        vn.id === id ? { ...vn, ...updates, updatedAt: new Date().toISOString() } : vn
+      )
     })),
 
     addCategory: (categoryData) => {

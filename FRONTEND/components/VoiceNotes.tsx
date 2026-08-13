@@ -142,6 +142,7 @@ export default function VoiceNotes({ onBack, onLinkToNote, onRecordingChange }: 
   const notes = useStore((s) => s.notes);
   const addVoiceNote = useStore((s) => s.addVoiceNote);
   const deleteVoiceNote = useStore((s) => s.deleteVoiceNote);
+  const updateVoiceNote = useStore((s) => s.updateVoiceNote);
   const updateNote = useStore((s) => s.updateNote);
   const addNote = useStore((s) => s.addNote);
   const persistenceError = useStore((s) => s.persistenceError);
@@ -603,10 +604,16 @@ export default function VoiceNotes({ onBack, onLinkToNote, onRecordingChange }: 
   };
 
   const handleRename = (vn: VoiceNote) => {
-    if (renameValue.trim() && renameValue !== vn.transcript) {
+    const trimmed = renameValue.trim();
+    // Empty renames are ignored and a no-op rename just closes the editor.
+    // The memo's own transcript is the memo's title, so a standalone memo
+    // (noteId null) is renamed the same way a linked memo is — the linked
+    // note's title stays in sync too.
+    if (trimmed && trimmed !== vn.transcript) {
+      updateVoiceNote(vn.id, { transcript: trimmed });
       const linkedNote = notes.find(n => n.id === vn.noteId);
       if (linkedNote) {
-        updateNote(linkedNote.id, { title: renameValue.trim() });
+        updateNote(linkedNote.id, { title: trimmed });
       }
     }
     setRenamingId(null);
@@ -808,7 +815,7 @@ export default function VoiceNotes({ onBack, onLinkToNote, onRecordingChange }: 
                           ))}
                         </div>
                       )}
-                      <button onClick={() => { setRenamingId(vn.id); setRenameValue(vn.transcript?.substring(0, 40) || `Voice ${formatTime(vn.duration)}`); }} className="voice-action-btn" title="Rename" aria-label="Rename recording">
+                      <button onClick={() => { setRenamingId(vn.id); setRenameValue(vn.transcript || `Voice ${formatTime(vn.duration)}`); }} className="voice-action-btn" title="Rename" aria-label="Rename recording">
                         <Edit3 size={14} />
                       </button>
                       <button onClick={() => { handleCreateNoteFromVoice(vn); }} className="voice-action-btn" title="Create Note" aria-label="Create note from recording">
