@@ -1,4 +1,5 @@
 import type {
+  AiChatMessage,
   Category,
   Folder,
   Note,
@@ -58,12 +59,50 @@ export function mergeById<T extends { id: string }>(target: T[], incoming: T[]):
   return merged;
 }
 
+/**
+ * Day 10 Task 2 — backward-compat normalization for a single persisted voice
+ * note. Extracted from the store's persist `merge` so EVERY load path applies
+ * the same rules: first hydration (persist merge), account switching
+ * (`switchStoreScopeForUser`), and guest→account migration. Previously the
+ * scope-switch and migration paths spread raw persisted rows, so legacy
+ * records (empty-string `noteId`, missing `updatedAt`, dead blob `audioUrl`)
+ * entered the live store unnormalized and LWW reconciliation broke.
+ */
+export function normalizeVoiceNote(raw: unknown): VoiceNote {
+  const vn = (raw ?? {}) as Partial<VoiceNote> & { audioUrl?: string };
+  const createdAt = typeof vn.createdAt === 'string' ? vn.createdAt : new Date().toISOString();
+  const hasAudioId = 'audioId' in vn;
+  const legacy = !hasAudioId && typeof vn.audioUrl === 'string';
+  const normalized: VoiceNote = {
+    id: typeof vn.id === 'string' && vn.id ? vn.id : crypto.randomUUID(),
+    noteId: vn.noteId === '' ? null : vn.noteId ?? null,
+    audioId: legacy ? null : vn.audioId ?? null,
+    audioUrl: legacy ? null : typeof vn.audioUrl === 'string' ? vn.audioUrl : null,
+    synced: !legacy && typeof vn.synced === 'boolean' ? vn.synced : false,
+    updatedAt: typeof vn.updatedAt === 'string' ? vn.updatedAt : createdAt,
+    duration: typeof vn.duration === 'number' && Number.isFinite(vn.duration) ? vn.duration : 0,
+    transcript: typeof vn.transcript === 'string' ? vn.transcript : null,
+    createdAt,
+  };
+  if (legacy) normalized.legacyAudioUrl = vn.audioUrl;
+  return normalized;
+}
+
+/** Day 10 Task 2 — drops malformed/legacy persisted chat rows. */
+export function normalizeAiMessages(input: unknown): AiChatMessage[] {
+  if (!Array.isArray(input)) return [];
+  return (input as Partial<AiChatMessage>[]).filter(
+    (m): m is AiChatMessage =>
+      !!m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string'
+  );
+}
+
 /** Normalizes a parsed guest payload (guarding missing/legacy fields). */
 export function normalizeGuestData(input: Partial<GuestMigrationData> | null | undefined): GuestMigrationData {
   if (!input || typeof input !== 'object') return emptyGuest();
   return {
     notes: Array.isArray(input.notes) ? input.notes : [],
-    voiceNotes: Array.isArray(input.voiceNotes) ? input.voiceNotes : [],
+    voiceNotes: Array.isArray(input.voiceNotes) ? input.voiceNotes.map(normalizeVoiceNote) : [],
     categories: Array.isArray(input.categories) ? input.categories : [],
     folders: Array.isArray(input.folders) ? input.folders : [],
     revisionLogs: Array.isArray(input.revisionLogs) ? input.revisionLogs : [],

@@ -178,3 +178,34 @@ test('migrateGuestDataForUser is idempotent after the guest scope is cleared', (
   assert.equal(second, null);
   assert.equal(useStore.getState().notes.length, 2);
 });
+
+test('switchStoreScopeForUser normalizes legacy voice notes like persist merge', () => {
+  // Seed an account scope with the OLD shape: empty-string noteId (standalone
+  // memo), no updatedAt, and a dead blob: audioUrl instead of an audioId.
+  const legacyVoiceNotes = [
+    {
+      id: 'legacy-v1',
+      noteId: '',
+      audioUrl: 'blob:http://localhost/legacy-blob',
+      duration: 3,
+      transcript: null,
+      createdAt: '2026-01-01T00:00:00.000Z',
+    },
+  ];
+  g.window.localStorage.setItem(
+    persistKeyForScope('legacy-user'),
+    JSON.stringify({ state: { voiceNotes: legacyVoiceNotes, aiMessages: [{ role: 'user', content: 'hi' }, { nonsense: true }] }, version: 0 }),
+  );
+  switchStoreScopeForUser(null);
+  switchStoreScopeForUser('legacy-user');
+  const state = useStore.getState();
+  assert.equal(state.voiceNotes.length, 1);
+  const vn = state.voiceNotes[0];
+  assert.equal(vn.noteId, null, 'empty-string noteId must normalize to null');
+  assert.equal(typeof vn.updatedAt, 'string', 'updatedAt must be derived from createdAt');
+  assert.equal(vn.audioUrl, null, 'dead blob: url must not survive as the primary source');
+  assert.equal(vn.audioId, null, 'legacy record gets audioId null');
+  assert.equal(vn.synced, false, 'legacy record starts pending');
+  assert.equal(vn.legacyAudioUrl, 'blob:http://localhost/legacy-blob', 'legacy url kept for same-session playback');
+  assert.equal(state.aiMessages.length, 1, 'malformed chat rows are dropped on scope switch');
+});

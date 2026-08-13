@@ -5,7 +5,12 @@ import type { StoreApi } from 'zustand';
 import type { SyncEngineStatus } from '../sync/syncEngine.ts';
 import { DAILY_GOAL, REVISION_INTERVAL_DAYS } from '../constants.ts';
 import { dateKey } from '../utils.ts';
-import { mergeGuestIntoUser, type GuestMigrationResult } from '../migration.ts';
+import {
+  mergeGuestIntoUser,
+  normalizeVoiceNote,
+  normalizeAiMessages,
+  type GuestMigrationResult,
+} from '../migration.ts';
 
 export interface Note {
   id: string;
@@ -543,33 +548,10 @@ export const useStore = create<AppState>()(
         if (!persisted || typeof persisted !== 'object') return currentState;
         const merged: AppState = { ...currentState, ...persisted };
         if (Array.isArray(persisted.voiceNotes)) {
-          merged.voiceNotes = persisted.voiceNotes.map((raw) => {
-            const vn = raw as Partial<VoiceNote> & { audioUrl?: string };
-            const createdAt = typeof vn.createdAt === 'string' ? vn.createdAt : new Date().toISOString();
-            const hasAudioId = 'audioId' in vn;
-            const legacy = !hasAudioId && typeof vn.audioUrl === 'string';
-            const normalized: VoiceNote = {
-              id: typeof vn.id === 'string' && vn.id ? vn.id : crypto.randomUUID(),
-              noteId: vn.noteId === '' ? null : vn.noteId ?? null,
-              audioId: legacy ? null : vn.audioId ?? null,
-              audioUrl: legacy ? null : typeof vn.audioUrl === 'string' ? vn.audioUrl : null,
-              synced: !legacy && typeof vn.synced === 'boolean' ? vn.synced : false,
-              updatedAt: typeof vn.updatedAt === 'string' ? vn.updatedAt : createdAt,
-              duration: typeof vn.duration === 'number' && Number.isFinite(vn.duration) ? vn.duration : 0,
-              transcript: typeof vn.transcript === 'string' ? vn.transcript : null,
-              createdAt,
-            };
-            if (legacy) normalized.legacyAudioUrl = vn.audioUrl;
-            return normalized;
-          });
+          merged.voiceNotes = persisted.voiceNotes.map(normalizeVoiceNote);
         }
         if (Array.isArray(persisted.aiMessages)) {
-          // Only durable role/content pairs survive; anything malformed is
-          // dropped so a corrupt row can never crash the chat.
-          merged.aiMessages = (persisted.aiMessages as Partial<AiChatMessage>[]).filter(
-            (m): m is AiChatMessage =>
-              !!m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string'
-          );
+          merged.aiMessages = normalizeAiMessages(persisted.aiMessages);
         }
         return merged;
       },
@@ -603,9 +585,17 @@ export function switchStoreScopeForUser(clerkUserId: string | null) {
     persisted = {};
   }
 
+  // Day 10 Task 2 — apply the SAME backward-compat normalization the persist
+  // `merge` uses on first hydration. The account-switch path previously spread
+  // raw rows, so legacy voice notes (empty-string `noteId`, missing
+  // `updatedAt`, dead blob `audioUrl`) broke LWW reconciliation and renames.
   useStore.setState({
     ...scopedDefaults(),
     ...persisted,
+    voiceNotes: Array.isArray(persisted.voiceNotes)
+      ? persisted.voiceNotes.map(normalizeVoiceNote)
+      : [],
+    aiMessages: normalizeAiMessages(persisted.aiMessages),
     // Non-persisted UI state is intentionally reset so the previous account's
     // navigation state never leaks into the next account.
     activeNoteId: null,
