@@ -59,6 +59,15 @@ export function isValidAppTab(id: string): id is AppTabId {
   return (APP_TAB_IDS as readonly string[]).includes(id);
 }
 
+// Day 9 Task 15 — the AI tutor header badge must reflect real connectivity.
+export function tutorConnectionLabel(isOffline: boolean): string {
+  return isOffline ? 'Offline' : 'Online';
+}
+
+export function tutorConnectionClass(isOffline: boolean): string {
+  return isOffline ? ' tutor-status-offline' : '';
+}
+
 // True when the browser's local/session storage is usable
 export function storageHealthy(): boolean {
   try {

@@ -2977,6 +2977,12 @@ textarea:focus-visible,
   border-radius: 50%;
   background: #10B981;
 }
+.tutor-status-offline .tutor-status-dot {
+  background: #F59E0B;
+}
+.tutor-status-offline {
+  color: #F59E0B;
+}
 
 .tutor-header-actions {
   display: flex;

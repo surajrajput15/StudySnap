@@ -5,7 +5,8 @@ import { useAuth } from '@clerk/nextjs';
 import { useStore, type Note } from '@/lib/store/useStore';
 import { API, apiFetch } from '@/lib/config';
 import { buildStudyContext, buildContextMessages } from '@/lib/ai';
-import { stripHtml } from '@/lib/utils';
+import { stripHtml, tutorConnectionLabel, tutorConnectionClass } from '@/lib/utils';
+import { classifyAiError, aiErrorMessage } from '@/lib/aiErrors';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -192,6 +193,8 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
   const activeAiTool = useStore((s) => s.activeAiTool);
   const setActiveAiTool = useStore((s) => s.setActiveAiTool);
   const notes = useStore((s) => s.notes);
+  // Day 9 Task 15 — the header badge previously claimed "Online" unconditionally.
+  const isOffline = useStore((s) => s.isOffline);
   const [authTimedOut, setAuthTimedOut] = useState(false);
 
   useEffect(() => {
@@ -412,7 +415,21 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
           setIsLoading(false);
         }, 100);
       } else {
-        renderErrorBubble(data.error && !/BACKEND|node_modules|allowedOrigins/i.test(data.error) ? data.error : 'Failed to get a response. Please try again.');
+        // Day 9 Task 17 — surface a cause-specific message instead of dumping
+        // whatever the backend sent. A clean 4xx message is still informative
+        // (e.g. "material too long"), so it is kept only for badRequest failures.
+        const cleanError =
+          data.error && !/BACKEND|node_modules|allowedOrigins/i.test(data.error) ? data.error : null;
+        const kind = classifyAiError({
+          isOffline,
+          status: data.status ?? null,
+          retryAfterMs: data.retryAfterMs ?? null,
+          message: data.error ?? null,
+          timedOut: data._timedOut,
+        });
+        renderErrorBubble(
+          kind === 'badRequest' && cleanError ? cleanError : aiErrorMessage(kind, data.retryAfterMs ?? null)
+        );
       }
     } catch (err) {
       const errorObj = err as { message?: string } | null;
@@ -423,27 +440,17 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
         return;
       }
 
-      const msg = rawMessage || 'The AI could not respond. Please try again.';
-      const isCorsError = msg.includes('CORS') || msg.includes('cross-origin');
-      const isTimeout = msg.includes('timeout') || msg.includes('timed out');
-
-      if (msg) {
-        console.warn('[AiTutor] Request failed:', msg);
+      if (rawMessage) {
+        console.warn('[AiTutor] Request failed:', rawMessage);
       }
 
-      let userMessage: string;
-      if (isCorsError) {
-        userMessage = `🔴 **Connection issue** — We couldn't reach the AI service securely.\n\n` +
-          `Please try again in a moment. If the problem persists, contact support.`;
-      } else if (isTimeout) {
-        userMessage = `⏱️ **Request Timeout** — The AI took too long to respond.\n\n` +
-          `Try asking a shorter or simpler question. The AI model may be under load.`;
-      } else {
-        userMessage = `⚠️ **Something went wrong** — We couldn't generate an AI response.\n\nPlease try again or rephrase your question.`;
-      }
-      renderErrorBubble(userMessage);
+      // Day 9 Task 17 — the catch path now classifies the same way as the
+      // response path, so CORS, timeouts and plain network drops each get a
+      // distinct, honest message.
+      const kind = classifyAiError({ isOffline, status: null, retryAfterMs: null, message: rawMessage });
+      renderErrorBubble(aiErrorMessage(kind));
     }
-  }, [addStreamingMessage, finalizeStreaming, getToken, renderErrorBubble]);
+  }, [addStreamingMessage, finalizeStreaming, getToken, isOffline, renderErrorBubble]);
 
   // Day 9 Task 2 — the request always carries the CURRENT study context (note or
   // attached file). Material is attached to the latest user message only, so the
@@ -645,9 +652,9 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
           <button className="tutor-new-chat-btn" onClick={handleNewChat} title="Start a new chat" aria-label="Start a new chat">
             <MessageSquarePlus size={16} />
           </button>
-          <div className="tutor-status">
+          <div className={`tutor-status${tutorConnectionClass(isOffline)}`} title={isOffline ? 'You are offline — answers may be limited' : undefined}>
             <span className="tutor-status-dot" />
-            Online
+            {tutorConnectionLabel(isOffline)}
           </div>
         </div>
       </div>

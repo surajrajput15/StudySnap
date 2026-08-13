@@ -59,6 +59,8 @@ export interface ApiResponse {
   /** Server-provided delay (ms) before the caller may retry, parsed from the
    *  `Retry-After` response header. Absent when no header was sent. */
   retryAfterMs?: number;
+  /** True when the request layer aborted on its own client-side timeout. */
+  _timedOut?: boolean;
 }
 
 /** Parses the `Retry-After` header into milliseconds. Accepts either a
