@@ -78,7 +78,7 @@ function lastError(engine: SyncEngine): string | null {
 }
 
 beforeEach(() => {
-  clock.enable({ apis: ['setTimeout', 'Date'] });
+  clock.enable({ apis: ['setTimeout', 'setInterval', 'Date'] });
   g.window = new FakeEventTarget();
   g.document = Object.assign(new FakeEventTarget(), { visibilityState: 'visible' as DocumentVisibilityState });
   // Node 21+ ships a `navigator` global; replace it with a controllable stub.
@@ -493,4 +493,135 @@ test('getStatus returns a snapshot copy, not a live reference', () => {
 test('scopeKey is exposed for per-account identification', () => {
   const { engine } = makeSuccessEngine();
   assert.equal(engine.scopeKey, 'test-scope');
+});
+
+test('periodic catch-up: an idle tab keeps running a scheduled sync on the interval', async () => {
+  const { engine, calls } = makeSuccessEngine({ periodicIntervalMs: 100 });
+  engine.start();
+  await flush();
+  assert.equal(calls(), 1, 'initial run');
+
+  await advance(100);
+  assert.equal(calls(), 2, 'periodic scheduled run after one interval');
+  await advance(100);
+  assert.equal(calls(), 3, 'periodic keeps ticking while started');
+  engine.stop();
+  await advance(200);
+  assert.equal(calls(), 3, 'no periodic tick after stop()');
+});
+
+test('periodic catch-up does not defeat a backoff cooldown', async () => {
+  const originalRandom = Math.random;
+  Math.random = () => 0.5;
+  let calls = 0;
+  const engine = createSyncEngine(
+    'test-scope-cooldown',
+    {
+      runTasks: () => {
+        calls += 1;
+        throw new Error('boom');
+      },
+    },
+    { jitterRatio: 0, periodicIntervalMs: 50 }
+  );
+
+  engine.start();
+  await flush();
+  assert.equal(calls, 1);
+  assert.equal(engine.getStatus().phase, 'cooldown');
+
+  // Several periodic intervals elapse while cooldown is active — the retry
+  // staircase (first retry at 2s) must be the ONLY thing to fire.
+  await advance(1000);
+  assert.equal(calls, 1, 'periodic tick suppressed during cooldown');
+  engine.stop();
+  Math.random = originalRandom;
+});
+
+test('periodic catch-up is skipped while offline and resumes on reconnect', async () => {
+  let calls = 0;
+  const engine = createSyncEngine(
+    'test-scope-offline-periodic',
+    {
+      runTasks: () => {
+        calls += 1;
+        return Promise.resolve();
+      },
+    },
+    { periodicIntervalMs: 50 }
+  );
+
+  setOnline(false);
+  engine.start();
+  await flush();
+  assert.equal(calls, 0, 'offline start does not run');
+
+  await advance(100);
+  assert.equal(calls, 0, 'periodic tick skipped while offline');
+
+  setOnline(true);
+  g.window.dispatch('online');
+  await flush();
+  assert.equal(calls, 1, 'reconnect run fires');
+  engine.stop();
+});
+
+test('broadcast: a successful sync wakes sibling tabs for the same scope', async () => {
+  let aCalls = 0;
+  let bCalls = 0;
+  const engineA = createSyncEngine('test-scope-bc', {
+    runTasks: () => {
+      aCalls += 1;
+      return Promise.resolve();
+    },
+  });
+  const engineB = createSyncEngine('test-scope-bc', {
+    runTasks: () => {
+      bCalls += 1;
+      return Promise.resolve();
+    },
+  });
+
+  engineB.start();
+  await flush();
+  assert.equal(bCalls, 1, 'tab B initial sync');
+
+  // Tab A runs and succeeds → posts a broadcast that B answers once.
+  engineA.start();
+  await flush();
+  assert.equal(aCalls, 1, 'tab A initial sync');
+
+  // Broadcast delivery is asynchronous (setImmediate stays unmocked while
+  // setTimeout is clock-mocked, so flush() a few turns for delivery).
+  for (let i = 0; i < 5; i++) await flush();
+  assert.equal(bCalls, 2, 'tab B answered the sibling wake-up');
+
+  // The broadcast-triggered run must NOT re-broadcast (no ping-pong).
+  for (let i = 0; i < 5; i++) await flush();
+  assert.equal(aCalls, 1, 'tab A did not run again from its own broadcast');
+  assert.equal(bCalls, 2, 'tab B did not cascade another broadcast back');
+
+  engineA.stop();
+  engineB.stop();
+});
+
+test('broadcast is per-scope — a different account is never woken', async () => {
+  let bCalls = 0;
+  const engineA = createSyncEngine('test-scope-bc-a', {
+    runTasks: () => Promise.resolve(),
+  });
+  const engineB = createSyncEngine('test-scope-bc-b', {
+    runTasks: () => {
+      bCalls += 1;
+      return Promise.resolve();
+    },
+  });
+
+  engineB.start();
+  engineA.start();
+  await flush();
+  for (let i = 0; i < 5; i++) await flush();
+  assert.equal(bCalls, 1, 'tab B only ran its own initial sync, never A broadcast');
+  engineA.stop();
+  engineB.stop();
 });

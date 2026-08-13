@@ -14,8 +14,17 @@
  *    via Retry-After (never fires before the server's requested delay).
  *  - Offline handling: runs are skipped while `navigator.onLine` is false and
  *    resumes on the `online` event.
+ *  - Periodic catch-up: while started, a `scheduled` run fires every
+ *    `periodicIntervalMs` so an idle, foreground tab keeps pulling server-side
+ *    changes made on other devices (Day 10 Task 4). The tick is suppressed
+ *    during a backoff cooldown so it can never defeat the retry staircase.
+ *  - Cross-tab sync: after a non-broadcast run succeeds, a `BroadcastChannel`
+ *    (named per scope) posts a wake-up; sibling tabs for the SAME scope run a
+ *    `broadcast`-triggered sync in response. Broadcast-triggered runs do NOT
+ *    re-broadcast, so two tabs can never ping-pong syncs forever.
  *  - Triggers: initial start, `online`/`offline` events, `visibilitychange`
- *    (catches up a throttled-background retry), and manual `requestSync()`.
+ *    (catches up a throttled-background retry), manual `requestSync()`, the
+ *    periodic interval, and a sibling tab's broadcast.
  *  - StrictMode-safe start/stop: `start()` is idempotent and `stop()` tears
  *    down timers and listeners, so React's double-invocated effects are safe.
  *  - Per-user/account isolation: each account owns its own engine instance and
@@ -69,6 +78,12 @@ export interface SyncEngineTiming {
   maxBackoffMs?: number;
   /** Jitter ratio around the base (0..1). Default 0.3. */
   jitterRatio?: number;
+  /**
+   * How often a `scheduled` catch-up run fires while started (ms).
+   * Default 60000 (1 min). Set to 0 to disable periodic catch-up entirely.
+   * Suppressed while a backoff cooldown or an in-flight run is active.
+   */
+  periodicIntervalMs?: number;
 }
 
 export interface SyncEngine {
@@ -86,8 +101,9 @@ export interface SyncEngine {
 const DEFAULT_MIN_BACKOFF_MS = 2000;
 const DEFAULT_MAX_BACKOFF_MS = 60000;
 const DEFAULT_JITTER_RATIO = 0.3;
+const DEFAULT_PERIODIC_INTERVAL_MS = 60000;
 
-export type SyncTrigger = 'initial' | 'scheduled' | 'manual' | 'reconnect' | 'visibility';
+export type SyncTrigger = 'initial' | 'scheduled' | 'manual' | 'reconnect' | 'visibility' | 'broadcast';
 
 /**
  * Fine-grained status emitted by the sync LAYERS (notesSync.ts, voiceNotesSync.ts)
@@ -129,6 +145,7 @@ export function createSyncEngine(
   const minBackoffMs = timing.minBackoffMs ?? DEFAULT_MIN_BACKOFF_MS;
   const maxBackoffMs = timing.maxBackoffMs ?? DEFAULT_MAX_BACKOFF_MS;
   const jitterRatio = Math.min(1, Math.max(0, timing.jitterRatio ?? DEFAULT_JITTER_RATIO));
+  const periodicIntervalMs = Math.max(0, timing.periodicIntervalMs ?? DEFAULT_PERIODIC_INTERVAL_MS);
   const { runTasks } = callbacks;
   const emit = callbacks.onStatus;
 
@@ -139,6 +156,8 @@ export function createSyncEngine(
   let coalesced = false;
   let backoff = minBackoffMs;
   let timer: ReturnType<typeof setTimeout> | null = null;
+  let periodicTimer: ReturnType<typeof setInterval> | null = null;
+  let channel: BroadcastChannel | null = null;
 
   let status: SyncEngineStatus = {
     phase: 'idle',
@@ -181,7 +200,51 @@ export function createSyncEngine(
     }, delayMs);
   }
 
-  async function run(_trigger: SyncTrigger): Promise<void> {
+  /** Wakes sibling tabs for the SAME scope so they pull the fresh server state.
+   *  The message is a scope-keyed tag; other tabs ignore it when their scope
+   *  differs (they have a separate channel, so this is inherently per-scope). */
+  function broadcastSync(): void {
+    if (!channel) return;
+    try {
+      channel.postMessage('synced');
+    } catch {
+      // channel closed concurrently — ignore
+    }
+  }
+
+  function setupChannel(): void {
+    if (typeof BroadcastChannel === 'undefined' || stopped) return;
+    try {
+      channel = new BroadcastChannel(`studysnap:sync:${scopeKey}`);
+      channel.onmessage = (event: MessageEvent) => {
+        if (stopped || event.data !== 'synced') return;
+        // Broadcast-triggered runs never re-broadcast (see run): a sibling's
+        // wake-up is answered with one sync, and that sync does not cascade.
+        void run('broadcast');
+      };
+    } catch {
+      channel = null; // BroadcastChannel unavailable → cross-tab sync degrades to periodic only
+    }
+  }
+
+  function teardownChannel(): void {
+    if (channel) {
+      try { channel.close(); } catch { /* ignore */ }
+      channel = null;
+    }
+  }
+
+  /** Periodic catch-up: an idle foreground tab must keep pulling server-side
+   *  changes made on other devices. Suppressed while a backoff cooldown or an
+   *  in-flight run is active so the retry staircase is never defeated, and
+   *  skipped while offline (run() handles that path). */
+  function tickPeriodic(): void {
+    if (stopped) return;
+    if (running || status.phase === 'cooldown') return;
+    void run('scheduled');
+  }
+
+  async function run(trigger: SyncTrigger): Promise<void> {
     if (stopped) return;
     if (running) {
       // Single-flight: remember the request, serve it exactly once afterwards.
@@ -205,6 +268,11 @@ export function createSyncEngine(
       await runTasks({ scopeKey });
       // Success resets the retry staircase so the next failure starts fresh.
       backoff = minBackoffMs;
+      // A broadcast-triggered run must not cascade: it already answered a
+      // sibling's wake-up, and re-broadcasting would ping-pong syncs forever.
+      // The coalesced follow-up carries the ORIGINAL trigger so it follows the
+      // same rule (a broadcast that arrived mid-run never re-broadcasts).
+      if (trigger !== 'broadcast') broadcastSync();
       setStatus({
         phase: 'idle',
         inFlight: false,
@@ -249,7 +317,7 @@ export function createSyncEngine(
     if (coalesced && !stopped) {
       coalesced = false;
       setStatus({ pending: false });
-      void run('manual');
+      void run(trigger);
     }
   }
 
@@ -286,6 +354,10 @@ export function createSyncEngine(
       if (typeof document !== 'undefined') {
         document.addEventListener('visibilitychange', handleVisibility);
       }
+      setupChannel();
+      if (periodicIntervalMs > 0) {
+        periodicTimer = setInterval(tickPeriodic, periodicIntervalMs);
+      }
       void run('initial');
     },
 
@@ -294,6 +366,11 @@ export function createSyncEngine(
       started = false;
       stopped = true;
       clearTimer();
+      if (periodicTimer !== null) {
+        clearInterval(periodicTimer);
+        periodicTimer = null;
+      }
+      teardownChannel();
       if (typeof window !== 'undefined') {
         window.removeEventListener('online', handleConnectivity);
         window.removeEventListener('offline', handleConnectivity);
