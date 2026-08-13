@@ -812,3 +812,36 @@ export async function deleteRemoteNote(noteId: string, getToken: TokenFn): Promi
     // tombstone stays for a later retry
   }
 }
+
+/**
+ * Day 9 Task 3 — folder deletion is a destructive data-integrity operation.
+ *
+ * Deleting a folder permanently deletes every note inside it, and those notes
+ * ride the EXACT same safe path as an individually deleted note (store removal
+ * via deleteNote + the deleteRemoteNote tombstone pipeline). Consequences:
+ *
+ *  - A user-scoped tombstone is recorded for every affected note immediately,
+ *    so the next hydration/merge filters the server copy out and can never
+ *    re-adopt it (no resurrection with a null folderId).
+ *  - A remote DELETE is issued per note through attemptRemoteDelete. Failures
+ *    keep the tombstone and are retried by flushPendingDeletes on later syncs
+ *    until the server confirms — the app never silently claims a permanent
+ *    remote deletion it did not achieve.
+ *  - The affected set is snapshotted BEFORE any mutation, so the loop can never
+ *    be disturbed by the store changing under it.
+ *
+ * Returns the deleted notes (useful to callers and tests). Never throws. In the
+ * guest scope deleteRemoteNote no-ops (guests have no server to resurrect
+ * from), so the folder + notes are removed locally only — exactly the existing
+ * individual-note guest behavior.
+ */
+export function deleteFolderWithNotes(folderId: string, getToken: TokenFn): Note[] {
+  const state = useStore.getState();
+  const affected = state.notes.filter((n) => n.folderId === folderId);
+  for (const note of affected) {
+    state.deleteNote(note.id);
+    void deleteRemoteNote(note.id, getToken);
+  }
+  state.deleteFolder(folderId);
+  return affected;
+}

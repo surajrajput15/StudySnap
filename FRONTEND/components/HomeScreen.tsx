@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { useStore } from '@/lib/store/useStore';
+import { useStore, type Folder } from '@/lib/store/useStore';
 import {
   Sparkles, BookOpen, FileText, Clock,
   Target, ChevronRight, Play, BarChart3,
@@ -15,7 +15,7 @@ import HeroAI from './HeroAI';
 import { WEEKDAYS, DAILY_GOAL, AI_TOOLS } from '@/lib/constants';
 import { formatShortDate, stripHtml } from '@/lib/utils';
 import { pinMatchesStored } from '@/lib/pin';
-import { deleteRemoteNote } from '@/lib/sync/notesSync';
+import { deleteRemoteNote, deleteFolderWithNotes } from '@/lib/sync/notesSync';
 import { useAuth } from '@clerk/nextjs';
 
 interface HomeScreenProps {
@@ -68,7 +68,6 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
   const searchQuery = useStore((s) => s.searchQuery);
   const addFolder = useStore((s) => s.addFolder);
   const addCategory = useStore((s) => s.addCategory);
-  const deleteFolder = useStore((s) => s.deleteFolder);
   const deleteCategory = useStore((s) => s.deleteCategory);
   const setActiveFolderId = useStore((s) => s.setActiveFolderId);
   const setActiveCategoryId = useStore((s) => s.setActiveCategoryId);
@@ -90,6 +89,10 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryColor, setNewCategoryColor] = useState('#0061A4');
   const [showCategoryModal, setShowCategoryModal] = useState(false);
+  // Day 9 Task 3 — folder deletion is destructive (it permanently deletes the
+  // notes inside). We never delete on first click: a confirmation modal opens,
+  // and only its confirm button performs the deletion.
+  const [folderToDelete, setFolderToDelete] = useState<Folder | null>(null);
   const [pinInput, setPinInput] = useState('');
   const [unlockNoteId, setUnlockNoteId] = useState<string | null>(null);
   const [pinError, setPinError] = useState(false);
@@ -151,6 +154,25 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
     void deleteRemoteNote(noteId, () => getToken());
   };
 
+  // Day 9 Task 3 — open the confirmation dialog. Nothing is deleted here.
+  const handleDeleteFolder = (folder: Folder) => {
+    setFolderToDelete(folder);
+  };
+
+  // Confirm button: perform the destructive cascade using the safe per-note
+  // deletion path (local removal + tombstone + remote DELETE) so the affected
+  // notes can never resurrect from the server on the next sync.
+  const confirmDeleteFolder = () => {
+    if (!folderToDelete) return;
+    const folder = folderToDelete;
+    setFolderToDelete(null);
+    deleteFolderWithNotes(folder.id, () => getToken());
+  };
+
+  const cancelDeleteFolder = () => {
+    setFolderToDelete(null);
+  };
+
   // Central gate for opening a note: locked notes first ask for their PIN
   // (the hash is verified before the editor is opened), unlocked notes open
   // directly.
@@ -187,11 +209,12 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
       if (e.key !== 'Escape') return;
       if (showFolderModal) setShowFolderModal(false);
       if (showCategoryModal) setShowCategoryModal(false);
+      if (folderToDelete) setFolderToDelete(null);
       if (unlockNoteId) setUnlockNoteId(null);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [showFolderModal, showCategoryModal, unlockNoteId]);
+  }, [showFolderModal, showCategoryModal, folderToDelete, unlockNoteId]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
@@ -562,7 +585,7 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
                     boxShadow: 'var(--elevation-1)' }}>
                   📁 {folder.name}
                 </button>
-                <button onClick={() => deleteFolder(folder.id)} aria-label={`Delete folder ${folder.name}`} style={{ border: 'none', background: 'none', padding: '4px', cursor: 'pointer', color: 'var(--error)', fontSize: '14px' }}>×</button>
+                <button onClick={() => handleDeleteFolder(folder)} aria-label={`Delete folder ${folder.name}`} style={{ border: 'none', background: 'none', padding: '4px', cursor: 'pointer', color: 'var(--error)', fontSize: '14px' }}>×</button>
               </div>
             ))}
           </div>
@@ -684,6 +707,32 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
               <button type="submit" className="md3-btn md3-btn-primary">Add</button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* ─── Folder delete confirmation ─── */}
+      {folderToDelete && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="folder-delete-title" onClick={cancelDeleteFolder}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <h3 id="folder-delete-title" style={{ fontSize: '18px', marginBottom: '12px' }}>Delete folder?</h3>
+            {(() => {
+              const count = notes.filter((n) => n.folderId === folderToDelete.id).length;
+              return count > 0 ? (
+                <p style={{ fontSize: '14px', color: 'var(--on-surface-variant)', lineHeight: 1.5 }}>
+                  <strong>&quot;{folderToDelete.name}&quot;</strong> contains {count} note{count === 1 ? '' : 's'}. Deleting this folder
+                  permanently deletes {count === 1 ? 'it' : 'them'} too. This cannot be undone.
+                </p>
+              ) : (
+                <p style={{ fontSize: '14px', color: 'var(--on-surface-variant)', lineHeight: 1.5 }}>
+                  Delete folder <strong>&quot;{folderToDelete.name}&quot;</strong>?
+                </p>
+              );
+            })()}
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>
+              <button type="button" onClick={cancelDeleteFolder} className="md3-btn md3-btn-text">Cancel</button>
+              <button type="button" onClick={confirmDeleteFolder} className="md3-btn md3-btn-primary" style={{ background: 'var(--error)', borderColor: 'var(--error)' }}>Delete</button>
+            </div>
+          </div>
         </div>
       )}
 
