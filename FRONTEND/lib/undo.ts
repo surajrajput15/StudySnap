@@ -10,6 +10,7 @@ export const DELETE_UNDO_WINDOW_MS = 5000;
 interface PendingDelete {
   id: number;
   label: string;
+  key?: string;
   timer: ReturnType<typeof setTimeout>;
   perform: () => void;
 }
@@ -32,8 +33,10 @@ function clearPendingTimer(): void {
 /** Schedules `perform` to run after `windowMs` unless undone first. A previous
  *  pending deletion that is superseded is STILL honored: its `perform` runs
  *  immediately instead of being silently dropped, so an item the user already
- *  saw a "deleted" toast for can never stay on-screen AND on the server. */
-export function deferDelete(label: string, perform: () => void, windowMs: number = DELETE_UNDO_WINDOW_MS): void {
+ *  saw a "deleted" toast for can never stay on-screen AND on the server.
+ *  An optional `key` lets callers cancel a specific pending deletion (e.g. when
+ *  the user re-opens a note that is still inside its undo window). */
+export function deferDelete(label: string, perform: () => void, windowMs: number = DELETE_UNDO_WINDOW_MS, key?: string): void {
   if (pendingDelete) {
     clearTimeout(pendingDelete.timer);
     pendingDelete.perform();
@@ -44,7 +47,7 @@ export function deferDelete(label: string, perform: () => void, windowMs: number
     pendingDelete = null;
     emit();
   }, windowMs);
-  pendingDelete = { id: nextId++, label, timer, perform };
+  pendingDelete = { id: nextId++, label, key, timer, perform };
   emit();
 }
 
@@ -52,6 +55,16 @@ export function deferDelete(label: string, perform: () => void, windowMs: number
 export function undoDelete(): void {
   clearPendingTimer();
   emit();
+}
+
+/** Cancels the pending deletion ONLY when it was scheduled with the given key.
+ *  Used to cancel a pending note delete when the user re-opens that note within
+ *  the undo window, so editing it cannot be silently reverted mid-delete. */
+export function cancelPendingDeleteFor(key: string): void {
+  if (pendingDelete && pendingDelete.key === key) {
+    clearPendingTimer();
+    emit();
+  }
 }
 
 /** Current pending deletion for the toast UI, or null. */

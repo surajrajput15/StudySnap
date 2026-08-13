@@ -65,7 +65,22 @@ export default function GamificationHub() {
   // Day 9 Task 12 — generate the weekly challenge ONLY when there is no stored
   // one, it is not a trackable type (legacy 'weekly-challenge' ids), or it
   // belongs to a previous week. A stale challenge must never linger forever.
-  const weekStartIso = useMemo(() => startOfWeek().toISOString().split('T')[0], []);
+  // Day 10 Task 1 — the week key is recomputed reactively instead of once at
+  // mount: an app left open across Monday 00:00 previously kept showing last
+  // week's challenge/target while progress was already computed against the new
+  // week. A visibilitychange + hourly timer refresh the key so a stale challenge
+  // is regenerated on the very first tick after the boundary.
+  const [weekStartIso, setWeekStartIso] = useState<string>(() => startOfWeek().toISOString().split('T')[0]);
+  useEffect(() => {
+    const refresh = () => setWeekStartIso(startOfWeek().toISOString().split('T')[0]);
+    const handleVisibility = () => { if (document.visibilityState === 'visible') refresh(); };
+    const interval = setInterval(refresh, 60 * 60 * 1000);
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, []);
   useEffect(() => {
     const known = WEEKLY_CHALLENGES.some((c) => c.id === weeklyChallenge?.id);
     const stale = weeklyChallenge !== null && weeklyChallenge.weekStart !== weekStartIso;
@@ -107,8 +122,11 @@ export default function GamificationHub() {
 
   const weeklyHours = useMemo(() => {
     const dayCounts = [0, 0, 0, 0, 0, 0, 0];
-    const weekStart = new Date();
-    weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1);
+    // Day 10 Task 1 — reuse the shared startOfWeek() boundary: the old inline
+    // `getDate() - getDay() + 1` computed NEXT Monday on Sundays (getDay()===0),
+    // making the "This Week" chart empty for every Sunday. The shared helper
+    // maps Sunday to the current week's Monday.
+    const weekStart = startOfWeek();
     for (const log of revisionLogs) {
       const d = new Date(log.revisedAt);
       if (d >= weekStart) {

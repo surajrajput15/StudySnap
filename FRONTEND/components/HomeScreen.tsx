@@ -16,7 +16,7 @@ import { WEEKDAYS, DAILY_GOAL, AI_TOOLS } from '@/lib/constants';
 import { formatShortDate, stripHtml, hasActiveSearch, noteMatchesSearch, SEARCH_EMPTY_MESSAGE, SEARCH_EMPTY_TIP } from '@/lib/utils';
 import { pinMatchesStored } from '@/lib/pin';
 import { deleteRemoteNote, deleteFolderWithNotes } from '@/lib/sync/notesSync';
-import { deferDelete } from '@/lib/undo';
+import { deferDelete, cancelPendingDeleteFor } from '@/lib/undo';
 import { useAuth } from '@clerk/nextjs';
 
 interface HomeScreenProps {
@@ -153,7 +153,7 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
     deferDelete(label, () => {
       deleteNote(noteId);
       void deleteRemoteNote(noteId, () => getToken());
-    });
+    }, undefined, noteId);
   };
 
   // Day 9 Task 3 — open the confirmation dialog. Nothing is deleted here.
@@ -179,6 +179,11 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
   // (the hash is verified before the editor is opened), unlocked notes open
   // directly.
   const openNote = (id: string) => {
+    // Day 10 Task 1 — a note inside its delete-undo window is still listed and
+    // clickable. Opening it cancels that pending delete: the user clearly wants
+    // the note, and letting the deferred delete fire mid-edit silently loses
+    // their work (the editor's autosave finds no note and no-ops).
+    cancelPendingDeleteFor(id);
     const target = notes.find(n => n.id === id);
     if (target?.pinLock) {
       setPinInput('');

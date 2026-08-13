@@ -64,12 +64,15 @@ export default function Page() {
   // recording alive; confirm navigates (VoiceNotes' own unmount cleanup then
   // discards the uncommitted recording). The VoiceNotes back button keeps its
   // self-guard and calls setActiveTab directly to avoid a double confirmation.
-  const navigate = (nextTab: string) => {
+  // Returns true only when the navigation actually happened, so callers (e.g.
+  // the mobile drawer) know whether to close.
+  const navigate = (nextTab: string): boolean => {
     if (shouldConfirmRecordingNav(activeTab, nextTab, voiceRecording)) {
       const leave = window.confirm(RECORDING_NAV_CONFIRM_MESSAGE);
-      if (!leave) return;
+      if (!leave) return false;
     }
     setActiveTab(nextTab);
+    return true;
   };
 
   useEffect(() => {
@@ -184,8 +187,8 @@ export default function Page() {
   // Day 9 Task 8 — the mobile drawer only contains real, rendered tabs now, so
   // navigation is a direct tab switch through the guarded chokepoint (the old
   // folders/favorites/statistics/settings/about alias routing is gone).
-  const handleDrawerNav = (tab: string) => {
-    navigate(tab);
+  const handleDrawerNav = (tab: string): boolean => {
+    return navigate(tab);
   };
 
   const navItems = [

@@ -5,6 +5,7 @@ import {
   undoDelete,
   getPendingDelete,
   subscribeDeleteUndo,
+  cancelPendingDeleteFor,
 } from '../lib/undo.ts';
 
 // Day 9 Task 9 — a single-click delete is deferred for an undo window; the real
@@ -87,4 +88,26 @@ test('undo after the window expires is a no-op', async () => {
   assert.equal(ran, 1);
   undoDelete();
   assert.equal(getPendingDelete(), null);
+});
+
+test('a pending delete is cancelled when its key is re-opened (no perform)', async () => {
+  undoDelete();
+  let ran = 0;
+  deferDelete('Note "G" deleted', () => { ran += 1; }, 20, 'note-123');
+  cancelPendingDeleteFor('note-123');
+  assert.equal(ran, 0, 'cancelling by key must not perform the delete');
+  assert.equal(getPendingDelete(), null, 'pending delete is cleared');
+  await wait(60);
+  assert.equal(ran, 0, 'the deferred delete must never fire after cancel');
+});
+
+test('cancelling by a different key leaves the pending delete intact', async () => {
+  undoDelete();
+  let ran = 0;
+  deferDelete('Note "H" deleted', () => { ran += 1; }, 20, 'note-aaa');
+  cancelPendingDeleteFor('note-bbb');
+  assert.equal(ran, 0);
+  assert.ok(getPendingDelete(), 'pending delete still present for another key');
+  await wait(60);
+  assert.equal(ran, 1, 'unrelated key must not cancel the deletion');
 });

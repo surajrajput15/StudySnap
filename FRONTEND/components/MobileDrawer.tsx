@@ -14,7 +14,7 @@ interface MobileDrawerProps {
   open: boolean;
   onClose: () => void;
   activeTab: string;
-  onNavigate: (tab: string) => void;
+  onNavigate: (tab: string) => boolean;
 }
 
 // Day 9 Task 8 — every item here must map to a real, rendered tab (validated
@@ -94,11 +94,16 @@ export default function MobileDrawer({ open, onClose, activeTab, onNavigate }: M
       document.removeEventListener('keydown', onKeyDown);
       lastFocusedRef.current?.focus();
     };
-  }, [open, onClose]);
+  }, [open]);
 
+  // Day 10 Task 1 — the drawer closes only when navigation actually happened.
+  // Previously `handleNav` closed unconditionally, so declining the "still
+  // recording — leave?" confirm (which keeps the user on the voice tab) still
+  // dismissed the drawer, leaving the app looking like the tab changed.
   const handleNav = (id: string) => {
-    onNavigate(id);
-    onClose();
+    if (onNavigate(id)) {
+      onClose();
+    }
   };
 
   const userDisplayName = user?.fullName || 'Student';

@@ -29,8 +29,16 @@ test('production CSP uses no broad wildcard sources', () => {
   assert.ok(!tokens.includes('https://*'), 'no https://* wildcard source');
   assert.ok(!tokens.includes('http://*'), 'no http://* wildcard source');
   assert.ok(!tokens.includes('*'), 'no bare * source');
-  assert.ok(!tokens.includes('https:'), 'no scheme-only https: source');
-  assert.ok(!tokens.includes('http:'), 'no scheme-only http: source');
+  // img-src deliberately allows scheme-only https:/http: so the note editor can
+  // display images the user pasted from any host; every other directive must
+  // keep an explicit allow-list.
+  const nonImg = csp
+    .split(';')
+    .map((p) => p.trim())
+    .filter((p) => p && !p.startsWith('img-src'))
+    .join(';');
+  assert.ok(!nonImg.split(/[;\s]+/).includes('https:'), 'no scheme-only https: source outside img-src');
+  assert.ok(!nonImg.split(/[;\s]+/).includes('http:'), 'no scheme-only http: source outside img-src');
 });
 
 test('locking directives are present and tight', () => {
@@ -50,9 +58,10 @@ test('scripts/styles only come from self, Clerk and the bundled Google Fonts', (
   assert.ok(hasSource(csp, 'script-src', 'https://js.clerk.com'));
   assert.ok(hasSource(csp, 'script-src', 'https://*.clerk.com'));
   assert.ok(hasSource(csp, 'script-src', 'https://*.clerk.accounts.dev'));
+  assert.ok(hasSource(csp, 'script-src', 'https://challenges.cloudflare.com'));
   assert.ok(hasSource(csp, 'style-src', "'unsafe-inline'"));
   assert.ok(hasSource(csp, 'style-src', 'https://fonts.googleapis.com'));
-  assert.equal(directive(csp, 'script-src').split(/\s+/).length, 5, 'script-src stays an explicit allow-list');
+  assert.equal(directive(csp, 'script-src').split(/\s+/).length, 6, 'script-src stays an explicit allow-list');
 });
 
 test('Cloudinary audio and Google font files are the only media/font hosts', () => {

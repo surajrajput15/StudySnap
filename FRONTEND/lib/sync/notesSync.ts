@@ -1,6 +1,7 @@
 import { useStore, getStoreScopeKey, type Note } from '../store/useStore.ts';
 import { API, apiFetch } from '../config.ts';
 import type { SyncChildStatusEvent } from './syncEngine.ts';
+import { cancelPendingDeleteFor } from '../undo.ts';
 
 /**
  * Day 5 — Notes sync layer (Phase 2).
@@ -485,6 +486,28 @@ async function seedLocalNotes(localNotes: Note[], userId: string, token: string)
     if (!isUserScopeActive(userId)) return false;
     const server = await guardedUpsert(userId, note, token);
     if (!server) return false;
+    // Day 10 Task 1 — apply the same live-edit guard the merge path uses. The
+    // seed snapshot can race a concurrent autosave (a newer edit landing while
+    // the older snapshot's POST is in flight). Without this, the server row the
+    // seed just wrote carries a minted clock NEWER than the local edit, so the
+    // NEXT merge's pure LWW comparison rolls the newer edit back. Mirroring the
+    // toUpload loop: if the live note is strictly newer than the snapshot, keep
+    // the local clock and record the stale server row as superseded; otherwise
+    // adopt the confirmed server clock so the note stops looking locally-newer.
+    if (!isUserScopeActive(userId)) return false;
+    const live = useStore.getState().notes.find((n) => n.id === note.id);
+    const localTime = new Date(note.updatedAt).getTime();
+    const liveTime = live ? new Date(live.updatedAt).getTime() : Number.NaN;
+    if (!Number.isNaN(liveTime) && liveTime > localTime) {
+      if (server.updatedAt) recordSuperseded(userId, note.id, server.updatedAt);
+      continue;
+    }
+    if (live) {
+      useStore.setState((s) => ({
+        notes: s.notes.map((n) => (n.id === note.id ? { ...n, updatedAt: server.updatedAt } : n)),
+      }));
+      clearSuperseded(userId, note.id);
+    }
   }
   return true;
 }
@@ -845,6 +868,11 @@ export function deleteFolderWithNotes(folderId: string, getToken: TokenFn): Note
   const state = useStore.getState();
   const affected = state.notes.filter((n) => n.folderId === folderId);
   for (const note of affected) {
+    // Day 10 Task 1 — a note inside its delete-undo window must not hold a
+    // pending deferred delete after the folder cascade already removed it: the
+    // toast would offer an Undo that can no longer resurrect the note. Cancel
+    // it first so the deferred delete never fires against an already-deleted id.
+    cancelPendingDeleteFor(note.id);
     state.deleteNote(note.id);
     void deleteRemoteNote(note.id, getToken);
   }

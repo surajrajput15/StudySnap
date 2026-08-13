@@ -63,9 +63,9 @@ function connectSrcFor(backendOrigin: string | null): string {
 export function buildProductionCspHeader(options: ProductionCspOptions): string {
   const directives = [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' https://js.clerk.com https://*.clerk.com https://*.clerk.accounts.dev",
+    "script-src 'self' 'unsafe-inline' https://js.clerk.com https://*.clerk.com https://*.clerk.accounts.dev https://challenges.cloudflare.com",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://*.clerk.com",
-    "img-src 'self' data: blob: https://img.clerk.com",
+    "img-src 'self' data: blob: https://img.clerk.com https: http:",
     "font-src 'self' data: https://fonts.gstatic.com",
     "media-src 'self' blob: https://res.cloudinary.com",
     connectSrcFor(options.backendOrigin),
