@@ -23,6 +23,42 @@ export function shouldConfirmRecordingNav(currentTab: string, nextTab: string, r
   return recording && currentTab === 'voice' && nextTab !== 'voice';
 }
 
+// Day 9 Task 6 — true when a search query is actually active (non-empty after
+// trimming). Guards whether the "no results" empty state is shown instead of
+// the generic first-run "no notes yet" state.
+export function hasActiveSearch(query: string): boolean {
+  return query.trim().length > 0;
+}
+
+// Day 9 Task 6 — search semantics for a note: a blank query matches everything
+// (no filtering); otherwise the title, content or any tag must contain the
+// (case-insensitive) query.
+export function noteMatchesSearch(query: string, note: { title: string; content: string; tags: string[] }): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return (
+    note.title.toLowerCase().includes(q) ||
+    note.content.toLowerCase().includes(q) ||
+    note.tags.some((t) => t.toLowerCase().includes(q))
+  );
+}
+
+// Day 9 Task 6 — copy for the search-specific empty state (shown only when a
+// search is active but no note matches).
+export const SEARCH_EMPTY_MESSAGE = 'Try different keywords, or clear the search to see all your notes.';
+export const SEARCH_EMPTY_TIP = 'Search matches titles, content, and tags.';
+
+// Day 9 Task 8 — the canonical, genuinely rendered app tabs. Every navigation
+// entry point (mobile drawer, sidebar, rail, bottom nav) must map to one of
+// these — a drawer item that collapses onto another tab with no real view (the
+// old Folders/Favorites/Statistics/Settings/About aliases) is a dead item.
+export const APP_TAB_IDS = ['home', 'editor', 'voice', 'calendar', 'ai', 'gamification', 'profile'] as const;
+export type AppTabId = (typeof APP_TAB_IDS)[number];
+
+export function isValidAppTab(id: string): id is AppTabId {
+  return (APP_TAB_IDS as readonly string[]).includes(id);
+}
+
 // True when the browser's local/session storage is usable
 export function storageHealthy(): boolean {
   try {

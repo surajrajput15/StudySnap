@@ -68,6 +68,23 @@ export function EmptyVoiceIllustration() {
   );
 }
 
+export function EmptySearchIllustration() {
+  return (
+    <svg width="160" height="120" viewBox="0 0 160 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="72" cy="56" r="30" fill="var(--primary-container)" opacity="0.4"/>
+      <circle cx="72" cy="56" r="22" fill="none" stroke="var(--primary)" strokeWidth="2.5"/>
+      <path d="M50 50a22 22 0 0 1 22-22" stroke="var(--primary)" strokeWidth="3" strokeLinecap="round" opacity="0.6"/>
+      <line x1="88" y1="72" x2="108" y2="92" stroke="var(--primary)" strokeWidth="5" strokeLinecap="round"/>
+      <line x1="98" y1="72" x2="118" y2="92" stroke="var(--primary)" strokeWidth="5" strokeLinecap="round" opacity="0.35"/>
+      <line x1="72" y1="40" x2="72" y2="72" stroke="var(--outline-variant)" strokeWidth="2" strokeLinecap="round" opacity="0.5"/>
+      <line x1="56" y1="56" x2="88" y2="56" stroke="var(--outline-variant)" strokeWidth="2" strokeLinecap="round" opacity="0.5"/>
+      <circle cx="44" cy="96" r="4" fill="var(--primary)" opacity="0.15"/>
+      <circle cx="120" cy="44" r="4" fill="var(--primary)" opacity="0.1"/>
+      <path d="M32 28l6-6M38 28l-6-6" stroke="var(--outline-variant)" strokeWidth="1.5" strokeLinecap="round" opacity="0.4"/>
+    </svg>
+  );
+}
+
 export function EmptyRevisionIllustration() {
   return (
     <svg width="160" height="120" viewBox="0 0 160 120" fill="none" xmlns="http://www.w3.org/2000/svg">

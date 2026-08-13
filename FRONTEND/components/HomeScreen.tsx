@@ -10,10 +10,10 @@ import {
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import confetti from 'canvas-confetti';
-import EmptyState, { EmptyNotesIllustration } from './EmptyState';
+import EmptyState, { EmptyNotesIllustration, EmptySearchIllustration } from './EmptyState';
 import HeroAI from './HeroAI';
 import { WEEKDAYS, DAILY_GOAL, AI_TOOLS } from '@/lib/constants';
-import { formatShortDate, stripHtml } from '@/lib/utils';
+import { formatShortDate, stripHtml, hasActiveSearch, noteMatchesSearch, SEARCH_EMPTY_MESSAGE, SEARCH_EMPTY_TIP } from '@/lib/utils';
 import { pinMatchesStored } from '@/lib/pin';
 import { deleteRemoteNote, deleteFolderWithNotes } from '@/lib/sync/notesSync';
 import { useAuth } from '@clerk/nextjs';
@@ -99,9 +99,7 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
   const [isUnlocking, setIsUnlocking] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const filteredNotes = useMemo(() => notes.filter((note) => {
-    const matchesSearch = note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          note.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          note.tags.some(t => t.toLowerCase().includes(searchQuery.toLowerCase()));
+    const matchesSearch = noteMatchesSearch(searchQuery, note);
     const matchesFolder = activeFolderId ? note.folderId === activeFolderId : true;
     const matchesCategory = activeCategoryId ? note.categoryId === activeCategoryId : true;
     return matchesSearch && matchesFolder && matchesCategory;
@@ -609,13 +607,23 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
           </div>
 
           {displayNotes.length === 0 ? (
-            <EmptyState
-              illustration={<EmptyNotesIllustration />}
-              title="No Study Notes Yet"
-              message="Your learning journey starts here. Create a note and watch your knowledge grow!"
-              action={{ label: 'Create Note', onClick: onCreateNote }}
-              tip="Organize notes with subjects, folders, and tags for easy retrieval."
-            />
+            hasActiveSearch(searchQuery) ? (
+              <EmptyState
+                illustration={<EmptySearchIllustration />}
+                title={`No results for "${searchQuery.trim()}"`}
+                message={SEARCH_EMPTY_MESSAGE}
+                action={{ label: 'Clear Search', onClick: () => setSearchQuery('') }}
+                tip={SEARCH_EMPTY_TIP}
+              />
+            ) : (
+              <EmptyState
+                illustration={<EmptyNotesIllustration />}
+                title="No Study Notes Yet"
+                message="Your learning journey starts here. Create a note and watch your knowledge grow!"
+                action={{ label: 'Create Note', onClick: onCreateNote }}
+                tip="Organize notes with subjects, folders, and tags for easy retrieval."
+              />
+            )
           ) : viewMode === 'grid' ? (
             <div className="notes-grid" style={{ gap: '16px' }}>
               {displayNotes.map((note) => {
