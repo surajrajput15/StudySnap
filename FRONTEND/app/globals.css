@@ -5119,6 +5119,19 @@ textarea:focus-visible,
   font-size: 12px;
 }
 
+/* Day 9 Task 12 — honest leaderboard empty state (no fabricated players) */
+.game-lb-empty {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border-radius: var(--radius-md, 16px);
+  background: var(--surface-variant);
+  color: var(--on-surface-variant);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 /* ─── Achievements ─── */
 .game-section {
   display: flex;

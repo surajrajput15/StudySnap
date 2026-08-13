@@ -9,7 +9,14 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { WEEKDAYS } from '@/lib/constants';
-import { getXpLevel, getMonthlyReport } from '@/lib/gamification';
+import {
+  getXpLevel,
+  getMonthlyReport,
+  WEEKLY_CHALLENGES,
+  pickWeeklyChallenge,
+  computeWeeklyChallengeProgress,
+  startOfWeek,
+} from '@/lib/gamification';
 
 const ALL_ACHIEVEMENTS = [
   { id: 'first-note', label: 'First Note', emoji: '📝', description: 'Create your first study note', xpReward: 50, coinReward: 10 },
@@ -26,26 +33,13 @@ const ALL_ACHIEVEMENTS = [
   { id: 'coin-king', label: '200 Coins', emoji: '💰', description: 'Earn 200 study coins', xpReward: 500, coinReward: 0 },
 ];
 
-const MOCK_LEADERBOARD = [
-  { rank: 1, name: 'StudyMaster99', xp: 8450, level: 9, avatar: '🧑‍🎓' },
-  { rank: 2, name: 'QuizWhiz', xp: 7200, level: 8, avatar: '🧠' },
-  { rank: 3, name: 'NoteTakerPro', xp: 6100, level: 7, avatar: '📖' },
-  { rank: 4, name: 'RevisionKing', xp: 5400, level: 7, avatar: '👑' },
-  { rank: 5, name: 'FlashcardFan', xp: 4800, level: 6, avatar: '🃏' },
-  { rank: 6, name: 'StreakRunner', xp: 3900, level: 6, avatar: '🏃' },
-  { rank: 7, name: 'VoiceNoteStar', xp: 3100, level: 5, avatar: '🎤' },
-  { rank: 8, name: 'StudyBuddy', xp: 2500, level: 5, avatar: '🤝' },
-];
+// Day 9 Task 12 — the old "global" leaderboard presented fabricated players
+// (MOCK_LEADERBOARD) and a hardcoded rank of 420 as if they were real data.
+// Nothing here is ever shown unless it is genuinely derived from the user's
+// activity, so the leaderboard is an honest empty state until rankings exist.
 
 function generateWeeklyChallenge(): { id: string; label: string; description: string; target: number; xpReward: number; coinReward: number } {
-  const challenges = [
-    { label: 'Note Machine', description: 'Create notes this week', target: 10, xpReward: 500, coinReward: 100 },
-    { label: 'Revision Rush', description: 'Complete revisions this week', target: 15, xpReward: 600, coinReward: 120 },
-    { label: 'Voice Hero', description: 'Record voice notes this week', target: 5, xpReward: 400, coinReward: 80 },
-    { label: 'Streak Defender', description: 'Study every day this week', target: 7, xpReward: 700, coinReward: 150 },
-    { label: 'Quiz Master', description: 'Generate quizzes this week', target: 3, xpReward: 300, coinReward: 60 },
-  ];
-  return { id: 'weekly-challenge', ...challenges[Math.floor(Math.random() * challenges.length)] };
+  return pickWeeklyChallenge();
 }
 
 export default function GamificationHub() {
@@ -65,16 +59,20 @@ export default function GamificationHub() {
 
   const [showReward, setShowReward] = useState<{ xp: number; coins: number; message: string } | null>(null);
   const [showAllAchievements, setShowAllAchievements] = useState(false);
-  const [leaderboardTab, setLeaderboardTab] = useState<'global' | 'friends'>('global');
 
   useEffect(() => { checkAndResetDaily(); }, [checkAndResetDaily]);
 
+  // Day 9 Task 12 — generate the weekly challenge ONLY when there is no stored
+  // one, it is not a trackable type (legacy 'weekly-challenge' ids), or it
+  // belongs to a previous week. A stale challenge must never linger forever.
+  const weekStartIso = useMemo(() => startOfWeek().toISOString().split('T')[0], []);
   useEffect(() => {
-    if (!weeklyChallenge) {
-      const challenge = generateWeeklyChallenge();
-      setWeeklyChallenge({ ...challenge, progress: 0, weekStart: new Date().toISOString().split('T')[0] });
+    const known = WEEKLY_CHALLENGES.some((c) => c.id === weeklyChallenge?.id);
+    const stale = weeklyChallenge !== null && weeklyChallenge.weekStart !== weekStartIso;
+    if (!weeklyChallenge || !known || stale) {
+      setWeeklyChallenge({ ...generateWeeklyChallenge(), progress: 0, weekStart: weekStartIso });
     }
-  }, [weeklyChallenge, setWeeklyChallenge]);
+  }, [weeklyChallenge, setWeeklyChallenge, weekStartIso]);
 
   const xp = useMemo(() => {
     return notes.length * 10 + voiceNotes.length * 15 + revisionLogs.length * 20 + (user.streakCount || 0) * 5;
@@ -143,12 +141,16 @@ export default function GamificationHub() {
     triggerReward(ach.xpReward, ach.coinReward, `Achievement Unlocked: ${ach.label}`);
   };
 
-  const userRank = 420;
+  // Day 9 Task 12 — progress is computed from REAL activity each render (notes /
+  // revisions / voice notes created THIS week). The stored `progress` field is
+  // ignored so a misleading 0/target can never be shown.
+  const weeklyProgress = useMemo(
+    () => computeWeeklyChallengeProgress(weeklyChallenge, { notes, voiceNotes, revisionLogs }),
+    [weeklyChallenge, notes, voiceNotes, revisionLogs],
+  );
+  const weeklyCompleted = weeklyChallenge !== null && weeklyProgress >= weeklyChallenge.target;
+
   const userDisplayName = user.name || 'You';
-  const fullLeaderboard = [
-    ...MOCK_LEADERBOARD,
-    { rank: userRank, name: userDisplayName, xp, level, avatar: '🌟' },
-  ].sort((a, b) => b.xp - a.xp).slice(0, 10).map((entry, idx) => ({ ...entry, rank: idx + 1 }));
 
   return (
     <div className="game-container">
@@ -212,12 +214,14 @@ export default function GamificationHub() {
           <div className="game-weekly-header">
             <Gift size={16} />
             Weekly Challenge
-            <span className="game-weekly-count">{weeklyChallenge.progress}/{weeklyChallenge.target}</span>
+            <span className="game-weekly-count">
+              {weeklyCompleted ? '✓ Completed' : `${Math.min(weeklyProgress, weeklyChallenge.target)}/${weeklyChallenge.target}`}
+            </span>
           </div>
           <div className="game-weekly-title">{weeklyChallenge.label}</div>
           <div className="game-weekly-desc">{weeklyChallenge.description}</div>
           <div className="game-weekly-track">
-            <div className="game-weekly-fill" style={{ width: `${Math.min((weeklyChallenge.progress / weeklyChallenge.target) * 100, 100)}%` }} />
+            <div className="game-weekly-fill" style={{ width: `${Math.min((weeklyProgress / weeklyChallenge.target) * 100, 100)}%` }} />
           </div>
           <div className="game-weekly-reward">
             <Zap size={12} /> +{weeklyChallenge.xpReward} XP
@@ -308,31 +312,22 @@ export default function GamificationHub() {
         </div>
       </div>
 
-      {/* ─── Leaderboard ─── */}
+      {/* ─── Leaderboard (honest empty state — no fabricated players) ─── */}
       <div className="game-section">
         <div className="game-section-header">
           <Crown size={16} style={{ color: '#F59E0B' }} />
           Leaderboard
-          <div className="game-leaderboard-tabs">
-            <button className={`game-lb-tab ${leaderboardTab === 'global' ? 'active' : ''}`} onClick={() => setLeaderboardTab('global')}>Global</button>
-            <button className={`game-lb-tab ${leaderboardTab === 'friends' ? 'active' : ''}`} onClick={() => setLeaderboardTab('friends')}>Friends</button>
-          </div>
         </div>
-        <div className="game-leaderboard">
-          {fullLeaderboard.map((entry) => {
-            const isUser = entry.name === userDisplayName;
-            return (
-              <div key={entry.rank} className={`game-lb-row ${isUser ? 'highlight' : ''}`}>
-                <span className={`game-lb-rank ${entry.rank <= 3 ? 'top' : ''}`}>
-                  {entry.rank === 1 ? '🥇' : entry.rank === 2 ? '🥈' : entry.rank === 3 ? '🥉' : `#${entry.rank}`}
-                </span>
-                <span className="game-lb-avatar">{entry.avatar}</span>
-                <span className="game-lb-name">{entry.name}{isUser && ' (You)'}</span>
-                <span className="game-lb-level">Lv.{entry.level}</span>
-                <span className="game-lb-xp">{entry.xp.toLocaleString()} XP</span>
-              </div>
-            );
-          })}
+        <div className="game-lb-empty">
+          <Crown size={28} style={{ opacity: 0.3 }} />
+          <span>Global and friend rankings aren&apos;t live yet. Only your real stats are shown — no sample data.</span>
+        </div>
+        <div className="game-lb-row highlight">
+          <span className="game-lb-rank">—</span>
+          <span className="game-lb-avatar">🌟</span>
+          <span className="game-lb-name">{userDisplayName} (You)</span>
+          <span className="game-lb-level">Lv.{level}</span>
+          <span className="game-lb-xp">{xp.toLocaleString()} XP</span>
         </div>
       </div>
 
