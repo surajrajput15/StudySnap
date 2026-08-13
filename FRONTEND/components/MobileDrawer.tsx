@@ -2,12 +2,13 @@
 
 import React, { useEffect, useRef } from 'react';
 import {
-  Home, FileText, Mic, Sparkles, Calendar, Folder, Star,
-  BarChart3, Settings, Info, LogOut, LogIn, X
+  Home, FileText, Mic, Sparkles, Calendar,
+  Trophy, User, LogOut, LogIn, X
 } from 'lucide-react';
 import { SignInButton, useAuth, useUser, useClerk } from '@clerk/nextjs';
 import Image from 'next/image';
 import { useStore, switchStoreScopeForUser } from '@/lib/store/useStore';
+import { isValidAppTab } from '@/lib/utils';
 
 interface MobileDrawerProps {
   open: boolean;
@@ -16,17 +17,18 @@ interface MobileDrawerProps {
   onNavigate: (tab: string) => void;
 }
 
+// Day 9 Task 8 — every item here must map to a real, rendered tab (validated
+// at render time via isValidAppTab). The old Folders/Favorites/Statistics/
+// Settings/About entries had no real view — they collapsed onto home/profile —
+// so they were dead items; Achievements and Profile were missing entirely.
 const DRAWER_ITEMS = [
   { id: 'home', label: 'Dashboard', icon: Home },
   { id: 'editor', label: 'Notes', icon: FileText },
   { id: 'voice', label: 'Voice Notes', icon: Mic },
   { id: 'ai', label: 'AI Assistant', icon: Sparkles },
   { id: 'calendar', label: 'Revision', icon: Calendar },
-  { id: 'folders', label: 'Folders', icon: Folder },
-  { id: 'favorites', label: 'Favorites', icon: Star },
-  { id: 'statistics', label: 'Statistics', icon: BarChart3 },
-  { id: 'settings', label: 'Settings', icon: Settings },
-  { id: 'about', label: 'About', icon: Info },
+  { id: 'gamification', label: 'Achievements', icon: Trophy },
+  { id: 'profile', label: 'Profile', icon: User },
 ];
 
 export default function MobileDrawer({ open, onClose, activeTab, onNavigate }: MobileDrawerProps) {
@@ -157,7 +159,7 @@ export default function MobileDrawer({ open, onClose, activeTab, onNavigate }: M
         </div>
 
         <nav className="drawer-nav">
-          {DRAWER_ITEMS.map((item) => {
+          {DRAWER_ITEMS.filter((item) => isValidAppTab(item.id)).map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
             return (

@@ -152,15 +152,11 @@ export default function Page() {
     navigate('editor');
   };
 
+  // Day 9 Task 8 — the mobile drawer only contains real, rendered tabs now, so
+  // navigation is a direct tab switch through the guarded chokepoint (the old
+  // folders/favorites/statistics/settings/about alias routing is gone).
   const handleDrawerNav = (tab: string) => {
-    const routing: Record<string, string> = {
-      folders: 'home',
-      favorites: 'home',
-      statistics: 'profile',
-      settings: 'profile',
-      about: 'profile',
-    };
-    navigate(routing[tab] || tab);
+    navigate(tab);
   };
 
   const navItems = [
