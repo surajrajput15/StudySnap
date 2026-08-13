@@ -15,6 +15,7 @@ import confetti from 'canvas-confetti';
 import { SpeechRecognition, SpeechRecognitionEvent, SpeechRecognitionErrorEvent } from '@/lib/speech';
 import { PIN_LENGTH } from '@/lib/constants';
 import { stripHtml } from '@/lib/utils';
+import { buildCodeBlockHtml, extractCodeBlockText, copyCodeToClipboard } from '@/lib/editorCode';
 import { buildStudyContext, buildContextMessages } from '@/lib/ai';
 import { API, apiFetch } from '@/lib/config';
 import { useAuth } from '@clerk/nextjs';
@@ -77,11 +78,12 @@ interface EditorAreaProps {
   onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => void;
   onCompositionStart: () => void;
   onCompositionEnd: () => void;
+  onCodeCopyClick: (e: React.MouseEvent<HTMLDivElement>) => void;
 }
 
 const EditorArea = React.memo(
   React.forwardRef<HTMLDivElement, EditorAreaProps>(function EditorArea(
-    { onInput, onKeyDown, onCompositionStart, onCompositionEnd },
+    { onInput, onKeyDown, onCompositionStart, onCompositionEnd, onCodeCopyClick },
     ref
   ) {
     return (
@@ -94,6 +96,7 @@ const EditorArea = React.memo(
         onKeyDown={onKeyDown}
         onCompositionStart={onCompositionStart}
         onCompositionEnd={onCompositionEnd}
+        onClick={onCodeCopyClick}
       />
     );
   })
@@ -487,14 +490,53 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
   }, [handleEditorInputChange, composingState]);
 
   const insertCodeBlock = useCallback((lang: string) => {
-    const html = `<div class="editor-code-block"><div class="editor-code-header"><span>${lang}</span><button class="editor-code-copy" onclick="(function(btn){var code=btn.parentElement.nextElementSibling.textContent;navigator.clipboard.writeText(code);btn.textContent='Copied!';setTimeout(function(){btn.textContent='Copy'},2000);})(this)">Copy</button></div><pre><code class="language-${lang}"> </code></pre></div>`;
-    insertAtCursor(html);
+    // Day 9 Task 11 — inert markup only (no inline onclick): DOMPurify strips
+    // event-handler attributes on reload, which killed the old inline handler.
+    // Copying is delegated to a live listener (handleCodeCopyClick) below, so
+    // freshly inserted and reloaded code blocks behave identically.
+    insertAtCursor(buildCodeBlockHtml(lang));
     handleEditorInputChange();
   }, [handleEditorInputChange]);
 
   useEffect(() => {
     editorChangeRef.current = handleEditorInputChange;
   }, [handleEditorInputChange]);
+
+  // Day 9 Task 11 — delegated copy for code blocks. A live listener on the
+  // editor container, so freshly inserted AND reloaded blocks behave the same
+  // (the old inline `onclick` was stripped by DOMPurify on reload).
+  const handleCodeCopyClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+    if (!target || typeof target.closest !== 'function') return;
+    const button = target.closest('.editor-code-copy') as HTMLButtonElement | null;
+    if (!button) return;
+    e.preventDefault();
+    const code = extractCodeBlockText(button);
+    const markCopied = () => {
+      button.textContent = 'Copied!';
+      setTimeout(() => { button.textContent = 'Copy'; }, 2000);
+    };
+    void copyCodeToClipboard(code, {
+      write: typeof navigator !== 'undefined' && navigator.clipboard?.writeText
+        ? (text) => navigator.clipboard.writeText(text)
+        : undefined,
+      fallbackWrite: (text) => {
+        try {
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.select();
+          const ok = document.execCommand('copy');
+          document.body.removeChild(ta);
+          return ok;
+        } catch {
+          return false;
+        }
+      },
+    }).then((ok) => { if (ok) markCopied(); });
+  }, []);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.nativeEvent.isComposing) return; // never run markdown shortcuts mid-composition
@@ -879,6 +921,7 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
           onKeyDown={handleKeyDown}
           onCompositionStart={handleEditorCompositionStart}
           onCompositionEnd={handleEditorCompositionEnd}
+          onCodeCopyClick={handleCodeCopyClick}
         />
       </div>
 
