@@ -5,6 +5,7 @@ import type { StoreApi } from 'zustand';
 import type { SyncEngineStatus } from '../sync/syncEngine.ts';
 import { DAILY_GOAL, REVISION_INTERVAL_DAYS } from '../constants.ts';
 import { dateKey } from '../utils.ts';
+import { mergeGuestIntoUser, type GuestMigrationResult } from '../migration.ts';
 
 export interface Note {
   id: string;
@@ -189,6 +190,10 @@ interface AppState {
 
   // Sync observability action
   setSyncStatus: (status: SyncEngineStatus | null) => void;
+
+  // Day 9 Task 16 — one-time guest→account migration notice (ephemeral, never persisted).
+  guestMigration: GuestMigrationResult | null;
+  setGuestMigration: (migration: GuestMigrationResult | null) => void;
 }
 
 const DEFAULT_CATEGORIES: Category[] = [
@@ -278,6 +283,7 @@ function makeInitialState(set: SetStateFn): AppState {
     activeAiTool: null,
     persistenceError: false,
     syncStatus: null,
+    guestMigration: null,
 
     toggleTheme: () => set((state) => ({ theme: state.theme === 'light' ? 'dark' : 'light' })),
 
@@ -457,6 +463,7 @@ function makeInitialState(set: SetStateFn): AppState {
     setActiveAiTool: (tool) => set({ activeAiTool: tool }),
     setPersistenceError: (hasError) => set((state) => (state.persistenceError === hasError ? state : { persistenceError: hasError })),
     setSyncStatus: (status) => set((state) => (state.syncStatus === status ? state : { syncStatus: status })),
+    setGuestMigration: (migration) => set((state) => (state.guestMigration === migration ? state : { guestMigration: migration })),
   };
 }
 
@@ -581,7 +588,7 @@ export const useStore = create<AppState>()(
 export function switchStoreScopeForUser(clerkUserId: string | null) {
   if (clerkUserId === activeStoreUserId) return;
   activeStoreUserId = clerkUserId;
-  const key = clerkUserId ? `${STORE_BASE_KEY}:${clerkUserId}` : STORE_BASE_KEY;
+  const key = persistKeyForScope(clerkUserId);
 
   let persisted: Partial<AppState> = {};
   try {
@@ -606,7 +613,67 @@ export function switchStoreScopeForUser(clerkUserId: string | null) {
     activeCategoryId: null,
     searchQuery: '',
     activeAiTool: null,
+    // A migration notice shown earlier must never carry across accounts.
+    guestMigration: null,
   });
+}
+
+/** LocalStorage key that holds a given scope's persisted state. */
+export function persistKeyForScope(clerkUserId: string | null): string {
+  return clerkUserId ? `${STORE_BASE_KEY}:${clerkUserId}` : STORE_BASE_KEY;
+}
+
+/**
+ * Day 9 Task 16 — fold the anonymous (guest) scope's data into the newly
+ * signed-in account and clear the guest scope. Runs once per sign-in (guarded by
+ * the caller); returns the migration summary for the UI notice, or null when the
+ * guest scope was already empty. The account's profile, streak and today's
+ * progress are intentionally left untouched so the fresh account stays honest.
+ */
+export function migrateGuestDataForUser(clerkUserId: string): GuestMigrationResult | null {
+  if (typeof window === 'undefined' || !clerkUserId) return null;
+
+  const guestKey = persistKeyForScope(null);
+  let guestRaw: string | null = null;
+  try {
+    guestRaw = window.localStorage.getItem(guestKey);
+  } catch {
+    guestRaw = null;
+  }
+  if (!guestRaw) return null;
+
+  let guestState: unknown = null;
+  try {
+    const parsed = JSON.parse(guestRaw) as { state?: unknown };
+    guestState = parsed?.state ?? null;
+  } catch {
+    guestState = null;
+  }
+  if (!guestState || typeof guestState !== 'object') return null;
+
+  const current = useStore.getState();
+  const { merged, result } = mergeGuestIntoUser(
+    {
+      notes: current.notes,
+      voiceNotes: current.voiceNotes,
+      categories: current.categories,
+      folders: current.folders,
+      revisionLogs: current.revisionLogs,
+      coins: current.coins,
+      earnedAchievements: current.earnedAchievements,
+    },
+    guestState as Parameters<typeof mergeGuestIntoUser>[1],
+  );
+  if (!result) return null;
+
+  useStore.setState({ ...merged, guestMigration: result });
+  try {
+    window.localStorage.removeItem(guestKey);
+  } catch {
+    // Persisting the migration to the account scope already succeeded via the
+    // store; failing to clear the guest scope only means a stale copy remains.
+  }
+  return result;
 }
 
 /** Fresh default values for every user-scoped field in the store. */
@@ -641,5 +708,5 @@ function scopedDefaults(): Partial<AppState> {
 
 /** Returns the store scope key the app is currently persisting under. */
 export function getStoreScopeKey(): string {
-  return activeStoreUserId ? `${STORE_BASE_KEY}:${activeStoreUserId}` : STORE_BASE_KEY;
+  return persistKeyForScope(activeStoreUserId);
 }

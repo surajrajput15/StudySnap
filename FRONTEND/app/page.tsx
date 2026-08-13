@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useLayoutEffect, useRef, useSyncExternalStore } from 'react';
 import dynamic from 'next/dynamic';
-import { useStore, switchStoreScopeForUser } from '@/lib/store/useStore';
+import { useStore, switchStoreScopeForUser, migrateGuestDataForUser } from '@/lib/store/useStore';
 import { syncNotesForUser } from '@/lib/sync/notesSync';
 import { syncVoiceNotesForUser } from '@/lib/sync/voiceNotesSync';
 import {
@@ -16,6 +16,8 @@ import MobileDrawer from '@/components/MobileDrawer';
 import OfflineBanner from '@/components/OfflineBanner';
 import SyncStatusIndicator from '@/components/SyncStatusIndicator';
 import DeleteUndoToast from '@/components/DeleteUndoToast';
+import LoadingShell from '@/components/LoadingShell';
+import GuestMigrationNotice from '@/components/GuestMigrationNotice';
 import { RECORDING_NAV_CONFIRM_MESSAGE, shouldConfirmRecordingNav } from '@/lib/utils';
 import { requestPersistentStorage } from '@/lib/persistence';
 
@@ -92,6 +94,24 @@ export default function Page() {
   useLayoutEffect(() => {
     if (!isLoaded) return;
     switchStoreScopeForUser(isSignedIn ? clerkId : null);
+  }, [isLoaded, isSignedIn, clerkId]);
+
+  // Day 9 Task 16 — once per sign-in, fold the anonymous guest scope's data into
+  // this account (and clear the guest scope). If anything moved, surface the
+  // GuestMigrationNotice so the user knows their notes weren't lost.
+  const migratedUserIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isLoaded) return;
+    if (isSignedIn && clerkId) {
+      if (migratedUserIdRef.current === clerkId) return;
+      migratedUserIdRef.current = clerkId;
+      const migrated = migrateGuestDataForUser(clerkId);
+      if (migrated) {
+        useStore.getState().setGuestMigration(migrated);
+      }
+    } else {
+      migratedUserIdRef.current = null;
+    }
   }, [isLoaded, isSignedIn, clerkId]);
 
   useEffect(() => {
@@ -178,12 +198,15 @@ export default function Page() {
     { id: 'profile', label: 'Profile', icon: User },
   ];
 
-  if (!mounted) return null;
+  // Day 9 Task 14 — render a skeleton shell instead of nothing before the
+  // client mounts (a null return left a blank screen on first paint / SSR).
+  if (!mounted) return <LoadingShell />;
 
   return (
     <div className="app-root">
       <OfflineBanner />
       <DeleteUndoToast />
+      <GuestMigrationNotice />
 
       {/* ─── Mobile Drawer ─── */}
       <MobileDrawer
