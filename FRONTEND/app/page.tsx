@@ -17,6 +17,7 @@ import OfflineBanner from '@/components/OfflineBanner';
 import SyncStatusIndicator from '@/components/SyncStatusIndicator';
 import DeleteUndoToast from '@/components/DeleteUndoToast';
 import { RECORDING_NAV_CONFIRM_MESSAGE, shouldConfirmRecordingNav } from '@/lib/utils';
+import { requestPersistentStorage } from '@/lib/persistence';
 
 const NoteEditor = dynamic(() => import('@/components/NoteEditor'), { ssr: false });
 const VoiceNotes = dynamic(() => import('@/components/VoiceNotes'), { ssr: false });
@@ -74,6 +75,13 @@ export default function Page() {
     if (params.get('returnTo') === 'ai') {
       window.history.replaceState({}, '', '/');
     }
+  }, []);
+
+  // Day 9 Task 10 — ask the browser for persistent storage so mobile browsers
+  // never evict the IndexedDB/localStorage (and voice blobs) that back the
+  // local-first store. Idempotent: once granted, later calls short-circuit.
+  useEffect(() => {
+    void requestPersistentStorage();
   }, []);
 
   const clerkId = clerkUser?.id ?? null;
