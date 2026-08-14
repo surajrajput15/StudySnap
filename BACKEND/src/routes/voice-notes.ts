@@ -5,7 +5,8 @@ import { eq, and, desc } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/auth';
 import { voiceUploadLimiter, voiceQueryLimiter } from '../middleware/rateLimiter';
 import { getDb, voiceNotes, notes } from '../db';
-import { MAX_FILE_SIZE_BYTES } from '../config/constants';
+import { MAX_FILE_SIZE_BYTES, CACHE_TTL_NOTES_SECONDS } from '../config/constants';
+import { cacheGet, cacheSet, invalidateUserCache } from '../services/cache';
 import {
   buildVoiceAudioPublicId,
   uploadVoiceAudio,
@@ -113,6 +114,16 @@ router.get('/', voiceQueryLimiter, async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
 
+    // Day 16 Task 6 — the voice-note listing is a full pull like notes; serve it
+    // from cache and invalidate on upload/delete. Voice rows carry no secrets
+    // (audioUrl is a public Cloudinary URL), so caching the whole row is fine.
+    const cacheKey = `${userId}:voiceNotes`;
+    const cached = await cacheGet<Array<typeof voiceNotes.$inferSelect>>(cacheKey);
+    if (cached) {
+      res.json({ success: true, voiceNotes: cached });
+      return;
+    }
+
     const db = getDb();
     if (!db) {
       res.status(503).json({ success: false, error: 'Voice notes are unavailable: database is not configured' });
@@ -125,6 +136,7 @@ router.get('/', voiceQueryLimiter, async (req: Request, res: Response) => {
       .where(eq(voiceNotes.userId, userId))
       .orderBy(desc(voiceNotes.createdAt));
 
+    await cacheSet(cacheKey, rows, CACHE_TTL_NOTES_SECONDS);
     res.json({ success: true, voiceNotes: rows });
   } catch {
     res.status(500).json({ success: false, error: 'Failed to fetch voice notes' });
@@ -256,6 +268,8 @@ async function handleVoiceNoteUpload(req: Request, res: Response): Promise<void>
       return;
     }
 
+    await invalidateUserCache(userId);
+
     if (saved.length === 0) {
       // The id already exists but belongs to ANOTHER user: the setWhere guard
       // made the update a no-op. Remove the freshly uploaded asset (best-effort)
@@ -320,6 +334,7 @@ router.delete('/', voiceQueryLimiter, async (req: Request, res: Response) => {
     }
 
     await db.delete(voiceNotes).where(and(eq(voiceNotes.id, id), eq(voiceNotes.userId, userId)));
+    await invalidateUserCache(userId);
     res.json({ success: true });
   } catch {
     res.status(500).json({ success: false, error: 'Failed to delete voice note' });

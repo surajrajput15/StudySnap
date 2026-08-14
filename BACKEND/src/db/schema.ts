@@ -17,14 +17,20 @@ export const categories = pgTable('categories', {
   name: text('name').notNull(),
   color: text('color'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, (table) => [
+  // Day 16 Task 2 — every categories query is user-scoped; without this index
+  // the table would be scanned for each user.
+  index('categories_user_idx').on(table.userId),
+]);
 
 export const folders = pgTable('folders', {
   id: uuid('id').defaultRandom().primaryKey(),
   userId: text('user_id').notNull(),
   name: text('name').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, (table) => [
+  index('folders_user_idx').on(table.userId),
+]);
 
 export const notes = pgTable('notes', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -43,7 +49,12 @@ export const notes = pgTable('notes', {
   isArchived: boolean('is_archived').default(false).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});
+}, (table) => [
+  // Day 16 Task 2 — the primary listing query filters by user + is_archived and
+  // sorts by is_pinned/updated_at; the composite below serves that scan without
+  // a full-table filter on every notes fetch.
+  index('notes_user_archived_idx').on(table.userId, table.isArchived),
+]);
 
 export const voiceNotes = pgTable('voice_notes', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -65,4 +76,7 @@ export const revisionLogs = pgTable('revision_logs', {
   revisedAt: timestamp('revised_at').defaultNow().notNull(),
   rating: text('rating'),
   nextScheduledAt: timestamp('next_scheduled_at').notNull(),
-});
+}, (table) => [
+  // Day 16 Task 2 — revision rows are queried/cleaned per note.
+  index('revision_logs_note_idx').on(table.noteId),
+]);

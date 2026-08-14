@@ -84,29 +84,51 @@ function stripPinLock(note: MockNote): NoteWithoutPinLock {
 router.get('/', async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
+
+    // Day 16 Task 5 — optional, validated `?limit=1..200`. The local-first sync
+    // contract pulls ALL notes (no limit sent), so default behavior is
+    // unchanged; a limit lets list-style consumers bound the response. Cursor
+    // (updated_at) delta-sync is the planned next step and stays out of scope.
+    let limit: number | null = null;
+    if (req.query.limit !== undefined) {
+      const parsed = z.coerce.number().int().min(1).max(200).safeParse(req.query.limit);
+      if (!parsed.success) {
+        res.status(400).json({ success: false, error: 'Invalid limit (must be an integer 1-200)' });
+        return;
+      }
+      limit = parsed.data;
+    }
+
     const cacheKey = `${userId}:notes`;
 
-    const cached = await cacheGet<Array<typeof notes.$inferSelect>>(cacheKey);
-    if (cached) {
-      res.json({ success: true, notes: cached.map(stripPinLock) });
-      return;
+    // Day 16 Task 4 — the cached payload is the STRIPPED shape (no pinLock
+    // hashes) so Redis never holds sensitive material. Limited requests bypass
+    // the cache — a slice must always be live.
+    if (limit === null) {
+      const cached = await cacheGet<Array<NoteWithoutPinLock>>(cacheKey);
+      if (cached) {
+        res.json({ success: true, notes: cached });
+        return;
+      }
     }
 
     const db = getDb();
     if (!db) {
       const filtered = mockNotes.filter(n => n.userId === userId);
-      res.json({ success: true, notes: filtered.map(stripPinLock) });
+      res.json({ success: true, notes: filtered.slice(0, limit ?? undefined).map(stripPinLock) });
       return;
     }
 
-    const dbNotes = await db
+    const query = db
       .select()
       .from(notes)
       .where(and(eq(notes.userId, userId), eq(notes.isArchived, false)))
       .orderBy(desc(notes.isPinned), desc(notes.updatedAt));
+    const dbNotes = limit !== null ? await query.limit(limit) : await query;
 
-    await cacheSet(cacheKey, dbNotes, CACHE_TTL_NOTES_SECONDS);
-    res.json({ success: true, notes: dbNotes.map(stripPinLock) });
+    const stripped = dbNotes.map(stripPinLock);
+    if (limit === null) await cacheSet(cacheKey, stripped, CACHE_TTL_NOTES_SECONDS);
+    res.json({ success: true, notes: stripped });
   } catch {
     res.status(500).json({ success: false, error: 'Failed to fetch notes' });
   }
@@ -162,9 +184,16 @@ router.post('/', validate(noteSchema), async (req: Request, res: Response) => {
 
     let result;
     if (id) {
-      const existing = await db.select().from(notes).where(and(eq(notes.id, id), eq(notes.userId, userId)));
-      if (existing.length > 0) {
-        const updated = await db.update(notes).set(noteData).where(and(eq(notes.id, id), eq(notes.userId, userId))).returning();
+      // Day 16 Task 1 — update-first: attempt the UPDATE directly (scoped to
+      // this account) instead of doing a SELECT then an UPDATE. Only when the
+      // update matches no row (0 returned) do we distinguish "new note" from
+      // "id belongs to someone else". Saves a round-trip on every edit.
+      const updated = await db
+        .update(notes)
+        .set(noteData)
+        .where(and(eq(notes.id, id), eq(notes.userId, userId)))
+        .returning();
+      if (updated.length > 0) {
         result = updated[0];
       } else {
         // Day 14 Task 3 — a caller-supplied id that ALREADY belongs to another

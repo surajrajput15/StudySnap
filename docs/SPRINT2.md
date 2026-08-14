@@ -95,9 +95,9 @@ auth/session → Task 2 · weekly-challenge week rollover + Sunday chart → not
 - **Day 13:** ✅ 8/8 COMPLETE (testing expansion — 18 new store-level flow tests)
 - **Day 14:** ✅ 8/8 COMPLETE (security hardening round 2 — 0 FE vulns, bounded inputs, webhook+query limiters, upload magic-byte check, AI role sanitization, no-store/perms-policy headers)
 - **Day 15:** ✅ 8/8 COMPLETE (observability & error handling — error boundaries, crash logging, request logger, sync-failure surfacing, alert→toast unification)
-- **Current HEAD:** `1facf9b` (+ Day 15 working tree, to commit)
+- **Current HEAD:** `b1f9c94` (+ Day 16 working tree, to commit)
 - **Tests:** ✅ Frontend 222/222 · ✅ Backend 67/67
-- **Sprint 2 status:** Day 15 COMPLETE → **NEXT: Day 16 (Database & Backend Engineering)**
+- **Sprint 2 status:** Day 16 COMPLETE → **NEXT: Day 17 (Final Production Readiness)**
 
 ##### Day 10 Tasks 7 & 8 — audit findings & fixes
 | # | Area | Finding | Fix |
@@ -230,15 +230,17 @@ Goal:
 
 Tests: FE **222/222** ✅ (5 new observability) · BE **67/67** ✅ (2 new requestLogger) · tsc ✅ · eslint ✅ · next build ✅
 
-### DAY 16 — DATABASE & BACKEND ENGINEERING
-- Task 1 — Database query audit
-- Task 2 — Index audit
-- Task 3 — N+1 / unnecessary query audit
-- Task 4 — API payload optimization
-- Task 5 — Pagination strategy
-- Task 6 — Cache usage audit
-- Task 7 — Connection/error recovery audit
-- Task 8 — Production backend readiness review
+### DAY 16 — DATABASE & BACKEND ENGINEERING ✅ DONE
+- Task 1 — Database query audit ✅ POST /notes upsert now update-first (UPDATE…returning → only on 0 rows does it check availability/insert): one fewer round-trip per edit; all other queries verified user-scoped + single (no cross-user reads)
+- Task 2 — Index audit ✅ Added 4 missing indexes in `schema.ts` + generated migration `drizzle/0000_wise_kree.sql`: `notes(user_id,is_archived)`, `categories(user_id)`, `folders(user_id)`, `revision_logs(note_id)` (voice_notes already indexed)
+- Task 3 — N+1 / unnecessary query audit ✅ No N+1 found — note listing is one query, delete audio cleanup uses Promise.allSettled (parallel), ownership checks are limit(1); POST redundant SELECT eliminated (Task 1)
+- Task 4 — API payload optimization ✅ Redis cache now stores the STRIPPED note shape (pinLock hashes never cached); verify-pin already selects only pinLock; response strips pinLock (Day 7) + isArchived filter
+- Task 5 — Pagination strategy ✅ Optional validated `?limit=1..200` on GET /notes (default = unchanged full-sync contract; limited requests bypass cache so a slice is live); documented delta-sync via updated_at cursor as the planned next step
+- Task 6 — Cache usage audit ✅ NEW voice-notes GET caching (per-user, TTL 60s) + invalidation on upload/delete; notes cache verified; `invalidateUserCache` keys() scan is O(known user keys) — acceptable at this scale
+- Task 7 — Connection/error recovery audit ✅ Verified: `getDb()` null → graceful mock (notes) / 503 (voice) when DB unconfigured; neon-http is connectionless by design; transient 5xx are retried by the FRONTEND sync engine's exponential backoff (the designed recovery layer)
+- Task 8 — Production backend readiness review ✅ Verified fail-fast boot (`validateProductionEnv` aborts without DATABASE_URL/CLERK_SECRET_KEY), tsc + production build clean, centralized error middleware, requestLogger (Day 15), health endpoint
+
+Tests: BE **67/67** ✅ · tsc ✅ · eslint ✅ · build ✅
 
 ### DAY 17 — FINAL PRODUCTION READINESS
 - Task 1 — Complete frontend audit
