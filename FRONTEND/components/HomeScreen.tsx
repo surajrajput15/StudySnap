@@ -19,6 +19,7 @@ import { pinMatchesStored } from '@/lib/pin';
 import { deleteRemoteNote, deleteFolderWithNotes } from '@/lib/sync/notesSync';
 import { deferDelete, cancelPendingDeleteFor } from '@/lib/undo';
 import { useAuth } from '@clerk/nextjs';
+import { useDialogFocus } from '@/lib/useDialogFocus';
 
 interface HomeScreenProps {
   onEditNote: (noteId: string) => void;
@@ -83,6 +84,7 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryColor, setNewCategoryColor] = useState('#0061A4');
   const [showCategoryModal, setShowCategoryModal] = useState(false);
+
   // Day 9 Task 3 — folder deletion is destructive (it permanently deletes the
   // notes inside). We never delete on first click: a confirmation modal opens,
   // and only its confirm button performs the deletion.
@@ -92,6 +94,19 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
   const [pinError, setPinError] = useState(false);
   const [isUnlocking, setIsUnlocking] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+
+  // Day 12 Tasks 2 & 4 — the dashboard dialogs share one focus/escape handler.
+  // Only one dialog is open at a time, so a single ref on the currently-mounted
+  // backdrop drives the trap; focus returns to the trigger on close.
+  const modalRef = useRef<HTMLDivElement | null>(null);
+  const anyModalOpen = showFolderModal || showCategoryModal || !!folderToDelete || !!unlockNoteId;
+  const closeAllModals = () => {
+    setShowFolderModal(false);
+    setShowCategoryModal(false);
+    setFolderToDelete(null);
+    setUnlockNoteId(null);
+  };
+  useDialogFocus(anyModalOpen, modalRef, closeAllModals);
   const filteredNotes = useMemo(() => notes.filter((note) => {
     const matchesSearch = noteMatchesSearch(searchQuery, note);
     const matchesFolder = activeFolderId ? note.folderId === activeFolderId : true;
@@ -213,18 +228,6 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
       setPinError(true);
     }
   };
-
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      if (showFolderModal) setShowFolderModal(false);
-      if (showCategoryModal) setShowCategoryModal(false);
-      if (folderToDelete) setFolderToDelete(null);
-      if (unlockNoteId) setUnlockNoteId(null);
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [showFolderModal, showCategoryModal, folderToDelete, unlockNoteId]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
@@ -666,7 +669,7 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
 
       {/* ─── Modals ─── */}
       {showFolderModal && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="folder-modal-title" onClick={() => setShowFolderModal(false)}>
+        <div ref={modalRef} className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="folder-modal-title" onClick={() => setShowFolderModal(false)}>
           <form className="modal-content" onClick={e => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); if (!newFolderName.trim()) return; addFolder({ name: newFolderName.trim() }); setNewFolderName(''); setShowFolderModal(false); confetti({ particleCount: 30, spread: 40, colors: ['#0061A4'] }); }}>
             <h3 id="folder-modal-title" style={{ fontSize: '18px', marginBottom: '16px' }}>Create Folder</h3>
             <input type="text" placeholder='e.g. Semester 2, Assignments' value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)} className="md3-input" autoFocus required />
@@ -679,7 +682,7 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
       )}
 
       {showCategoryModal && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="category-modal-title" onClick={() => setShowCategoryModal(false)}>
+        <div ref={modalRef} className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="category-modal-title" onClick={() => setShowCategoryModal(false)}>
           <form className="modal-content" onClick={e => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); if (!newCategoryName.trim()) return; addCategory({ name: newCategoryName.trim(), color: newCategoryColor }); setNewCategoryName(''); setShowCategoryModal(false); confetti({ particleCount: 30, spread: 40, colors: [newCategoryColor] }); }}>
             <h3 id="category-modal-title" style={{ fontSize: '18px', marginBottom: '16px' }}>Add Subject</h3>
             <input type="text" placeholder="e.g. Computer Science" value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} className="md3-input" autoFocus required />
@@ -698,7 +701,7 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
 
       {/* ─── Folder delete confirmation ─── */}
       {folderToDelete && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="folder-delete-title" onClick={cancelDeleteFolder}>
+        <div ref={modalRef} className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="folder-delete-title" onClick={cancelDeleteFolder}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
             <h3 id="folder-delete-title" style={{ fontSize: '18px', marginBottom: '12px' }}>Delete folder?</h3>
             {(() => {
@@ -723,7 +726,7 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
       )}
 
       {unlockNoteId && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="unlock-modal-title" onClick={() => setUnlockNoteId(null)}>
+        <div ref={modalRef} className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="unlock-modal-title" onClick={() => setUnlockNoteId(null)}>
           <form className="modal-content" onClick={e => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); void handleUnlockSubmit(); }}>
             <Lock size={36} style={{ color: 'var(--primary)', margin: '0 auto 12px', display: 'block' }} />
             <h3 id="unlock-modal-title" style={{ fontSize: '18px', textAlign: 'center' }}>Enter PIN</h3>

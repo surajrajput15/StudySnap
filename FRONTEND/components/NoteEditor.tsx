@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { useStore, getStoreScopeKey } from '@/lib/store/useStore';
+import { useDialogFocus } from '@/lib/useDialogFocus';
 import DOMPurify from 'dompurify';
 import {
   ArrowLeft, Pin, Star, Lock, Unlock, Download, Upload,
@@ -92,6 +93,9 @@ const EditorArea = React.memo(
         className="editor-content"
         contentEditable
         suppressContentEditableWarning
+        role="textbox"
+        aria-multiline="true"
+        aria-label="Note content"
         onInput={onInput}
         onKeyDown={onKeyDown}
         onCompositionStart={onCompositionStart}
@@ -416,6 +420,11 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [showTablePicker, showAiAssistant, showPinModal]);
+
+  // Day 12 Tasks 2 & 4 — the PIN dialog traps focus, closes on Escape and
+  // restores focus to the lock button that opened it.
+  const pinModalRef = useRef<HTMLDivElement | null>(null);
+  useDialogFocus(showPinModal, pinModalRef, () => setShowPinModal(false));
 
   const recordSnapshot = useCallback(() => {
     const el = editorRef.current;
@@ -1038,7 +1047,7 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
 
       {/* ─── Pin Modal ─── */}
       {showPinModal && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="pin-modal-title" onClick={() => setShowPinModal(false)}>
+        <div ref={pinModalRef} className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="pin-modal-title" onClick={() => setShowPinModal(false)}>
           <form className="modal-content" onClick={e => e.stopPropagation()} onSubmit={handleSavePin} style={{ textAlign: 'center', maxWidth: '360px' }}>
             <Lock size={40} style={{ color: 'var(--primary)', margin: '0 auto 12px' }} />
             <h3 id="pin-modal-title" style={{ fontSize: '18px' }}>Lock Note</h3>

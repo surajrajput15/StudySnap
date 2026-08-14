@@ -91,9 +91,10 @@ auth/session → Task 2 · weekly-challenge week rollover + Sunday chart → not
 - **Day 9:** ✅ 17/17 COMPLETE
 - **Day 10:** ✅ 8/8 COMPLETE (audit + fixes landed across commits 8e937ae → 652b577)
 - **Day 11:** ✅ 8/8 COMPLETE (perf audit + NoteCard memoization + KaTeX fonts)
-- **Current HEAD:** `ed0afe4` (+ Day 11 working tree, to commit)
+- **Day 12:** ✅ 8/8 COMPLETE (a11y + responsive audit; focus-trap hook + editor textbox role)
+- **Current HEAD:** `c347bfd` (+ Day 12 working tree, to commit)
 - **Tests:** ✅ Frontend 199/199 · ✅ Backend 39/39
-- **Sprint 2 status:** Day 11 COMPLETE → **NEXT: Day 12 (Accessibility & Responsive QA)**
+- **Sprint 2 status:** Day 12 COMPLETE → **NEXT: Day 13 (Testing Expansion)**
 
 ##### Day 10 Tasks 7 & 8 — audit findings & fixes
 | # | Area | Finding | Fix |
@@ -162,19 +163,21 @@ Goal:
 
 Tests: FE 199/199 ✅ (incl. new cardKeyboard.test.mts) · tsc ✅ · eslint ✅ · next build ✅
 
-### DAY 12 — ACCESSIBILITY & RESPONSIVE QA
-- Task 1 — Keyboard navigation audit
-- Task 2 — Focus management audit
-- Task 3 — ARIA labels/roles audit
-- Task 4 — Modal/dialog accessibility
-- Task 5 — Screen-reader critical flows
-- Task 6 — 320px mobile QA
-- Task 7 — Tablet layout QA
-- Task 8 — Touch target / interaction audit
+### DAY 12 — ACCESSIBILITY & RESPONSIVE QA ✅ DONE
+- Task 1 — Keyboard navigation audit ✅ Verified: every `role="button"` has `tabIndex={0}` + Enter/Space handler; card keyboard helper moved to `lib/utils.ts` (Day 11) and covered by tests
+- Task 2 — Focus management audit ✅ NEW `lib/useDialogFocus.ts` (extracted from MobileDrawer's pattern): focus-in, Tab trap, Escape-close, focus-restore. Applied to HomeScreen's 4 dialogs, AiTutor note picker, GamificationHub reward overlay, NoteEditor PIN dialog
+- Task 3 — ARIA labels/roles audit ✅ Every button has text or `aria-label`; contentEditable editor now `role="textbox"` + `aria-label="Note content"`; all `aria-labelledby` targets verified to exist
+- Task 4 — Modal/dialog accessibility ✅ All dialogs: `role="dialog"` + `aria-modal="true"` + labelled; Escape close now universal (AiTutor picker + reward overlay previously lacked it); backdrop click already closed
+- Task 5 — Screen-reader critical flows ✅ Verified: sync/offline/undo/guest statuses all `role="status" aria-live="polite"`; AiTutor chat `role="log"` + typing `role="status"`; VoiceNotes recording state now `role="status"`; `<main>`/header/nav landmarks + `html lang="en"`
+- Task 6 — 320px mobile QA ✅ Verified: `body` + `.app-main` `overflow-x` guarded; 40 breakpoints (340px→1024px); fluid `minmax(140px,1fr)` notes grid
+- Task 7 — Tablet layout QA ✅ Verified: stats/grid rows collapse via media queries; hero/revision/profile grids stack correctly mid-range (768–1023px)
+- Task 8 — Touch target / interaction audit ✅ Header icon buttons 36→40px (WCAG 2.5.5 closer); bottom-nav + hamburger already 40px+; playback slider keyboard-operable
 
 Goal:
-→ desktop + mobile + keyboard users ke liye reliable UX
-→ accessibility failures systematically close karna
+→ desktop + mobile + keyboard users ke liye reliable UX ✅
+→ accessibility failures systematically close karna ✅
+
+Tests: FE 199/199 ✅ · tsc ✅ · eslint ✅ · next build ✅
 
 ### DAY 13 — TESTING EXPANSION
 - Task 1 — Critical user-flow tests

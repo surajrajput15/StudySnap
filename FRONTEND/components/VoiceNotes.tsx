@@ -714,7 +714,7 @@ export default function VoiceNotes({ onBack, onLinkToNote, onRecordingChange }: 
         <div className="voice-timer">{formatTime(recordingDuration)}</div>
 
         {isRecording && (
-          <div className="voice-status-row">
+          <div className="voice-status-row" role="status" aria-live="polite">
             <div className={`voice-status-dot ${isPaused ? '' : 'recording'}`} />
             <span>{isPaused ? 'Paused' : 'Recording'}</span>
             {!isPaused && <div className="voice-status-waves"><div className="wave-bar" /><div className="wave-bar" /><div className="wave-bar" /></div>}

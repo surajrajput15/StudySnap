@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useStore } from '@/lib/store/useStore';
+import { useDialogFocus } from '@/lib/useDialogFocus';
 import {
   Zap, Trophy, Flame, Target, Crown, Coins,
   TrendingUp, CalendarDays, Sparkles, CheckCircle, Gift,
@@ -59,6 +60,11 @@ export default function GamificationHub() {
 
   const [showReward, setShowReward] = useState<{ xp: number; coins: number; message: string } | null>(null);
   const [showAllAchievements, setShowAllAchievements] = useState(false);
+
+  // Day 12 Tasks 2 & 4 — the reward overlay traps focus, closes on Escape and
+  // restores focus to whatever triggered the reward.
+  const rewardRef = useRef<HTMLDivElement | null>(null);
+  useDialogFocus(!!showReward, rewardRef, () => setShowReward(null));
 
   useEffect(() => { checkAndResetDaily(); }, [checkAndResetDaily]);
 
@@ -351,7 +357,7 @@ export default function GamificationHub() {
 
       {/* ─── Animated Reward Overlay ─── */}
       {showReward && (
-        <div className="game-reward-overlay" role="dialog" aria-modal="true" aria-labelledby="reward-title" onClick={() => setShowReward(null)}>
+        <div ref={rewardRef} className="game-reward-overlay" role="dialog" aria-modal="true" aria-labelledby="reward-title" onClick={() => setShowReward(null)}>
           <div className="game-reward-card">
             <div className="game-reward-icon">
               <Sparkles size={32} />

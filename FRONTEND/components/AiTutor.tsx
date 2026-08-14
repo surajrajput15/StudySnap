@@ -23,6 +23,7 @@ import {
   ArrowLeft, MessageSquarePlus
 } from 'lucide-react';
 import SignInPrompt from '@/components/SignInPrompt';
+import { useDialogFocus } from '@/lib/useDialogFocus';
 import { getSpeechRecognitionCtor } from '@/lib/speech';
 
 const QUICK_CHIPS = [
@@ -708,6 +709,11 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
     setPendingTool(null);
   };
 
+  // Day 12 Tasks 2 & 4 — the note picker traps focus, closes on Escape and
+  // returns focus to the trigger that opened it.
+  const notePickerRef = useRef<HTMLDivElement | null>(null);
+  useDialogFocus(showNotePicker, notePickerRef, closeNotePicker);
+
   const handleInputFocus = () => {
     setTimeout(scrollToBottom, 350);
   };
@@ -932,7 +938,7 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
 
           {/* Day 9 Task 2 — explicit note selection. Never auto-picks a note. */}
           {showNotePicker && (
-            <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="note-picker-title" onClick={closeNotePicker}>
+            <div ref={notePickerRef} className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="note-picker-title" onClick={closeNotePicker}>
               <div className="modal-content tutor-note-picker-modal" onClick={(e) => e.stopPropagation()}>
                 <h3 id="note-picker-title" style={{ fontSize: '16px', fontWeight: 700 }}>
                   {pendingTool ? `Select a note for ${TOOL_LABELS[pendingTool] || 'the AI'}` : 'Attach a note'}
