@@ -174,10 +174,24 @@ export function isVoiceRecordingScopeValid(
 }
 
 /**
+ * Day 10 Task 7 — the server's voice-note transcript column (and its schema)
+ * cap at 50,000 characters. A speech transcript that long would otherwise make
+ * the multipart upload fail with a 400 and leave the row pending forever.
+ * Capped here at creation so the stored transcript, the sync payload and the
+ * server row all agree on the same value.
+ */
+export const MAX_VOICE_TRANSCRIPT_CHARS = 50000;
+
+/**
  * Final transcript for a persisted voice note. Returns null only when there is
  * genuinely no transcript, so the placeholder is never chosen over real text.
+ * Over-long speech transcripts are truncated to the server column limit instead
+ * of being stored whole (which would break the upload).
  */
 export function finalizeVoiceNoteTranscript(accumulated: string | null | undefined): string | null {
   const trimmed = (accumulated ?? '').trim();
-  return trimmed || null;
+  if (!trimmed) return null;
+  return trimmed.length <= MAX_VOICE_TRANSCRIPT_CHARS
+    ? trimmed
+    : trimmed.slice(0, MAX_VOICE_TRANSCRIPT_CHARS);
 }

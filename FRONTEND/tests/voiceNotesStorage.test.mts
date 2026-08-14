@@ -100,3 +100,14 @@ test('final transcript is real text, never the placeholder when text exists', ()
   assert.equal(finalizeVoiceNoteTranscript(null), null);
   assert.equal(finalizeVoiceNoteTranscript(undefined), null);
 });
+
+test('an over-long transcript is truncated to the server column limit (Day 10 Task 7)', () => {
+  // The server's transcript column/schema cap at 50,000 chars; storing a longer
+  // transcript would make the upload fail with a 400 and wedge the row pending.
+  const long = 'r'.repeat(60_000);
+  const capped = finalizeVoiceNoteTranscript(long);
+  assert.ok(capped, 'a non-empty transcript must never be dropped');
+  assert.equal(capped!.length, 50_000);
+  assert.ok(capped!.startsWith('r'.repeat(50_000)), 'head is preserved, tail is cut');
+  assert.equal(finalizeVoiceNoteTranscript('r'.repeat(50_000))!.length, 50_000);
+});

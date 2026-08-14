@@ -23,6 +23,27 @@ import type { SyncChildStatusEvent } from './syncEngine.ts';
 const STORE_KEY_PREFIX = 'studysnap-store';
 const VTOMBSTONE_PREFIX = 'studysnap:vtombstones';
 
+/**
+ * Day 10 Task 7 — the backend multer cap is 50MB (MAX_FILE_SIZE_BYTES). A
+ * recording bigger than that gets a 413 that the sync layer cannot fix, so it
+ * would retry the SAME oversized blob forever. The upload is skipped instead:
+ * the row stays local/pending (playback still works via IndexedDB) and no
+ * doomed network attempt is made.
+ */
+const MAX_VOICE_UPLOAD_BYTES = 50 * 1024 * 1024;
+
+/**
+ * Day 10 Task 7 — mirrors the server-side transcript truncation (voice-notes.ts)
+ * as defense-in-depth for legacy rows created before the cap existed.
+ */
+const MAX_TRANSCRIPT_CHARS = 50000;
+
+/** Day 10 Task 7 — true when a blob's byte size fits the backend upload cap
+ *  (50MB multer limit). Pure predicate so the skip rule is unit-testable. */
+export function isVoiceUploadWithinServerLimit(blobSize: number): boolean {
+  return blobSize <= MAX_VOICE_UPLOAD_BYTES;
+}
+
 /** Extracts the Clerk user id from an active store scope key, or null when the
  *  scope is the guest/anonymous store. */
 function getScopeUserId(scope: string): string | null {
@@ -210,12 +231,20 @@ async function performVoiceUpload(
   const blob = await getVoiceAudioBlob(voiceNote.audioId);
   if (!blob) return; // durable bytes are gone — cannot upload; stays pending
 
+  // Day 10 Task 7 — skip uploads the server would reject with a 413: the bytes
+  // exceed the backend cap, so every retry is a doomed network round-trip.
+  if (!isVoiceUploadWithinServerLimit(blob.size)) return;
+
   const formData = new FormData();
   formData.append('file', blob);
   formData.append('id', voiceNote.id);
   formData.append('noteId', voiceNote.noteId ?? '');
   formData.append('duration', String(voiceNote.duration));
-  if (voiceNote.transcript) formData.append('transcript', voiceNote.transcript);
+  if (voiceNote.transcript) {
+    // Day 10 Task 7 — legacy rows can still exceed the column limit; truncate
+    // before sending so the server never rejects a valid upload with a 400.
+    formData.append('transcript', voiceNote.transcript.slice(0, MAX_TRANSCRIPT_CHARS));
+  }
 
   const res = await apiFetchMultipart<VoiceNoteSaveResponse>(API.voiceNotes, formData, { token });
   if (res && res.status === 429) {

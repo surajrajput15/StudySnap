@@ -420,8 +420,19 @@ export default function VoiceNotes({ onBack, onLinkToNote, onRecordingChange }: 
       setTranscript('');
       if (recognitionRef.current) recognitionRef.current.start();
     } catch (err) {
-      console.error("Mic Access failed:", err);
-      alert("Failed to access microphone. Please grant permission.");
+      // Day 10 Task 7 — differentiate the two most common getUserMedia failures
+      // so the user gets a fixable message instead of a generic "grant permission".
+      const name = (err as { name?: string })?.name;
+      if (name === 'NotAllowedError' || name === 'SecurityError') {
+        console.error('Mic access denied:', err);
+        alert('Microphone access was denied. Please allow microphone permission for this site in your browser settings, then try again.');
+      } else if (name === 'NotFoundError' || name === 'OverconstrainedError' || name === 'DevicesNotFoundError') {
+        console.error('No microphone found:', err);
+        alert('No microphone was detected. Connect a microphone and try again.');
+      } else {
+        console.error("Mic Access failed:", err);
+        alert("Failed to access microphone. Please grant permission.");
+      }
     }
   };
 

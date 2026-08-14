@@ -8,6 +8,7 @@ import {
   deleteRemoteVoiceNote,
   syncVoiceNotesForUser,
   sweepOrphanedVoiceAudio,
+  isVoiceUploadWithinServerLimit,
   type ServerVoiceNoteRow,
 } from '../lib/sync/voiceNotesSync.ts';
 import { saveVoiceAudio, purgeOrphanedVoiceAudio, resetVoiceAudioStore, getVoiceAudio } from '../lib/storage/voiceNotes.ts';
@@ -444,4 +445,25 @@ test('V15 — an in-flight Account A upload cannot mutate Account B after a scop
   await flushMicrotasks();
 
   assert.equal(useStore.getState().voiceNotes.some((vn) => vn.id === 'vn-15'), false, 'B store untouched by A’s upload');
+});
+
+test('V16 — a blob above the 50MB server cap is never uploaded (Day 10 Task 7)', async () => {
+  // The backend multer limit is 50MB; an upload above it gets a 413 that the
+  // sync layer cannot fix and would retry forever. The upload must be skipped.
+  await saveVoiceAudio('audio-huge', new Blob([new Uint8Array(50 * 1024 * 1024 + 1024)], { type: 'audio/webm' }));
+  const note = makeVoiceNote({ id: 'vn-huge', audioId: 'audio-huge' });
+  useStore.setState({ voiceNotes: [note] });
+
+  await uploadVoiceNote(note, tokenFn);
+  await flushMicrotasks();
+
+  assert.equal(sentUploads(), 0, 'no doomed multipart attempt for an oversized blob');
+  const after = useStore.getState().voiceNotes.find((vn) => vn.id === 'vn-huge');
+  assert.equal(after?.synced, false, 'row stays pending and playable locally');
+});
+
+test('V17 — isVoiceUploadWithinServerLimit caps at the backend 50MB limit', () => {
+  assert.equal(isVoiceUploadWithinServerLimit(0), true);
+  assert.equal(isVoiceUploadWithinServerLimit(50 * 1024 * 1024), true);
+  assert.equal(isVoiceUploadWithinServerLimit(50 * 1024 * 1024 + 1), false);
 });

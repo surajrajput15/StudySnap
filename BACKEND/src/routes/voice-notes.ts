@@ -60,6 +60,10 @@ function normalizeAudioMimeType(mime: string): string {
 // with an empty string for the linked-note id, which must map to null instead
 // of failing validation (the old `.transform` ran after `.uuid()` and was dead
 // code, rejecting every standalone recording with a 400).
+// Day 10 Task 7 — the transcript is TRUNCATED (never rejected) to the 50,000
+// column limit. The old `.max(50000)` rejected over-long speech transcripts
+// with a 400, which the sync layer silently left pending and retried forever.
+const MAX_TRANSCRIPT_CHARS = 50000;
 const voiceNoteUploadSchema = z.object({
   id: z.string().uuid('Voice note id must be a UUID'),
   noteId: z.preprocess(
@@ -67,7 +71,11 @@ const voiceNoteUploadSchema = z.object({
     z.string().uuid('Linked note id must be a UUID').nullable()
   ),
   duration: z.coerce.number().int('duration must be an integer').min(0).max(86400).optional(),
-  transcript: z.string().max(50000, 'transcript must be at most 50,000 characters').optional(),
+  transcript: z
+    .string()
+    .max(200000, 'transcript is unreasonably long')
+    .transform((s) => s.slice(0, MAX_TRANSCRIPT_CHARS))
+    .optional(),
 });
 
 /** Exported for unit tests (standalone-memo validation, MIME normalization). */

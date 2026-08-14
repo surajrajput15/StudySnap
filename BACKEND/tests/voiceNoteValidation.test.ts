@@ -39,6 +39,31 @@ test('transcript and duration are optional but bounded', () => {
   }
 });
 
+test('an over-long transcript is truncated, never rejected (Day 10 Task 7)', () => {
+  // The old `.max(50000)` returned a 400, which the sync layer left pending and
+  // retried forever. Now the schema caps at the column limit so a long speech
+  // transcript can never wedge an upload.
+  const parsed = voiceNoteUploadSchema.safeParse({
+    id: UUID,
+    noteId: '',
+    transcript: 'a'.repeat(60_000),
+  });
+  assert.equal(parsed.success, true);
+  if (parsed.success) {
+    assert.equal(parsed.data.transcript!.length, 50_000);
+    assert.ok(parsed.data.transcript!.endsWith('a'.repeat(50_000)));
+  }
+});
+
+test('a transcript far beyond any realistic size is still rejected', () => {
+  const parsed = voiceNoteUploadSchema.safeParse({
+    id: UUID,
+    noteId: '',
+    transcript: 'x'.repeat(300_000),
+  });
+  assert.equal(parsed.success, false);
+});
+
 test('MIME aliases normalize to the canonical container', () => {
   assert.equal(normalizeAudioMimeType('audio/webm'), 'audio/webm');
   assert.equal(normalizeAudioMimeType('audio/webm;codecs=opus'), 'audio/webm');
