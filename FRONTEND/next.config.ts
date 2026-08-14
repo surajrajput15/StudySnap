@@ -48,6 +48,12 @@ const nextConfig: NextConfig = {
           { key: 'X-Frame-Options', value: 'DENY' },
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          // Day 14 Task 8 — HSTS for production hosts only: browsers ignore it
+          // on localhost/insecure contexts, so scoping it avoids confusion in
+          // local dev while locking the deployed origin to HTTPS.
+          ...(process.env.NODE_ENV === 'production'
+            ? [{ key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' }]
+            : []),
           // Day 14 Task 8 — the app records audio, so `microphone=(self)` stays;
           // everything else (camera, geolocation, payment, USB…) is denied to the
           // page and any embedded frame.
