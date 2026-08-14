@@ -77,7 +77,7 @@ test('addNote counts toward the daily goal, restarting on a new day', () => {
   assert.equal(useStore.getState().dailyProgress, 1);
   s.addNote(makeNote('B'));
   assert.equal(useStore.getState().dailyProgress, 2, 'a second note the same day counts again');
-  useStore.setState((state) => ({ lastDailyReset: '2000-01-01' }));
+  useStore.setState({ lastDailyReset: '2000-01-01' });
   s.addNote(makeNote('C'));
   assert.equal(useStore.getState().dailyProgress, 1, 'a new calendar day restarts progress at 1');
 });

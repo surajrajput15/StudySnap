@@ -532,14 +532,6 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
         </button>
       </div>
 
-      {/* ════════════════════════════════════════
-         SCREENSHOT SPLIT — Screenshot 1 ends here
-         (Header → Hero → Stats → AI Tools → Search)
-         Screenshot 2 begins below
-         (Categories → Folders → Notes)
-         ════════════════════════════════════════ */}
-      <div className="screenshot-divider" />
-
       {/* ─── Categories ─── */}
       <div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>

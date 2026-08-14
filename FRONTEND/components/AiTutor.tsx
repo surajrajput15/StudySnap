@@ -461,7 +461,9 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
         );
       } else if (data.sessionExpired) {
         addStreamingMessage('');
-        setTimeout(() => {
+        if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+        errorTimerRef.current = setTimeout(() => {
+          errorTimerRef.current = null;
           setMessages(prev => {
             const last = prev[prev.length - 1];
             if (last?.isStreaming) {

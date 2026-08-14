@@ -95,9 +95,9 @@ auth/session → Task 2 · weekly-challenge week rollover + Sunday chart → not
 - **Day 13:** ✅ 8/8 COMPLETE (testing expansion — 18 new store-level flow tests)
 - **Day 14:** ✅ 8/8 COMPLETE (security hardening round 2 — 0 FE vulns, bounded inputs, webhook+query limiters, upload magic-byte check, AI role sanitization, no-store/perms-policy headers)
 - **Day 15:** ✅ 8/8 COMPLETE (observability & error handling — error boundaries, crash logging, request logger, sync-failure surfacing, alert→toast unification)
-- **Current HEAD:** `b1f9c94` (+ Day 16 working tree, to commit)
+- **Current HEAD:** `2ba7b69` (+ Day 17 working tree, to commit)
 - **Tests:** ✅ Frontend 222/222 · ✅ Backend 67/67
-- **Sprint 2 status:** Day 16 COMPLETE → **NEXT: Day 17 (Final Production Readiness)**
+- **Sprint 2 status:** Day 17 COMPLETE → **NEXT: Day 18 (Release Candidate)**
 
 ##### Day 10 Tasks 7 & 8 — audit findings & fixes
 | # | Area | Finding | Fix |
@@ -242,15 +242,23 @@ Tests: FE **222/222** ✅ (5 new observability) · BE **67/67** ✅ (2 new reque
 
 Tests: BE **67/67** ✅ · tsc ✅ · eslint ✅ · build ✅
 
-### DAY 17 — FINAL PRODUCTION READINESS
-- Task 1 — Complete frontend audit
-- Task 2 — Complete backend audit
-- Task 3 — Security final audit
-- Task 4 — Performance final audit
-- Task 5 — Accessibility final audit
-- Task 6 — Test-suite final verification
-- Task 7 — Deployment/env verification
-- Task 8 — Final production checklist
+### DAY 17 — FINAL PRODUCTION READINESS ✅ DONE
+- Task 1 — Complete frontend audit ✅ 3 CRITICAL fixed:
+  - **NoteEditor autosave** — title/tags/pin/fav/lock/category/folder edits only set React state, never the debounce ref, so they were "Unsaved" but never autosaved (iOS tab-kill = data loss). All mutations now route through `markDirty()` (sets ref + state).
+  - **VoiceNotes mic race** — `getUserMedia` resolved after unmount started a live recorder + analyser loop with no cleanup. Added `mountedRef` guard → resolved stream is stopped/discarded if unmounted.
+  - **Guest migration** — guest key was deleted before the account-scope write was confirmed (quota-full ⇒ merged data existed ONLY in guest key ⇒ permanent loss + orphan sweep purging audio blobs). Now removes guest key only after the account write is confirmed on disk (`persistenceError` false + user key present).
+  - Also: `insertImage`/`insertMath` protocol-lock + DOMPurify (old regex scrub allowed `onerror` breakout); removed HomeScreen screenshot dev block; PwaRegister registers after-ready (load-race) + `console.log`→`info/error`; tracked AiTutor sessionExpired + GamificationHub reward timers; rail buttons get `aria-label`.
+- Task 2 — Complete backend audit ✅ 1 CRITICAL fixed + clean-up:
+  - **Removed the fully-mock `/api/revision` router** (never wired to DB; FE never calls it — silent "success:true lies" in prod). Deleted `routes/revision.ts`, `revisionSchema`, `computeNextRevision`, `REVISION_INTERVAL_DAYS`, + FE `revision` config refs.
+  - Removed unused deps `bullmq` + `ioredis`; moved `@types/*` + `typescript` to devDependencies (prod install bloat).
+- Task 3 — Security final audit ✅ 0 CRITICAL. No committed secrets (verified git ls-files); no `dangerouslySetInnerHTML`; zero native `alert()`; CSP/headers coherent (frontend strong, backend `unsafe-eval` accepted — JSON API). Fixed the real gaps: **rate-limiter skip dead code** — limiter mounted at `/api/` made `req.path` = `/ai/chat`, so AI/voice calls were double-counted against the global 100/15-min budget (runtime-verified fix: `req.baseUrl + req.path`). NODE_ENV consistency: `ensureAIAllowed` now applies the same "unset NODE_ENV == development" default as `env.ts` (call-time). Multer non-size errors no longer leak raw `err.message`. Root `.env.example` documents `NODE_ENV`.
+- Task 4 — Performance final audit ✅ No render loops; hot list path memoized (NoteCard/NoteListItem React.memo); heavy tabs all lazy `dynamic(ssr:false)`; pdf.js + jspdf lazy. Accepted: framer-motion + canvas-confetti ride the initial bundle via HomeScreen (Home is the default tab); 60 s periodic sync poll is the designed multi-device catch-up.
+- Task 5 — Accessibility final audit ✅ 0 native `alert()`; verified aria-live/role=status on sync pill, undo toast, offline banner, migration notice, AI chat; `:focus-visible` + `prefers-reduced-motion` honored; `lang="en"` + visually-hidden h1 per tab. Fixed: rail buttons `aria-label`. Accepted: 2 native `confirm()` dialogs + nested `role="button"` wrappers (deliberate, low-impact).
+- Task 6 — Test-suite final verification ✅ FE **222/222** · BE **67/67** · tsc ✅ · eslint ✅ · production builds ✅ (both). BE audit: 4 moderate remain = the documented dev-only esbuild advisory (drizzle-kit); no new vulns after dep cleanup.
+- Task 7 — Deployment/env verification ✅ `.env.example` now lists `NODE_ENV` (previously undocumented yet the pivot for fail-fast/mock/CORS); Railway `railway.json` + `npm run build`/`start` verified; health endpoint under the global limiter → now correctly skipping AI/voice keeps headroom (~90 health checks/15 min by design).
+- Task 8 — Final production checklist ✅ Every day-17 audit finding triaged: CRITICAL → fixed + verified; MINOR → fixed or explicitly accepted with a reason. See Day 18 for the Release Candidate run.
+
+Tests: BE **67/67** ✅ · FE **222/222** ✅ · tsc ✅ · eslint ✅ · build ✅ (both)
 
 ### DAY 18 — RELEASE CANDIDATE
 - Task 1 — Fresh production build

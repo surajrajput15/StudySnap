@@ -643,9 +643,21 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
   const insertImage = () => {
     const url = prompt('Paste image URL:');
     if (url) {
-      const sanitizedUrl = url.replace(/^javascript:/i, '').replace(/<[^>]*>/g, '');
-      const fileName = sanitizedUrl.split('/').pop()?.replace(/[?#].*$/, '').split('.')[0] || '';
-      const html = `<figure class="editor-image-block"><img src="${sanitizedUrl}" alt="${fileName}" loading="lazy" /><figcaption>Image</figcaption></figure>`;
+      const src = url.trim();
+      try {
+        const parsed = new URL(src);
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') throw new Error();
+      } catch {
+        notifyError('Image URL must start with http:// or https://');
+        return;
+      }
+      const fileName = src.split('/').pop()?.replace(/[?#].*$/, '').split('.')[0] || '';
+      // Day 17 Task 3 fix — the old regex scrub could not stop attribute
+      // breakout (e.g. `x" onerror="alert(1)`). The URL is now protocol-locked
+      // and the assembled markup is passed through DOMPurify before insertion.
+      const html = DOMPurify.sanitize(
+        `<figure class="editor-image-block"><img src="${src}" alt="${fileName}" loading="lazy" /><figcaption>Image</figcaption></figure>`
+      );
       insertAtCursor(html);
       handleEditorInputChange();
     }
@@ -654,7 +666,7 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
   const insertMath = () => {
     const expr = prompt('Enter math expression (e.g., E = mc²):');
     if (expr) {
-      const html = `<span class="editor-math-inline" contenteditable="false">📐 ${expr}</span>`;
+      const html = DOMPurify.sanitize(`<span class="editor-math-inline" contenteditable="false">📐 ${expr}</span>`);
       insertAtCursor(html + ' ');
       handleEditorInputChange();
     }
@@ -704,7 +716,7 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
       e.preventDefault();
       if (!tags.includes(tagInput.trim().toLowerCase())) {
         setTags([...tags, tagInput.trim().toLowerCase()]);
-        setSaveStatus('unsaved');
+        markDirty();
       }
       setTagInput('');
     }
@@ -712,11 +724,11 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
 
   const handleRemoveTag = (tagToRemove: string) => {
     setTags(tags.filter(t => t !== tagToRemove));
-    setSaveStatus('unsaved');
+    markDirty();
   };
 
   const handleLockToggle = () => {
-    if (pinLock) { setPinLock(null); confetti({ particleCount: 30, colors: ['#a0c9ff'] }); }
+    if (pinLock) { setPinLock(null); confetti({ particleCount: 30, colors: ['#a0c9ff'] }); markDirty(); }
     else { setShowPinModal(true); setPinCode(''); }
   };
 
@@ -730,6 +742,7 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
       const storedPin = await hashPinClient(pinCode);
       setPinLock(storedPin);
       setShowPinModal(false);
+      markDirty();
       confetti({ particleCount: 50, colors: ['#0061A4'] });
     } finally {
       setIsPinSetting(false);
@@ -876,10 +889,10 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
               <RefreshCw size={11} className={saveStatus === 'saving' ? 'pulse-recording' : ''} />
               {saveStatus === 'saved' ? 'Saved' : saveStatus === 'saving' ? 'Saving...' : 'Unsaved'}
             </span>
-            <button onClick={() => setIsPinned(!isPinned)} className="editor-toolbar-btn" aria-label={isPinned ? 'Unpin note' : 'Pin note'} style={{ color: isPinned ? 'var(--primary)' : 'var(--outline)' }}>
+            <button onClick={() => { setIsPinned(!isPinned); markDirty(); }} className="editor-toolbar-btn" aria-label={isPinned ? 'Unpin note' : 'Pin note'} style={{ color: isPinned ? 'var(--primary)' : 'var(--outline)' }}>
               <Pin size={15} style={{ fill: isPinned ? 'var(--primary)' : 'transparent' }} />
             </button>
-            <button onClick={() => setIsFavorite(!isFavorite)} className="editor-toolbar-btn" aria-label={isFavorite ? 'Remove from favorites' : 'Mark as favorite'} style={{ color: isFavorite ? '#F59E0B' : 'var(--outline)' }}>
+            <button onClick={() => { setIsFavorite(!isFavorite); markDirty(); }} className="editor-toolbar-btn" aria-label={isFavorite ? 'Remove from favorites' : 'Mark as favorite'} style={{ color: isFavorite ? '#F59E0B' : 'var(--outline)' }}>
               <Star size={15} style={{ fill: isFavorite ? '#F59E0B' : 'transparent' }} />
             </button>
             <button onClick={handleLockToggle} className="editor-toolbar-btn" aria-label={pinLock ? 'Unlock note' : 'Lock note with PIN'} style={{ color: pinLock ? 'var(--error)' : 'var(--outline)' }}>
@@ -893,14 +906,14 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
       <div className="editor-meta-bar">
         <div className="editor-meta-field">
           <Tag size={12} />
-          <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+          <select value={categoryId} onChange={(e) => { setCategoryId(e.target.value); markDirty(); }}>
             <option value="">General</option>
             {categories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
           </select>
         </div>
         <div className="editor-meta-field">
           <FolderOpen size={12} />
-          <select value={folderId} onChange={(e) => setFolderId(e.target.value)}>
+          <select value={folderId} onChange={(e) => { setFolderId(e.target.value); markDirty(); }}>
             <option value="">Root</option>
             {folders.map(folder => <option key={folder.id} value={folder.id}>{folder.name}</option>)}
           </select>
@@ -911,7 +924,7 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
       <div className="editor-paper">
         <input
           type="text" placeholder="Untitled" value={title}
-          onChange={(e) => { setTitle(e.target.value); setSaveStatus('unsaved'); }}
+          onChange={(e) => { setTitle(e.target.value); markDirty(); }}
           className="editor-title-input"
         />
 

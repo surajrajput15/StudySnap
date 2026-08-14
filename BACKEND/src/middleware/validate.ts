@@ -54,11 +54,6 @@ export const translateSchema = z.object({
   targetLanguage: z.enum(['hindi', 'english']).optional(),
 }).strict();
 
-export const revisionSchema = z.object({
-  noteId: z.string().uuid('Invalid note ID'),
-  rating: z.enum(['easy', 'medium', 'hard']),
-}).strict();
-
 export const verifyPinSchema = z.object({
   noteId: z.string().uuid('Invalid note ID'),
   pin: z.string().regex(PIN_PATTERN, PIN_PATTERN_MESSAGE),

@@ -64,6 +64,7 @@ export default function GamificationHub() {
   // Day 12 Tasks 2 & 4 — the reward overlay traps focus, closes on Escape and
   // restores focus to whatever triggered the reward.
   const rewardRef = useRef<HTMLDivElement | null>(null);
+  const rewardTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useDialogFocus(!!showReward, rewardRef, () => setShowReward(null));
 
   useEffect(() => { checkAndResetDaily(); }, [checkAndResetDaily]);
@@ -154,8 +155,21 @@ export default function GamificationHub() {
     setShowReward({ xp: xpAmt, coins: coinAmt, message: msg });
     addCoins(coinAmt);
     confetti({ particleCount: 40, spread: 60, colors: ['#0061A4', '#F59E0B', '#10B981'] });
-    setTimeout(() => setShowReward(null), 3000);
+    // Day 17 Task 1 fix — track the dismissal timer so it never fires setState
+    // after the tab unmounts (and never leaks a stale reward toast on remount).
+    if (rewardTimerRef.current) clearTimeout(rewardTimerRef.current);
+    rewardTimerRef.current = setTimeout(() => {
+      rewardTimerRef.current = null;
+      setShowReward(null);
+    }, 3000);
   }, [addCoins]);
+
+  useEffect(() => {
+    return () => {
+      if (rewardTimerRef.current) clearTimeout(rewardTimerRef.current);
+      rewardTimerRef.current = null;
+    };
+  }, []);
 
   const handleClaimAchievement = (id: string) => {
     if (earnedAchievements.includes(id)) return;

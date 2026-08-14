@@ -84,8 +84,11 @@ export class AIUnavailableError extends Error {
 
 function ensureAIAllowed(): void {
   // Every non-"development" environment (production, staging, test) must fail
-  // fast instead of serving mock study content to real users.
-  if (!groq && process.env.NODE_ENV !== 'development') {
+  // fast instead of serving mock study content to real users. The check reads
+  // NODE_ENV at CALL time and applies the same default as config/env.ts (unset
+  // NODE_ENV == development), so a box that forgets NODE_ENV can never
+  // half-degrade into mock mode, and tests can toggle the env per call.
+  if (!groq && (process.env.NODE_ENV || 'development') !== 'development') {
     throw new AIUnavailableError();
   }
 }

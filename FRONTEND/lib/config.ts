@@ -41,10 +41,6 @@ export const API = {
     mcqs: `${BACKEND_URL}/api/ai/mcqs`,
     translate: `${BACKEND_URL}/api/ai/translate`,
   },
-  revision: {
-    mark: `${BACKEND_URL}/api/revision/mark`,
-    logs: `${BACKEND_URL}/api/revision/logs`,
-  },
 };
 
 export interface ApiResponse {

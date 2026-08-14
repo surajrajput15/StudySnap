@@ -661,11 +661,21 @@ export function migrateGuestDataForUser(clerkUserId: string): GuestMigrationResu
   if (!result) return null;
 
   useStore.setState({ ...merged, guestMigration: result });
-  try {
-    window.localStorage.removeItem(guestKey);
-  } catch {
-    // Persisting the migration to the account scope already succeeded via the
-    // store; failing to clear the guest scope only means a stale copy remains.
+
+  // Day 17 Task 1 fix — only clear the guest scope AFTER the account-scope
+  // write is confirmed on disk. If the write failed (quota, storage locked),
+  // the merged data exists ONLY in the guest key; removing it would be permanent
+  // data loss, and the post-hydration orphan sweep would then purge the migrated
+  // voice audio blobs too. The guest copy stays put until the account write lands.
+  const accountWriteFailed = useStore.getState().persistenceError;
+  if (!accountWriteFailed) {
+    try {
+      const userKey = persistKeyForScope(activeStoreUserId);
+      const confirmed = window.localStorage.getItem(userKey) !== null;
+      if (confirmed) window.localStorage.removeItem(guestKey);
+    } catch {
+      // Keep the guest copy — it is the only surviving source of the data.
+    }
   }
   return result;
 }

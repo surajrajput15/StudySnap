@@ -180,6 +180,10 @@ export default function VoiceNotes({ onBack, onLinkToNote, onRecordingChange }: 
   // stale onstop can never read a newer recording's live values.
   const recordingCtxRef = useRef<RecordingSession | null>(null);
   const isRecordingRef = useRef<boolean>(false);
+  // Day 17 Task 1 fix — guards the getUserMedia await: if the user leaves the
+  // tab while the permission prompt is pending, the resolved stream must be
+  // discarded (not turned into a live mic + recorder after unmount).
+  const mountedRef = useRef(true);
   // Object URLs we created for playback; revoked when playback ends.
   const objectUrlsRef = useRef<Set<string>>(new Set());
   const activePlaybackUrlRef = useRef<string | null>(null);
@@ -287,6 +291,7 @@ export default function VoiceNotes({ onBack, onLinkToNote, onRecordingChange }: 
 
   useEffect(() => {
     return () => {
+      mountedRef.current = false;
       if (activeAudioRef.current) activeAudioRef.current.pause();
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
       if (audioContextRef.current) audioContextRef.current.close();
@@ -366,6 +371,12 @@ export default function VoiceNotes({ onBack, onLinkToNote, onRecordingChange }: 
   const handleStartRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // The component may have unmounted while the permission prompt was open.
+      // Release the mic immediately — never start a recorder or touch state.
+      if (!mountedRef.current) {
+        stream.getTracks().forEach(track => track.stop());
+        return;
+      }
       // Fresh per-recording context. MediaRecorder's ondataavailable and onstop
       // close over this object, so a rapid stop → start can never make a stale
       // onstop read the new recording's chunks, transcript, duration or scope.

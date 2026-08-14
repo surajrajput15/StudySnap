@@ -154,7 +154,9 @@ router.post('/', voiceUploadLimiter, (req: Request, res: Response) => {
           });
           return;
         }
-        res.status(400).json({ success: false, error: err.message });
+        // Day 17 Task 2 fix — never leak multer's raw internal message (paths,
+        // field names, library internals) to the client; report a generic error.
+        res.status(400).json({ success: false, error: 'Upload failed' });
         return;
       }
       res.status(400).json({ success: false, error: 'Upload failed' });

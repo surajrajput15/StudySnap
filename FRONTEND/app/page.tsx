@@ -261,6 +261,7 @@ export default function Page() {
               className={`rail-link ${isActive ? 'active' : ''}`}
               onClick={() => navigate(tab.id)}
               title={tab.label}
+              aria-label={tab.label}
             >
               <Icon size={20} strokeWidth={isActive ? 2.5 : 1.5} />
             </button>

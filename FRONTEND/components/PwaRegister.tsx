@@ -5,18 +5,26 @@ import { useStore } from '@/lib/store/useStore';
 
 export default function PwaRegister() {
   useEffect(() => {
-    // Register Service Worker for PWA offline support
-    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js').then(
-          (registration) => {
-            console.log('ServiceWorker registration successful with scope: ', registration.scope);
-          },
-          (err) => {
-            console.log('ServiceWorker registration failed: ', err);
-          }
-        );
-      });
+    // Register Service Worker for PWA offline support. Registration is cheap
+    // and idempotent; doing it before `load` when the document is already
+    // ready avoids the race where a fast cached load fires `window.load`
+    // before this effect runs and registration is silently skipped.
+    const register = () => {
+      if (!('serviceWorker' in navigator)) return;
+      navigator.serviceWorker.register('/sw.js').then(
+        (registration) => {
+          console.info('ServiceWorker registered:', registration.scope);
+        },
+        (err) => {
+          console.error('ServiceWorker registration failed:', err);
+        }
+      );
+    };
+
+    if (document.readyState === 'complete') {
+      register();
+    } else {
+      window.addEventListener('load', register);
     }
 
     // Monitor online/offline status
@@ -30,6 +38,7 @@ export default function PwaRegister() {
     updateOnlineStatus(); // Initial run
 
     return () => {
+      window.removeEventListener('load', register);
       window.removeEventListener('online', updateOnlineStatus);
       window.removeEventListener('offline', updateOnlineStatus);
     };

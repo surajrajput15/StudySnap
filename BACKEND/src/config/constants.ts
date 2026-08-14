@@ -13,14 +13,6 @@ export const CACHE_TTL_NOTES_SECONDS = 60;
 export const PIN_PATTERN = /^\d{4}$/;
 export const PIN_PATTERN_MESSAGE = 'PIN must be 4 digits';
 
-export const REVISION_INTERVAL_DAYS = {
-  easy: 7,
-  medium: 3,
-  hard: 1,
-} as const;
-
-export type RevisionRating = keyof typeof REVISION_INTERVAL_DAYS;
-
 export const DEFAULT_CATEGORIES = [
   { id: 'cat-physics', name: 'Physics', color: '#3B82F6' },
   { id: 'cat-chemistry', name: 'Chemistry', color: '#10B981' },

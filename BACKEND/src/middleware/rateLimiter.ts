@@ -20,7 +20,12 @@ export const apiLimiter = rateLimit({
   ...limits,
   windowMs: 15 * MINUTE,
   max: 100,
-  skip: (req) => GLOBAL_LIMIT_SKIP_PATHS.some((pattern) => pattern.test(req.path)),
+  // Day 17 Task 2 fix — the limiter is mounted at `/api/`, so `req.path` is
+  // `/ai/chat`, NOT `/api/ai/chat`, and the skip patterns never matched: every
+  // AI/voice call was double-counted against BOTH its dedicated limiter and the
+  // global 100/15-min budget, risking mid-session 429s. Join baseUrl + path to
+  // reconstruct the full API route before testing the skip patterns.
+  skip: (req) => GLOBAL_LIMIT_SKIP_PATHS.some((pattern) => pattern.test(`${req.baseUrl}${req.path}`)),
   message: { success: false, error: 'Too many requests. Please try again later.' },
 });
 
