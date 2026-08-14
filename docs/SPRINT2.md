@@ -92,9 +92,10 @@ auth/session → Task 2 · weekly-challenge week rollover + Sunday chart → not
 - **Day 10:** ✅ 8/8 COMPLETE (audit + fixes landed across commits 8e937ae → 652b577)
 - **Day 11:** ✅ 8/8 COMPLETE (perf audit + NoteCard memoization + KaTeX fonts)
 - **Day 12:** ✅ 8/8 COMPLETE (a11y + responsive audit; focus-trap hook + editor textbox role)
-- **Current HEAD:** `c347bfd` (+ Day 12 working tree, to commit)
-- **Tests:** ✅ Frontend 199/199 · ✅ Backend 39/39
-- **Sprint 2 status:** Day 12 COMPLETE → **NEXT: Day 13 (Testing Expansion)**
+- **Day 13:** ✅ 8/8 COMPLETE (testing expansion — 18 new store-level flow tests)
+- **Current HEAD:** `9f49443` (+ Day 13 working tree, to commit)
+- **Tests:** ✅ Frontend 217/217 · ✅ Backend 39/39
+- **Sprint 2 status:** Day 13 COMPLETE → **NEXT: Day 14 (Security Hardening Round 2)**
 
 ##### Day 10 Tasks 7 & 8 — audit findings & fixes
 | # | Area | Finding | Fix |
@@ -179,18 +180,22 @@ Goal:
 
 Tests: FE 199/199 ✅ · tsc ✅ · eslint ✅ · next build ✅
 
-### DAY 13 — TESTING EXPANSION
-- Task 1 — Critical user-flow tests
-- Task 2 — Authentication flow tests
-- Task 3 — Note CRUD tests
-- Task 4 — Folder/category tests
-- Task 5 — Voice-note lifecycle tests
-- Task 6 — AI flow tests
-- Task 7 — Offline/sync recovery tests
-- Task 8 — Error/retry tests
+### DAY 13 — TESTING EXPANSION ✅ DONE
+- Task 1 — Critical user-flow tests ✅ NEW `criticalUserFlow.test.mts` — full guest study session (note + voice memo) → spaced revision scheduling → sign-in migration → edit → delete; account streak-honesty asserted
+- Task 2 — Authentication flow tests ✅ Covered by existing `guestMigration.test.mts` (migrateGuestDataForUser merge/idempotency + switchStoreScopeForUser legacy normalization); no-op-empty-migration case added in criticalUserFlow
+- Task 3 — Note CRUD tests ✅ NEW `noteCrud.test.mts` — id/timestamp generation, prepend order, partial-update merge + updatedAt refresh, delete + activeNoteId bookkeeping
+- Task 4 — Folder/category tests ✅ NEW `folderCategory.test.mts` — category detach (notes survive), folder cascade (notes inside removed), filter clearing, and "organizing is NOT study activity"
+- Task 5 — Voice-note lifecycle tests ✅ NEW `voiceNoteLifecycle.test.mts` — empty-noteId→null normalization, synced/audioUrl defaults, prepend, transcript update, targeted delete
+- Task 6 — AI flow tests ✅ Covered by existing `aiChatPersistence`/`aiContext`/`aiErrors` (setAiMessages, clearAiMessages, caps, classification)
+- Task 7 — Offline/sync recovery tests ✅ Covered by existing `syncEngine` (20+ cases incl. offline/resume) + `voiceNotesSync`/`notesSyncDeleteRace`
+- Task 8 — Error/retry tests ✅ Covered by existing `aiErrors`, `deleteUndo`, `syncEngine` 429/backoff suites
+
+Bonus fix: store `addNote` now stamps a single timestamp for createdAt/updatedAt (a parallel-test-run revealed the two `new Date()` calls could straddle a millisecond boundary — flaky equality).
 
 Goal:
-→ important production flows regression-proof banana
+→ important production flows regression-proof banana ✅
+
+Tests: FE **217/217** ✅ (18 new) · tsc ✅ · eslint ✅ · next build ✅
 
 ### DAY 14 — SECURITY HARDENING ROUND 2
 - Task 1 — Dependency/security audit

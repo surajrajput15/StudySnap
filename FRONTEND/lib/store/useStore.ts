@@ -304,6 +304,7 @@ function makeInitialState(set: SetStateFn): AppState {
       return { user: { ...state.user, name } };
     }),
     addNote: (noteData) => {
+      const now = new Date().toISOString();
       const newNote: Note = {
         id: noteData.id || crypto.randomUUID(),
         title: noteData.title,
@@ -317,8 +318,11 @@ function makeInitialState(set: SetStateFn): AppState {
         lastRevisedAt: noteData.lastRevisedAt || null,
         nextRevisionAt: noteData.nextRevisionAt || null,
         revisionStreak: noteData.revisionStreak || 0,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        // Day 13 — a single timestamp so createdAt and updatedAt can never
+        // straddle a millisecond boundary (a flaky window that made the two
+        // values differ and tests/timestamps inconsistent).
+        createdAt: now,
+        updatedAt: now,
       };
       set((state) => {
         const today = dateKey();
