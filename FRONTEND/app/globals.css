@@ -6852,3 +6852,129 @@ textarea:focus-visible,
     display: none;
   }
 }
+
+/* ─── Day 15 — error boundaries, error toast, 404 ─────────────────────── */
+
+.error-boundary,
+.route-error,
+.not-found {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+  padding: 32px 20px;
+  text-align: center;
+}
+.route-error {
+  min-height: 100vh;
+}
+.error-boundary-inner,
+.route-error-inner,
+.not-found-inner {
+  max-width: 460px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.error-boundary-title,
+.route-error-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--on-background, #1a1d23);
+}
+.not-found-code {
+  margin: 0;
+  font-size: 3rem;
+  font-weight: 800;
+  color: var(--primary, #0061a4);
+  letter-spacing: 2px;
+}
+.not-found-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--on-background, #1a1d23);
+}
+.error-boundary-copy,
+.route-error-copy,
+.not-found-copy {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--md3-on-surface-variant, var(--text-muted, #5a6472));
+}
+.route-error-digest {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted, #5a6472);
+  font-family: monospace;
+}
+.error-boundary-action {
+  border: none;
+  cursor: pointer;
+  margin-top: 8px;
+  padding: 10px 20px;
+  border-radius: var(--radius-md, 16px);
+  background: var(--primary, #0061a4);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: opacity var(--transition-fast, 150ms);
+}
+.error-boundary-action:hover {
+  opacity: 0.9;
+}
+
+.error-toast {
+  position: fixed;
+  bottom: 96px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(90vw, 440px);
+  padding: 12px 12px 12px 16px;
+  background: var(--error-container, #fce4ec);
+  color: var(--on-error-container, var(--error, #b91c1c));
+  border-radius: var(--radius-md, 16px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  font-size: 13px;
+  line-height: 1.45;
+  z-index: 1300;
+  animation: delete-undo-in 160ms ease-out;
+}
+.error-toast-icon {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--error, #ba1a1a);
+  color: #fff;
+  font-weight: 800;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.error-toast-message {
+  flex: 1;
+  min-width: 0;
+}
+.error-toast-dismiss {
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm, 8px);
+  color: inherit;
+}
+.error-toast-dismiss:hover {
+  background: rgba(0, 0, 0, 0.08);
+}

@@ -3,6 +3,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 import PwaRegister from "@/components/PwaRegister";
 import ThemeSync from "@/components/ThemeSync";
 import SessionExpiredModal from "@/components/SessionExpiredModal";
+import ErrorToast from "@/components/ErrorToast";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -57,6 +58,7 @@ export default function RootLayout({
           <ThemeSync />
           <PwaRegister />
           <SessionExpiredModal />
+          <ErrorToast />
           {children}
         </body>
       </html>

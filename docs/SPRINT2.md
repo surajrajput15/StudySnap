@@ -94,9 +94,10 @@ auth/session → Task 2 · weekly-challenge week rollover + Sunday chart → not
 - **Day 12:** ✅ 8/8 COMPLETE (a11y + responsive audit; focus-trap hook + editor textbox role)
 - **Day 13:** ✅ 8/8 COMPLETE (testing expansion — 18 new store-level flow tests)
 - **Day 14:** ✅ 8/8 COMPLETE (security hardening round 2 — 0 FE vulns, bounded inputs, webhook+query limiters, upload magic-byte check, AI role sanitization, no-store/perms-policy headers)
-- **Current HEAD:** `e876837` (+ Day 14 working tree, to commit)
-- **Tests:** ✅ Frontend 217/217 · ✅ Backend 62/62
-- **Sprint 2 status:** Day 14 COMPLETE → **NEXT: Day 15 (Observability & Error Handling)**
+- **Day 15:** ✅ 8/8 COMPLETE (observability & error handling — error boundaries, crash logging, request logger, sync-failure surfacing, alert→toast unification)
+- **Current HEAD:** `1facf9b` (+ Day 15 working tree, to commit)
+- **Tests:** ✅ Frontend 222/222 · ✅ Backend 67/67
+- **Sprint 2 status:** Day 15 COMPLETE → **NEXT: Day 16 (Database & Backend Engineering)**
 
 ##### Day 10 Tasks 7 & 8 — audit findings & fixes
 | # | Area | Finding | Fix |
@@ -214,18 +215,20 @@ Goal:
 
 Tests: BE **62/62** ✅ (new: `aiInjectionGuard`, `authorization`, `rateLimitCoverage`, `validationHardening`, `voiceNoteValidation` signature/bounds) · FE **217/217** ✅ · tsc ✅ · eslint ✅ · next build ✅ · npm audit ✅ (FE 0)
 
-### DAY 15 — OBSERVABILITY & ERROR HANDLING
-- Task 1 — Frontend error boundaries
-- Task 2 — Backend centralized error handling
-- Task 3 — Production-safe logging
-- Task 4 — AI failure observability
-- Task 5 — Sync failure observability
-- Task 6 — API latency/error tracking strategy
-- Task 7 — User-facing error consistency
-- Task 8 — Recovery/retry UX audit
+### DAY 15 — OBSERVABILITY & ERROR HANDLING ✅ DONE
+- Task 1 — Frontend error boundaries ✅ NEW reusable `ErrorBoundary` + `app/error.tsx` + `app/global-error.tsx` + `app/not-found.tsx`; every tab in the shell is wrapped per-tab (`key=tab-<id>`) so one crashing tab no longer blanks the whole app
+- Task 2 — Backend centralized error handling ✅ Verified existing: global error middleware (index.ts) maps body-parser 400/413 to correct statuses; AI 503/429 surfaced truthfully via `aiErrorBody`; **no gaps**
+- Task 3 — Production-safe logging ✅ NEW `lib/observability.ts` — the only global client crash channel: window `error` + `unhandledrejection` + declared `studysnap:crash` listeners, structured console breadcrumbs (Vercel stdout = production log store); NEW backend `requestLogger` middleware (one metric-only line per call: method/path/status/duration/userId — never body content)
+- Task 4 — AI failure observability ✅ Existing AI breadcrumbs verified (`aiRequestLogMeta` counts/lengths only, `wrapAIError` status passthrough); new global crash logging now captures any render-timer crash in the AI bubble
+- Task 5 — Sync failure observability ✅ `SyncStatusIndicator` now surfaces `lastError` / `lastHttpStatus` / `retryCount` (data the engine already tracked but never rendered) in the retry tooltip
+- Task 6 — API latency/error tracking ✅ NEW `requestLogger` middleware (per-request status+duration+userId) + requestLogger unit tests
+- Task 7 — User-facing error consistency ✅ NEW shared `notifyError()` channel + `ErrorToast` component (event-driven, auto-dismiss) replacing ALL 6 native `alert()` calls (VoiceNotes mic/no-mic/recording, NoteEditor STT, AiTutor STT); AiTutor's raw `data.error` passthrough hardened (≤200 chars, no paths/stack frames)
+- Task 8 — Recovery/retry UX audit ✅ Fire-and-forget `uploadVoiceNote` rejection now caught (an IndexedDB blob-read failure surfaces as a pending note, never an unhandled rejection); sync retry tooltip shows why it failed + which attempt
 
 Goal:
-→ production me bug aaye to "kuch nahi chal raha" ke bajay exact failure path identify ho
+→ production me bug aaye to "kuch nahi chal raha" ke bajay exact failure path identify ho ✅
+
+Tests: FE **222/222** ✅ (5 new observability) · BE **67/67** ✅ (2 new requestLogger) · tsc ✅ · eslint ✅ · next build ✅
 
 ### DAY 16 — DATABASE & BACKEND ENGINEERING
 - Task 1 — Database query audit

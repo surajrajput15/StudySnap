@@ -6,7 +6,7 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "lint": "eslint src/",
-    "test": "node --no-warnings --import tsx --test tests/corsSecurity.test.ts tests/aiLogging.test.ts tests/envValidation.test.ts tests/aiFailFast.test.ts tests/storageFailClosed.test.ts tests/voiceNoteValidation.test.ts tests/errorStateConsistency.test.ts tests/validationHardening.test.ts tests/authorization.test.ts tests/rateLimitCoverage.test.ts",
+    "test": "node --no-warnings --import tsx --test tests/corsSecurity.test.ts tests/aiLogging.test.ts tests/envValidation.test.ts tests/aiFailFast.test.ts tests/storageFailClosed.test.ts tests/voiceNoteValidation.test.ts tests/errorStateConsistency.test.ts tests/validationHardening.test.ts tests/authorization.test.ts tests/rateLimitCoverage.test.ts tests/aiInjectionGuard.test.ts tests/requestLogger.test.ts",
     "start": "node dist/index.js",
     "db:push": "drizzle-kit push",
     "db:generate": "drizzle-kit generate",

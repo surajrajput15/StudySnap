@@ -16,6 +16,7 @@ import MobileDrawer from '@/components/MobileDrawer';
 import OfflineBanner from '@/components/OfflineBanner';
 import SyncStatusIndicator from '@/components/SyncStatusIndicator';
 import DeleteUndoToast from '@/components/DeleteUndoToast';
+import ErrorBoundary from '@/components/ErrorBoundary';
 import LoadingShell from '@/components/LoadingShell';
 import GuestMigrationNotice from '@/components/GuestMigrationNotice';
 import { RECORDING_NAV_CONFIRM_MESSAGE, shouldConfirmRecordingNav } from '@/lib/utils';
@@ -302,30 +303,32 @@ export default function Page() {
       <main className="app-main">
         <h1 className="visually-hidden">{navItems.find(t => t.id === activeTab)?.label || 'StudySnap'}</h1>
         <div className="main-content">
-          {activeTab === 'home' && (
-            <HomeScreen 
-              onEditNote={handleEditNote} 
-              onCreateNote={handleCreateNote} 
-              onNavigate={(tab) => navigate(tab)}
-            />
-          )}
-          {activeTab === 'editor' && (
-            <NoteEditor 
-              noteId={activeNoteId} 
-              onBack={() => navigate('home')}
-            />
-          )}
-          {activeTab === 'voice' && (
-            <VoiceNotes 
-              onBack={() => setActiveTab('home')}
-              onLinkToNote={handleLinkToNote}
-              onRecordingChange={setVoiceRecording}
-            />
-          )}
-          {activeTab === 'calendar' && <RevisionCalendar />}
-          {activeTab === 'ai' && <AiTutor onBack={() => navigate('home')} />}
-          {activeTab === 'gamification' && <GamificationHub />}
-          {activeTab === 'profile' && <ProfileView />}
+          <ErrorBoundary key={`tab-${activeTab}`} label="This tab">
+            {activeTab === 'home' && (
+              <HomeScreen 
+                onEditNote={handleEditNote} 
+                onCreateNote={handleCreateNote} 
+                onNavigate={(tab) => navigate(tab)}
+              />
+            )}
+            {activeTab === 'editor' && (
+              <NoteEditor 
+                noteId={activeNoteId} 
+                onBack={() => navigate('home')}
+              />
+            )}
+            {activeTab === 'voice' && (
+              <VoiceNotes 
+                onBack={() => setActiveTab('home')}
+                onLinkToNote={handleLinkToNote}
+                onRecordingChange={setVoiceRecording}
+              />
+            )}
+            {activeTab === 'calendar' && <RevisionCalendar />}
+            {activeTab === 'ai' && <AiTutor onBack={() => navigate('home')} />}
+            {activeTab === 'gamification' && <GamificationHub />}
+            {activeTab === 'profile' && <ProfileView />}
+          </ErrorBoundary>
         </div>
       </main>
 

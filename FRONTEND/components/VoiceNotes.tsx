@@ -20,6 +20,7 @@ import confetti from 'canvas-confetti';
 import EmptyState, { EmptyVoiceIllustration } from './EmptyState';
 import { SpeechRecognition, SpeechRecognitionEvent } from '@/lib/speech';
 import { formatShortDate, RECORDING_NAV_CONFIRM_MESSAGE } from '@/lib/utils';
+import { notifyError } from '@/lib/observability';
 
 interface VoiceNotesProps {
   onBack: () => void;
@@ -425,13 +426,13 @@ export default function VoiceNotes({ onBack, onLinkToNote, onRecordingChange }: 
       const name = (err as { name?: string })?.name;
       if (name === 'NotAllowedError' || name === 'SecurityError') {
         console.error('Mic access denied:', err);
-        alert('Microphone access was denied. Please allow microphone permission for this site in your browser settings, then try again.');
+        notifyError('Microphone access was denied. Please allow microphone permission for this site in your browser settings, then try again.');
       } else if (name === 'NotFoundError' || name === 'OverconstrainedError' || name === 'DevicesNotFoundError') {
         console.error('No microphone found:', err);
-        alert('No microphone was detected. Connect a microphone and try again.');
+        notifyError('No microphone was detected. Connect a microphone and try again.');
       } else {
         console.error("Mic Access failed:", err);
-        alert("Failed to access microphone. Please grant permission.");
+        notifyError('Failed to access microphone. Please grant permission.');
       }
     }
   };
@@ -472,7 +473,11 @@ export default function VoiceNotes({ onBack, onLinkToNote, onRecordingChange }: 
     // first, then the sync layer sends the bytes to the server (multipart) so
     // the row can be marked synced. The upload is fire-and-forget; a failure
     // leaves the note pending and a later sync retries. Never blocks local UI.
-    void uploadVoiceNote(created, () => getToken());
+    // Day 15 — the fire-and-forget promise is caught so an IndexedDB blob-read
+    // failure surfaces as a pending note instead of an unhandled rejection.
+    void uploadVoiceNote(created, () => getToken()).catch((err: unknown) => {
+      console.error('[studysnap] voice upload rejected (will retry on next sync):', err);
+    });
     confetti({ particleCount: 40, colors: ['#0061A4', '#bdc7dc'] });
   };
 
@@ -553,7 +558,7 @@ export default function VoiceNotes({ onBack, onLinkToNote, onRecordingChange }: 
       if (!source) {
         setPlayingId(null);
         setPlaybackProgress(0);
-        alert('This recording is no longer available.');
+        notifyError('This recording is no longer available.');
         return;
       }
 

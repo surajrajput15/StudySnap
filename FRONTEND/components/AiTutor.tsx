@@ -7,6 +7,7 @@ import { API, apiFetch } from '@/lib/config';
 import { buildStudyContext, buildContextMessages } from '@/lib/ai';
 import { stripHtml, tutorConnectionLabel, tutorConnectionClass } from '@/lib/utils';
 import { classifyAiError, aiErrorMessage } from '@/lib/aiErrors';
+import { notifyError } from '@/lib/observability';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -475,8 +476,14 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
         // Day 9 Task 17 — surface a cause-specific message instead of dumping
         // whatever the backend sent. A clean 4xx message is still informative
         // (e.g. "material too long"), so it is kept only for badRequest failures.
+        // Day 15 — the allow-list is tightened: no file paths, stack frames,
+        // source-file names, or over-long strings reach the chat bubble.
         const cleanError =
-          data.error && !/BACKEND|node_modules|allowedOrigins/i.test(data.error) ? data.error : null;
+          data.error &&
+          data.error.length <= 200 &&
+          !/[\\/]|node_modules|allowedOrigins|at \w+\.|\b\w+\.ts\b|\b\w+\.js\b/i.test(data.error)
+            ? data.error
+            : null;
         const kind = classifyAiError({
           isOffline,
           status: data.status ?? null,
@@ -899,7 +906,7 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
                     };
                     recognition.start();
                   } else {
-                    alert('Speech recognition is not supported in this browser.');
+                    notifyError('Speech recognition is not supported in this browser.');
                   }
                 }}
               >

@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import { securityMiddleware, corsMiddleware } from './middleware/security';
 import { apiLimiter } from './middleware/rateLimiter';
+import { requestLogger } from './middleware/requestLogger';
 import { env, validateProductionEnv } from './config/env';
 import { JSON_BODY_LIMIT } from './config/constants';
 
@@ -29,6 +30,7 @@ app.set('trust proxy', 1);
 
 app.use(securityMiddleware);
 app.use(corsMiddleware);
+app.use(requestLogger);
 app.use('/api/webhooks', webhooksRouter);
 app.use(express.json({ limit: JSON_BODY_LIMIT }));
 app.use(express.urlencoded({ extended: true }));

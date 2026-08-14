@@ -16,6 +16,7 @@ import confetti from 'canvas-confetti';
 import { SpeechRecognition, SpeechRecognitionEvent, SpeechRecognitionErrorEvent } from '@/lib/speech';
 import { PIN_LENGTH } from '@/lib/constants';
 import { stripHtml } from '@/lib/utils';
+import { notifyError } from '@/lib/observability';
 import { buildCodeBlockHtml, extractCodeBlockText, copyCodeToClipboard } from '@/lib/editorCode';
 import { buildStudyContext, buildContextMessages } from '@/lib/ai';
 import { API, apiFetch } from '@/lib/config';
@@ -683,7 +684,7 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
 
   const handleDictateSpeech = () => {
     if (!recognitionRef.current) {
-      alert("Speech Recognition API is not supported in this browser. Try Chrome/Safari.");
+      notifyError('Speech Recognition API is not supported in this browser. Try Chrome/Safari.');
       return;
     }
     if (isListening) {
