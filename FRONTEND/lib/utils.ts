@@ -4,7 +4,15 @@ export function stripHtml(html: string): string {
 
 export function dateKey(date: Date | string = new Date()): string {
   const value = date instanceof Date ? date : new Date(date);
-  return value.toISOString().split('T')[0];
+  // Local calendar day, not UTC: `toISOString()` returns the UTC date, which for
+  // a user east of UTC is the PREVIOUS day between midnight and the UTC offset
+  // (e.g. 00:30 IST is still "yesterday" in UTC), so a study session right after
+  // midnight would be counted on the wrong calendar day and break the streak /
+  // daily-goal logic. Pad manually to keep it a stable YYYY-MM-DD sortable key.
+  const y = value.getFullYear();
+  const m = String(value.getMonth() + 1).padStart(2, '0');
+  const d = String(value.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
 export function formatShortDate(date: string | Date): string {
