@@ -3,7 +3,7 @@ import multer from 'multer';
 import { z } from 'zod';
 import { eq, and, desc } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/auth';
-import { voiceUploadLimiter } from '../middleware/rateLimiter';
+import { voiceUploadLimiter, voiceQueryLimiter } from '../middleware/rateLimiter';
 import { getDb, voiceNotes, notes } from '../db';
 import { MAX_FILE_SIZE_BYTES } from '../config/constants';
 import {
@@ -54,6 +54,32 @@ function normalizeAudioMimeType(mime: string): string {
   return base;
 }
 
+// Day 14 Task 5 — the multipart MIME type is CLIENT-DECLARED, so the allowlist
+// above alone can be beaten by a caller who labels arbitrary bytes
+// `audio/webm`. These magic-byte signatures verify the FIRST BYTES of the file
+// match the declared container, so a script/html/other payload labelled as
+// audio is rejected before it ever reaches Cloudinary. Matroska/EBML for WebM,
+// "OggS" for Ogg, RIFF/WAVE for WAV, ISO-BMFF "ftyp" for MP4/M4A, and an MPEG
+// frame-sync byte pair for MP3.
+const WEBM_MAGIC = Buffer.from([0x1a, 0x45, 0xdf, 0xa3]);
+const OGG_MAGIC = Buffer.from('OggS', 'latin1');
+const RIFF_MAGIC = Buffer.from('RIFF', 'latin1');
+const WAVE_MAGIC = Buffer.from('WAVE', 'latin1');
+const FTYP_MAGIC = Buffer.from('ftyp', 'latin1');
+
+/** Exported for unit tests. */
+export function hasAudioSignature(buffer: Buffer, normalizedMime: string): boolean {
+  if (buffer.length < 12) return false;
+  if (normalizedMime === 'audio/webm') return buffer.subarray(0, 4).equals(WEBM_MAGIC);
+  if (normalizedMime === 'audio/ogg') return buffer.subarray(0, 4).equals(OGG_MAGIC);
+  if (normalizedMime === 'audio/wav') {
+    return buffer.subarray(0, 4).equals(RIFF_MAGIC) && buffer.subarray(8, 12).equals(WAVE_MAGIC);
+  }
+  if (normalizedMime === 'audio/mp4') return buffer.subarray(4, 8).equals(FTYP_MAGIC);
+  if (normalizedMime === 'audio/mpeg') return buffer[0] === 0xff && (buffer[1] & 0xe0) === 0xe0;
+  return true;
+}
+
 // Multipart fields arrive as strings, so the shared JSON `validate` middleware
 // cannot be used here; this route-local schema coerces/validates in place.
 // `noteId` is preprocessed BEFORE the UUID check: standalone memos are sent
@@ -83,7 +109,7 @@ export { voiceNoteUploadSchema, normalizeAudioMimeType };
 
 router.use(authMiddleware);
 
-router.get('/', async (req: Request, res: Response) => {
+router.get('/', voiceQueryLimiter, async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
 
@@ -138,6 +164,11 @@ async function handleVoiceNoteUpload(req: Request, res: Response): Promise<void>
     const normalizedMime = normalizeAudioMimeType(file.mimetype);
     if (!ALLOWED_AUDIO_MIME_TYPES.has(normalizedMime)) {
       res.status(415).json({ success: false, error: `Unsupported audio type: ${file.mimetype}` });
+      return;
+    }
+    // Day 14 Task 5 — the declared MIME must match the file's actual bytes.
+    if (!hasAudioSignature(file.buffer, normalizedMime)) {
+      res.status(415).json({ success: false, error: 'File content does not match the declared audio type' });
       return;
     }
 
@@ -245,7 +276,7 @@ async function handleVoiceNoteUpload(req: Request, res: Response): Promise<void>
   }
 }
 
-router.delete('/', async (req: Request, res: Response) => {
+router.delete('/', voiceQueryLimiter, async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
     const id = req.query.id;

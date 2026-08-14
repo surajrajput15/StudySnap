@@ -2,6 +2,10 @@ export const JSON_BODY_LIMIT = '10mb';
 
 export const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
 
+// Day 14 Task 2 — cap note content at ~1M chars (~500 pages of plain text) so
+// the note upsert endpoint can never be flooded with unbounded bodies.
+export const MAX_NOTE_CONTENT_CHARS = 1_000_000;
+
 export const AI_MODEL = 'llama-3.1-8b-instant';
 
 export const CACHE_TTL_NOTES_SECONDS = 60;

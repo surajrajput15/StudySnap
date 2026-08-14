@@ -2,10 +2,13 @@ import { Router, raw } from 'express';
 import { Webhook, WebhookVerificationError } from 'svix';
 import { env } from '../config/env';
 import { getDb, users } from '../db';
+import { webhookLimiter } from '../middleware/rateLimiter';
+import { clerkEventSchema, clerkUserCreatedDataSchema } from '../middleware/validate';
 
 const router = Router();
 
-router.post('/clerk', raw({ type: 'application/json' }), async (req, res) => {
+router.post('/clerk', webhookLimiter, raw({ type: 'application/json' }), async (req, res) => {
+  res.set('Cache-Control', 'no-store');
   if (!env.CLERK_WEBHOOK_SECRET) {
     console.error('[Webhook] ⚠️ CLERK_WEBHOOK_SECRET is not set. Rejecting webhook.');
     res.status(500).json({ success: false, error: 'Webhook secret not configured' });
@@ -39,22 +42,25 @@ router.post('/clerk', raw({ type: 'application/json' }), async (req, res) => {
   }
 
   try {
-    if (event === null || typeof event !== 'object' || !('type' in event)) {
+    const parsedEvent = clerkEventSchema.safeParse(event);
+    if (!parsedEvent.success) {
       res.status(400).json({ success: false, error: 'Malformed webhook event' });
       return;
     }
 
-    const eventType = (event as { type: string }).type;
+    const eventType = parsedEvent.data.type;
     console.log('[Webhook] Clerk event:', eventType);
 
     if (eventType === 'user.created') {
-      const userData = (event as { data?: { id?: string; first_name?: string; last_name?: string } })?.data;
-      if (userData?.id) {
-        const name = [userData.first_name, userData.last_name].filter(Boolean).join(' ').trim() || 'Student';
+      const userData = (event as { data?: unknown })?.data;
+      const parsedUser = clerkUserCreatedDataSchema.safeParse(userData);
+      if (parsedUser.success && parsedUser.data.id) {
+        const { id, first_name, last_name } = parsedUser.data;
+        const name = ([first_name, last_name].filter(Boolean).join(' ').trim().slice(0, 200) || 'Student');
         try {
           const db = getDb();
           if (db) {
-            await db.insert(users).values({ id: userData.id, name }).onConflictDoNothing({ target: users.id });
+            await db.insert(users).values({ id, name }).onConflictDoNothing({ target: users.id });
           }
         } catch (e) {
           console.error('[Webhook] user upsert failed:', e instanceof Error ? e.message : e);

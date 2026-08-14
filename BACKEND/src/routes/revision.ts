@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { z } from 'zod';
 import { authMiddleware } from '../middleware/auth';
 import { validate, revisionSchema } from '../middleware/validate';
 import { computeNextRevision, generateId } from '../utils/helpers';
@@ -62,6 +63,10 @@ router.get('/logs', (req: Request, res: Response) => {
 router.get('/status/:noteId', (req: Request, res: Response) => {
   const userId = req.userId!;
   const noteId = req.params.noteId as string;
+  if (!z.string().uuid('Invalid note ID').safeParse(noteId).success) {
+    res.status(400).json({ success: false, error: 'Invalid note ID' });
+    return;
+  }
   const status = mockNotesRevision[`${userId}:${noteId}`] || null;
   res.json({ success: true, status });
 });

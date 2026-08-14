@@ -28,6 +28,9 @@ export const authMiddleware: RequestHandler = async (req, res, next) => {
   try {
     const { userId } = await verifySession(sessionToken);
     req.userId = userId;
+    // Day 14 Task 8 — authenticated responses carry personal study data and must
+    // never be cached by a shared proxy/CDN.
+    res.set('Cache-Control', 'no-store');
     next();
   } catch {
     res.status(401).json({ success: false, error: 'Invalid or expired session' });

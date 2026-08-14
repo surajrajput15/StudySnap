@@ -44,3 +44,27 @@ export const voiceUploadLimiter = rateLimit({
   max: 20,
   message: { success: false, error: 'Too many voice uploads. Please try again later.' },
 });
+
+// Day 14 Task 4 — the global limiter SKIPS the whole /api/voice-notes namespace
+// so recording bursts are not double-counted, but that leaves GET/DELETE
+// completely unthrottled (only POST had a dedicated limiter). This per-IP query
+// limiter closes the gap for hydration GETs and deletes while uploads keep
+// their own tighter budget. ~120 reads/15 min is generous for legit sessions.
+export const voiceQueryLimiter = rateLimit({
+  ...limits,
+  windowMs: 15 * MINUTE,
+  max: 120,
+  message: { success: false, error: 'Too many voice note requests. Please try again later.' },
+});
+
+// Day 14 Task 4 — webhooks are mounted BEFORE the global /api limiter, so they
+// would otherwise bypass ALL throttling. They are signature-verified (Clerk
+// only), so the real defense is the signature — but a generous, dedicated
+// limiter is cheap defense-in-depth that still leaves room for legit signup
+// bursts (~500 events / 15 min per Clerk edge IP).
+export const webhookLimiter = rateLimit({
+  ...limits,
+  windowMs: 15 * MINUTE,
+  max: 500,
+  message: { success: false, error: 'Too many webhook requests.' },
+});

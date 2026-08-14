@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { voiceNoteUploadSchema, normalizeAudioMimeType } from '../src/routes/voice-notes';
+import { voiceNoteUploadSchema, normalizeAudioMimeType, hasAudioSignature } from '../src/routes/voice-notes';
 
 // Day 10 Task 1 — the upload schema must accept standalone (unlinked) memos,
 // which the frontend sends with `noteId: ''`. The old schema ran `.uuid()`
@@ -73,4 +73,33 @@ test('MIME aliases normalize to the canonical container', () => {
   assert.equal(normalizeAudioMimeType('audio/x-wav'), 'audio/wav');
   assert.equal(normalizeAudioMimeType('Audio/MPEG'), 'audio/mpeg');
   assert.equal(normalizeAudioMimeType('application/octet-stream'), 'application/octet-stream');
+});
+
+// Day 14 Task 5 — the declared MIME must match the file's real bytes, so a
+// caller who labels arbitrary bytes `audio/webm` is rejected at the edge.
+function signature(hex: string): Buffer {
+  return Buffer.from(hex, 'hex');
+}
+
+test('real container signatures validate', () => {
+  assert.equal(hasAudioSignature(signature('1a45dfa3' + '00'.repeat(16)), 'audio/webm'), true);
+  assert.equal(hasAudioSignature(signature('4f676753' + '00'.repeat(16)), 'audio/ogg'), true);
+  assert.equal(hasAudioSignature(signature('52494646' + '00000000' + '57415645'), 'audio/wav'), true);
+  assert.equal(hasAudioSignature(signature('00000018' + '66747970' + '4d344120'), 'audio/mp4'), true);
+  assert.equal(hasAudioSignature(signature('fff30000' + '00'.repeat(16)), 'audio/mpeg'), true);
+});
+
+test('non-audio bytes are rejected for every declared container', () => {
+  // An HTML page labelled audio/webm must fail.
+  assert.equal(hasAudioSignature(Buffer.from('<!DOCTYPE html><html>...'), 'audio/webm'), false);
+  assert.equal(hasAudioSignature(Buffer.from('MZ....executable....'), 'audio/webm'), false);
+  assert.equal(hasAudioSignature(Buffer.from('{ "json": true } padded....'), 'audio/ogg'), false);
+  assert.equal(hasAudioSignature(Buffer.from('PK\x03\x04' + 'zipfile....'), 'audio/wav'), false);
+  assert.equal(hasAudioSignature(Buffer.from('not-an-mp4-container!!!!'), 'audio/mp4'), false);
+  assert.equal(hasAudioSignature(Buffer.from('GIF89a' + '00'.repeat(16)), 'audio/mpeg'), false);
+});
+
+test('tiny buffers are always rejected', () => {
+  assert.equal(hasAudioSignature(Buffer.from(''), 'audio/webm'), false);
+  assert.equal(hasAudioSignature(Buffer.from('ab'), 'audio/wav'), false);
 });

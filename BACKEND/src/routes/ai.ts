@@ -85,7 +85,7 @@ router.post('/summarize', validate(aiContentSchema), async (req, res) => {
 router.post('/mcqs', validate(aiContentSchema), async (req, res) => {
   const start = Date.now();
   try {
-    const { title, content, type } = req.body as z.infer<typeof aiContentSchema> & { type?: string };
+    const { title, content, type } = req.body as z.infer<typeof aiContentSchema>;
     logAIRequest('mcqs', req.userId, aiRequestLogMeta(req.body));
     if (type === 'flashcard') {
       const flashcards = await generateFlashcards(title || 'Untitled', content);

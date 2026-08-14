@@ -48,6 +48,10 @@ const nextConfig: NextConfig = {
           { key: 'X-Frame-Options', value: 'DENY' },
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          // Day 14 Task 8 — the app records audio, so `microphone=(self)` stays;
+          // everything else (camera, geolocation, payment, USB…) is denied to the
+          // page and any embedded frame.
+          { key: 'Permissions-Policy', value: 'microphone=(self), camera=(), geolocation=(), payment=(), usb=(), accelerometer=(), gyroscope=(), magnetometer=(), sync-xhr=()' },
           ...(productionCspHeader
             ? [{ key: 'Content-Security-Policy', value: productionCspHeader }]
             : []),

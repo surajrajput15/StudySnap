@@ -93,9 +93,10 @@ auth/session → Task 2 · weekly-challenge week rollover + Sunday chart → not
 - **Day 11:** ✅ 8/8 COMPLETE (perf audit + NoteCard memoization + KaTeX fonts)
 - **Day 12:** ✅ 8/8 COMPLETE (a11y + responsive audit; focus-trap hook + editor textbox role)
 - **Day 13:** ✅ 8/8 COMPLETE (testing expansion — 18 new store-level flow tests)
-- **Current HEAD:** `9f49443` (+ Day 13 working tree, to commit)
-- **Tests:** ✅ Frontend 217/217 · ✅ Backend 39/39
-- **Sprint 2 status:** Day 13 COMPLETE → **NEXT: Day 14 (Security Hardening Round 2)**
+- **Day 14:** ✅ 8/8 COMPLETE (security hardening round 2 — 0 FE vulns, bounded inputs, webhook+query limiters, upload magic-byte check, AI role sanitization, no-store/perms-policy headers)
+- **Current HEAD:** `e876837` (+ Day 14 working tree, to commit)
+- **Tests:** ✅ Frontend 217/217 · ✅ Backend 62/62
+- **Sprint 2 status:** Day 14 COMPLETE → **NEXT: Day 15 (Observability & Error Handling)**
 
 ##### Day 10 Tasks 7 & 8 — audit findings & fixes
 | # | Area | Finding | Fix |
@@ -197,19 +198,21 @@ Goal:
 
 Tests: FE **217/217** ✅ (18 new) · tsc ✅ · eslint ✅ · next build ✅
 
-### DAY 14 — SECURITY HARDENING ROUND 2
-- Task 1 — Dependency/security audit
-- Task 2 — API input validation audit
-- Task 3 — Authorization boundary audit
-- Task 4 — Rate-limit coverage audit
-- Task 5 — File upload security audit
-- Task 6 — AI prompt-abuse audit
-- Task 7 — Sensitive-data exposure audit
-- Task 8 — Production headers/config audit
+### DAY 14 — SECURITY HARDENING ROUND 2 ✅ DONE
+- Task 1 — Dependency/security audit ✅ **FE: next 16.2.10→16.3.1 + npm audit fix → 0 vulnerabilities.** BE: removed unused nodemailer + @types/nodemailer (was the only HIGH); 4 moderate remain — dev-only esbuild inside drizzle-kit's CLI, no non-breaking fix (documented accepted risk)
+- Task 2 — API input validation audit ✅ note content capped at 1M chars; tags capped (20 × 50 chars); notes DELETE rejects non-UUID ids; webhook name capped at 200; revision status noteId now uuid-checked; existing zod schemas + multer caps verified
+- Task 3 — Authorization boundary audit ✅ Verified: Clerk JWT verify on every API route, every DB op userId-scoped, voice-note upsert setWhere cross-user guard, sticky-delete guard keyed by user, per-user cache keys, pinLock stripped from responses, exact-origin CORS (no substring), svix webhook signature verify. **No gaps found**
+- Task 4 — Rate-limit coverage audit ✅ webhooks now throttled (webhookLimiter 500/15min); NEW voiceQueryLimiter (120/15min) closes the GET/DELETE gap left by the global-skip design; ai/pin/upload limiters verified
+- Task 5 — File upload security audit ✅ NEW magic-byte signature validation (`hasAudioSignature`): the client-declared MIME must match the file's real bytes (WebM/EBML, OggS, RIFF/WAVE, ftyp, MPEG sync) so arbitrary bytes labelled `audio/webm` are rejected before reaching Cloudinary
+- Task 6 — AI prompt-abuse audit ✅ client can no longer send `system` role (schema) + service-level role sanitizer (defense-in-depth) + prompts now mark user content as UNTRUSTED DATA; FE renders AI output via react-markdown with no rehypeRaw and default dangerous-URL blocking — verified no dangerouslySetInnerHTML on AI/MCQ/flashcard output
+- Task 7 — Sensitive-data exposure audit ✅ aiRequestLogMeta logs counts/lengths only (never content), pinLock stripped, verify-pin returns boolean only, generic error bodies, production fail-fast env validation, no hardcoded secrets in FE/BE, no token/secret logging. **No gaps found**
+- Task 8 — Production headers/config audit ✅ NEW `Permissions-Policy` (mic-only) on pages; NEW `Cache-Control: no-store` on all authenticated responses + webhooks (authMiddleware + webhook route); existing X-Frame-Options DENY, nosniff, Referrer-Policy, CSP (no `*`, no unsafe-eval), poweredByHeader:false, helmet HSTS verified
 
 Goal:
-→ security posture ko ek final serious pass dena
-→ unnecessary attack surface remove karna
+→ security posture ko ek final serious pass dena ✅
+→ unnecessary attack surface remove karna ✅ (nodemailer, unbounded fields, unthrottled GET/DELETE, client system-role, cacheable auth data)
+
+Tests: BE **62/62** ✅ (new: `aiInjectionGuard`, `authorization`, `rateLimitCoverage`, `validationHardening`, `voiceNoteValidation` signature/bounds) · FE **217/217** ✅ · tsc ✅ · eslint ✅ · next build ✅ · npm audit ✅ (FE 0)
 
 ### DAY 15 — OBSERVABILITY & ERROR HANDLING
 - Task 1 — Frontend error boundaries

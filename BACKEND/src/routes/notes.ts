@@ -1,10 +1,12 @@
 import { Router, Request, Response } from 'express';
 import { eq, and, desc } from 'drizzle-orm';
+import { z } from 'zod';
 import { getDb, notes, categories, voiceNotes } from '../db';
 import { authMiddleware } from '../middleware/auth';
 import { pinLimiter } from '../middleware/rateLimiter';
 import { generateId } from '../utils/helpers';
 import { hashPin, verifyPin } from '../utils/pin';
+import { checkNoteIdAvailability } from '../utils/noteOwnership';
 import { validate, noteSchema, verifyPinSchema } from '../middleware/validate';
 import { cacheGet, cacheSet, invalidateUserCache } from '../services/cache';
 import { CACHE_TTL_NOTES_SECONDS, DEFAULT_CATEGORIES } from '../config/constants';
@@ -165,6 +167,16 @@ router.post('/', validate(noteSchema), async (req: Request, res: Response) => {
         const updated = await db.update(notes).set(noteData).where(and(eq(notes.id, id), eq(notes.userId, userId))).returning();
         result = updated[0];
       } else {
+        // Day 14 Task 3 — a caller-supplied id that ALREADY belongs to another
+        // account must be rejected (409), never attempted as an INSERT that
+        // collides on the primary key. Mirrors the voice-note upsert guard. The
+        // cast narrows the real Drizzle builder to the minimal structural seam
+        // the helper needs so the guard stays unit-testable with a fake DB.
+        const availability = await checkNoteIdAvailability(db as unknown as Parameters<typeof checkNoteIdAvailability>[0], notes, id, userId);
+        if (availability === 'taken') {
+          res.status(409).json({ success: false, error: 'This note id already belongs to another account.' });
+          return;
+        }
         const inserted = await db.insert(notes).values({ ...noteData, id, userId, ...(createdAtValue ? { createdAt: createdAtValue } : {}) }).returning();
         result = inserted[0];
       }
@@ -211,10 +223,14 @@ router.post('/verify-pin', pinLimiter, validate(verifyPinSchema), async (req: Re
 router.delete('/', async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const id = req.query.id as string;
+    const id = req.query.id;
 
-    if (!id) {
+    if (typeof id !== 'string' || !id) {
       res.status(400).json({ success: false, error: 'ID required' });
+      return;
+    }
+    if (!z.string().uuid().safeParse(id).success) {
+      res.status(400).json({ success: false, error: 'Invalid note id' });
       return;
     }
 
