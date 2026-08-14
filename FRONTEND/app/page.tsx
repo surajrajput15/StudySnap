@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useLayoutEffect, useRef, useSyncExternalStore } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useSyncExternalStore, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { useStore, switchStoreScopeForUser, migrateGuestDataForUser } from '@/lib/store/useStore';
 import { syncNotesForUser } from '@/lib/sync/notesSync';
@@ -66,14 +66,14 @@ export default function Page() {
   // self-guard and calls setActiveTab directly to avoid a double confirmation.
   // Returns true only when the navigation actually happened, so callers (e.g.
   // the mobile drawer) know whether to close.
-  const navigate = (nextTab: string): boolean => {
+  const navigate = useCallback((nextTab: string): boolean => {
     if (shouldConfirmRecordingNav(activeTab, nextTab, voiceRecording)) {
       const leave = window.confirm(RECORDING_NAV_CONFIRM_MESSAGE);
       if (!leave) return false;
     }
     setActiveTab(nextTab);
     return true;
-  };
+  }, [activeTab, voiceRecording]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -169,10 +169,12 @@ export default function Page() {
     };
   }, [isLoaded, isSignedIn, clerkId, getToken]);
 
-  const handleEditNote = (noteId: string) => {
+  // Day 11 Task 2 — stable identity so the HomeScreen note-card memo can skip
+  // re-renders; a new function identity here would ripple through every card.
+  const handleEditNote = useCallback((noteId: string) => {
     setActiveNoteId(noteId);
     navigate('editor');
-  };
+  }, [navigate, setActiveNoteId]);
 
   const handleCreateNote = () => {
     setActiveNoteId(null);

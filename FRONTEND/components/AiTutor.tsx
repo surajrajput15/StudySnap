@@ -11,6 +11,11 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
+// Day 11 Task 7 — rehype-katex emits KaTeX HTML that needs the full KaTeX
+// stylesheet (fractions, radicals, scripts and the math WOFF2 fonts). Without
+// it the math renders as unstyled spans. The fonts ship from our own origin,
+// which the existing `font-src 'self'` CSP already allows.
+import 'katex/dist/katex.min.css';
 import {
   Sparkles, Send, Paperclip, Mic, Bot, User, BookOpen,
   FileText, LayoutGrid, HelpCircle, Languages, Lightbulb,

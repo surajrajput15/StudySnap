@@ -1,19 +1,20 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useStore, type Folder } from '@/lib/store/useStore';
 import {
   Sparkles, BookOpen, FileText, Clock,
   Target, ChevronRight, Play, BarChart3,
-  CheckCircle2, Flame, Plus, Search, Star, Pin, Trash2,
+  CheckCircle2, Flame, Plus, Search, Star, Pin,
   Layers, FolderPlus, Grid3X3, List, Lock, ArrowRight
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import confetti from 'canvas-confetti';
 import EmptyState, { EmptyNotesIllustration, EmptySearchIllustration } from './EmptyState';
 import HeroAI from './HeroAI';
+import { NoteCard, NoteListItem } from './NoteCards';
 import { WEEKDAYS, DAILY_GOAL, AI_TOOLS } from '@/lib/constants';
-import { formatShortDate, stripHtml, hasActiveSearch, noteMatchesSearch, SEARCH_EMPTY_MESSAGE, SEARCH_EMPTY_TIP } from '@/lib/utils';
+import { formatShortDate, stripHtml, hasActiveSearch, noteMatchesSearch, SEARCH_EMPTY_MESSAGE, SEARCH_EMPTY_TIP, handleCardKeyDown } from '@/lib/utils';
 import { pinMatchesStored } from '@/lib/pin';
 import { deleteRemoteNote, deleteFolderWithNotes } from '@/lib/sync/notesSync';
 import { deferDelete, cancelPendingDeleteFor } from '@/lib/undo';
@@ -23,13 +24,6 @@ interface HomeScreenProps {
   onEditNote: (noteId: string) => void;
   onCreateNote: () => void;
   onNavigate: (tab: string) => void;
-}
-
-function handleCardKeyDown(e: React.KeyboardEvent, action: () => void) {
-  if (e.key === 'Enter' || e.key === ' ') {
-    e.preventDefault();
-    action();
-  }
 }
 
 const QUOTES = [
@@ -147,14 +141,23 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
   // Day 9 Task 9 — a single-click note delete is deferred so a mistaken tap can
   // be undone. The real deletion (local removal + tombstone + remote DELETE)
   // runs only after the undo window expires.
-  const handleDeleteNote = (noteId: string) => {
-    const target = notes.find(n => n.id === noteId);
+  // Day 11 Task 2 — the note cards are React.memo'd, which only pays off when
+  // the handlers passed down have stable identities. The live notes snapshot is
+  // therefore read through a ref (refs never invalidate a useCallback) instead
+  // of the `notes` value directly.
+  const notesRef = useRef(notes);
+  useEffect(() => {
+    notesRef.current = notes;
+  }, [notes]);
+
+  const handleDeleteNote = useCallback((noteId: string) => {
+    const target = notesRef.current.find(n => n.id === noteId);
     const label = `Note "${target?.title?.trim() || 'Untitled'}" deleted`;
     deferDelete(label, () => {
       deleteNote(noteId);
       void deleteRemoteNote(noteId, () => getToken());
     }, undefined, noteId);
-  };
+  }, [deleteNote, getToken]);
 
   // Day 9 Task 3 — open the confirmation dialog. Nothing is deleted here.
   const handleDeleteFolder = (folder: Folder) => {
@@ -178,13 +181,13 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
   // Central gate for opening a note: locked notes first ask for their PIN
   // (the hash is verified before the editor is opened), unlocked notes open
   // directly.
-  const openNote = (id: string) => {
+  const openNote = useCallback((id: string) => {
     // Day 10 Task 1 — a note inside its delete-undo window is still listed and
     // clickable. Opening it cancels that pending delete: the user clearly wants
     // the note, and letting the deferred delete fire mid-edit silently loses
     // their work (the editor's autosave finds no note and no-ops).
     cancelPendingDeleteFor(id);
-    const target = notes.find(n => n.id === id);
+    const target = notesRef.current.find(n => n.id === id);
     if (target?.pinLock) {
       setPinInput('');
       setPinError(false);
@@ -192,7 +195,7 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
     } else {
       onEditNote(id);
     }
-  };
+  }, [onEditNote]);
 
   const handleUnlockSubmit = async () => {
     if (!unlockNoteId || isUnlocking) return;
@@ -635,61 +638,27 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
             )
           ) : viewMode === 'grid' ? (
             <div className="notes-grid" style={{ gap: '16px' }}>
-              {displayNotes.map((note) => {
-                const noteCategory = categories.find(c => c.id === note.categoryId);
-                return (
-                  <div key={note.id} className="md3-card" role="button" tabIndex={0} onClick={() => openNote(note.id)} onKeyDown={(e) => handleCardKeyDown(e, () => openNote(note.id))} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '10px', cursor: 'pointer', borderTop: noteCategory ? `4px solid ${noteCategory.color}` : '4px solid var(--outline-variant)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <h4 style={{ fontSize: '15px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        {note.pinLock && <Lock size={12} style={{ color: 'var(--outline)' }} />}
-                        {note.title}
-                      </h4>
-                      <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                        {note.isPinned && <Pin size={13} style={{ color: 'var(--primary)', fill: 'var(--primary)' }} />}
-                        {note.isFavorite && <Star size={13} style={{ color: '#F59E0B', fill: '#F59E0B' }} />}
-                      </div>
-                    </div>
-                    <p style={{ fontSize: '13px', color: 'var(--on-surface-variant)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.5 }}>
-                      {note.pinLock ? '[🔒 Locked Note]' : stripHtml(note.content).substring(0, 150)}
-                    </p>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: 'auto' }}>
-                      {noteCategory && <span className="md3-chip" style={{ fontSize: '10px', padding: '2px 10px', background: `${noteCategory.color}18`, color: noteCategory.color }}>{noteCategory.name}</span>}
-                      {note.tags.slice(0, 2).map((tag, idx) => (
-                        <span key={idx} className="md3-chip" style={{ fontSize: '10px', padding: '2px 10px' }}>#{tag}</span>
-                      ))}
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--outline-variant)', paddingTop: '10px', marginTop: '4px' }}>
-                      <span style={{ fontSize: '11px', color: 'var(--outline)' }}>{formatShortDate(note.updatedAt)}</span>
-                      <button onClick={(e) => { e.stopPropagation(); handleDeleteNote(note.id); }} aria-label={`Delete note ${note.title}`} className="md3-btn-ghost" style={{ padding: '4px', color: 'var(--error)', fontSize: '12px' }}><Trash2 size={14} /></button>
-                    </div>
-                  </div>
-                );
-              })}
+              {displayNotes.map((note) => (
+                <NoteCard
+                  key={note.id}
+                  note={note}
+                  category={categories.find(c => c.id === note.categoryId)}
+                  onOpen={openNote}
+                  onDelete={handleDeleteNote}
+                />
+              ))}
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {displayNotes.map((note) => {
-                const noteCategory = categories.find(c => c.id === note.categoryId);
-                return (
-                  <div key={note.id} className="md3-card-sm" role="button" tabIndex={0} onClick={() => openNote(note.id)} onKeyDown={(e) => handleCardKeyDown(e, () => openNote(note.id))} style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '14px 18px', cursor: 'pointer', borderLeft: noteCategory ? `4px solid ${noteCategory.color}` : '4px solid var(--outline-variant)' }}>
-                    <div style={{ flexGrow: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <h4 style={{ fontSize: '14px', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{note.title}</h4>
-                        {note.isPinned && <Pin size={11} style={{ color: 'var(--primary)', fill: 'var(--primary)', flexShrink: 0 }} />}
-                        {note.isFavorite && <Star size={11} style={{ color: '#F59E0B', fill: '#F59E0B', flexShrink: 0 }} />}
-                      </div>
-                      <p style={{ fontSize: '12px', color: 'var(--on-surface-variant)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: '2px' }}>
-                        {stripHtml(note.content).substring(0, 100)}
-                      </p>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-                      {noteCategory && <span className="md3-chip" style={{ fontSize: '10px', padding: '2px 10px', background: `${noteCategory.color}18`, color: noteCategory.color }}>{noteCategory.name}</span>}
-                      <span style={{ fontSize: '11px', color: 'var(--outline)', whiteSpace: 'nowrap' }}>{formatShortDate(note.updatedAt)}</span>
-                      <button onClick={(e) => { e.stopPropagation(); handleDeleteNote(note.id); }} aria-label={`Delete note ${note.title}`} className="md3-btn-ghost" style={{ padding: '4px', color: 'var(--error)' }}><Trash2 size={14} /></button>
-                    </div>
-                  </div>
-                );
-              })}
+              {displayNotes.map((note) => (
+                <NoteListItem
+                  key={note.id}
+                  note={note}
+                  category={categories.find(c => c.id === note.categoryId)}
+                  onOpen={openNote}
+                  onDelete={handleDeleteNote}
+                />
+              ))}
             </div>
           )}
         </div>

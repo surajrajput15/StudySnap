@@ -95,3 +95,12 @@ export function storageHealthy(): boolean {
     return false;
   }
 }
+
+// Day 11 Task 2 — shared by the memoized note cards (and the dashboard hero /
+// recent-note tiles) so a keyboard user can open a card with Enter or Space.
+export function handleCardKeyDown(e: { key: string; preventDefault: () => void }, action: () => void) {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    action();
+  }
+}

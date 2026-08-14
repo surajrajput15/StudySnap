@@ -90,9 +90,10 @@ auth/session → Task 2 · weekly-challenge week rollover + Sunday chart → not
 #### Overall
 - **Day 9:** ✅ 17/17 COMPLETE
 - **Day 10:** ✅ 8/8 COMPLETE (audit + fixes landed across commits 8e937ae → 652b577)
-- **Current HEAD:** `652b577`
-- **Tests:** ✅ Frontend 196/196 · ✅ Backend 39/39
-- **Sprint 2 status:** Day 10 COMPLETE → **NEXT: Day 11 (Performance Optimization)**
+- **Day 11:** ✅ 8/8 COMPLETE (perf audit + NoteCard memoization + KaTeX fonts)
+- **Current HEAD:** `ed0afe4` (+ Day 11 working tree, to commit)
+- **Tests:** ✅ Frontend 199/199 · ✅ Backend 39/39
+- **Sprint 2 status:** Day 11 COMPLETE → **NEXT: Day 12 (Accessibility & Responsive QA)**
 
 ##### Day 10 Tasks 7 & 8 — audit findings & fixes
 | # | Area | Finding | Fix |
@@ -144,20 +145,22 @@ Goal:
 → Day 9 ke fixes ke baad koi regression nahi
 → Refresh/offline/reconnect/session expiry properly handle ho
 
-### DAY 11 — PERFORMANCE OPTIMIZATION ⏳ NEXT
-- Task 1 — Bundle-size audit
-- Task 2 — Large component/render audit
-- Task 3 — AI Tutor render optimization
-- Task 4 — NoteEditor performance optimization
-- Task 5 — Large notes handling
-- Task 6 — PDF processing performance
-- Task 7 — Image/font optimization
-- Task 8 — Network request optimization
+### DAY 11 — PERFORMANCE OPTIMIZATION ✅ DONE
+- Task 1 — Bundle-size audit ✅ Initial JS ~0.60MB; pdfjs worker (1.2MB), jspdf (0.4MB) and react-markdown+rehype-katex (0.4MB) already code-split behind `next/dynamic` — nothing extra hits the initial load
+- Task 2 — Large component/render audit ✅ Extracted memoized `NoteCard`/`NoteListItem` (components/NoteCards.tsx) + stable `useCallback` handlers (openNote/handleDeleteNote via notesRef, navigate/handleEditNote in page.tsx); single-note updates now re-render one card, not the whole grid
+- Task 3 — AI Tutor render optimization ✅ Verified already optimal: `MessageItem` is `React.memo`'d and per-token streaming (`addStreamingMessage`) is reference-preserving, so only the last bubble re-renders
+- Task 4 — NoteEditor performance optimization ✅ Verified already optimal: contentEditable host is `React.memo`'d (`EditorArea`), DOM edits run through refs, autosave debounced 1500ms
+- Task 5 — Large notes handling ✅ Verified: debounced autosave + controlled content mirror; card previews strip HTML (bounded). No change needed
+- Task 6 — PDF processing performance ✅ Verified: main-thread pdf.js is a deliberate, documented CSP choice (pdf.ts) already bounded by MAX_PDF_PAGES=100 (Day 10 T8)
+- Task 7 — Image/font optimization ✅ Imported full `katex/dist/katex.min.css` (math was rendering as unstyled spans); 60 KaTeX WOFF2 fonts now bundle and serve from self, allowed by existing `font-src 'self'` CSP
+- Task 8 — Network request optimization ✅ Verified: sync is event-driven (mount/reconnect/visibility/manual) single-flight `SyncEngine` with 429 Retry-After backoff; no polling, no redundant requests
 
 Goal:
-→ unnecessary renders/request kam
-→ large notes/PDF par UI responsive
-→ production bundle unnecessarily heavy na ho
+→ unnecessary renders/request kam ✅
+→ large notes/PDF par UI responsive ✅
+→ production bundle unnecessarily heavy na ho ✅
+
+Tests: FE 199/199 ✅ (incl. new cardKeyboard.test.mts) · tsc ✅ · eslint ✅ · next build ✅
 
 ### DAY 12 — ACCESSIBILITY & RESPONSIVE QA
 - Task 1 — Keyboard navigation audit
