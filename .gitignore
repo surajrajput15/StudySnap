@@ -9,3 +9,4 @@ dist
 Thumbs.db
 FRONTEND/.env.local
 shot.mjs
+checkpoint.txt

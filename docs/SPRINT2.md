@@ -89,9 +89,10 @@ auth/session → Task 2 · weekly-challenge week rollover + Sunday chart → not
 
 #### Overall
 - **Day 9:** ✅ 17/17 COMPLETE
-- **Day 10:** ✅ 8/8 COMPLETE (audit + fixes landed across commits 8e937ae → a2b0366 + Day 10 Tasks 7 & 8)
-- **Current HEAD:** `a2b0366` + Day 10 T7/T8 (uncommitted at doc time)
+- **Day 10:** ✅ 8/8 COMPLETE (audit + fixes landed across commits 8e937ae → 652b577)
+- **Current HEAD:** `652b577`
 - **Tests:** ✅ Frontend 196/196 · ✅ Backend 39/39
+- **Sprint 2 status:** Day 10 COMPLETE → **NEXT: Day 11 (Performance Optimization)**
 
 ##### Day 10 Tasks 7 & 8 — audit findings & fixes
 | # | Area | Finding | Fix |
@@ -129,21 +130,21 @@ auth/session → Task 2 · weekly-challenge week rollover + Sunday chart → not
 
 ## ROADMAP (NEXT)
 
-### DAY 10 — PRODUCTION QUALITY & EDGE CASES
-- Task 1 — Full production regression audit
-- Task 2 — Auth/session edge-case audit
-- Task 3 — API error-state consistency
-- Task 4 — Offline/online transition testing
-- Task 5 — Data persistence + hydration edge cases
-- Task 6 — Multi-tab / refresh consistency
-- Task 7 — Voice notes edge-case audit
-- Task 8 — AI context / PDF edge-case audit
+### DAY 10 — PRODUCTION QUALITY & EDGE CASES ✅ DONE
+- Task 1 — Full production regression audit ✅
+- Task 2 — Auth/session edge-case audit ✅
+- Task 3 — API error-state consistency ✅
+- Task 4 — Offline/online transition testing ✅
+- Task 5 — Data persistence + hydration edge cases ✅
+- Task 6 — Multi-tab / refresh consistency ✅
+- Task 7 — Voice notes edge-case audit ✅
+- Task 8 — AI context / PDF edge-case audit ✅
 
 Goal:
 → Day 9 ke fixes ke baad koi regression nahi
 → Refresh/offline/reconnect/session expiry properly handle ho
 
-### DAY 11 — PERFORMANCE OPTIMIZATION
+### DAY 11 — PERFORMANCE OPTIMIZATION ⏳ NEXT
 - Task 1 — Bundle-size audit
 - Task 2 — Large component/render audit
 - Task 3 — AI Tutor render optimization
