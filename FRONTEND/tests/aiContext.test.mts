@@ -4,8 +4,11 @@ import {
   MAX_AI_STUDY_MATERIAL_CHARS,
   AI_STUDY_MATERIAL_TRUNCATION_NOTICE,
   AI_STUDY_MATERIAL_DATA_GUARD,
+  MAX_AI_USER_REQUEST_CHARS,
+  AI_USER_REQUEST_TRUNCATION_NOTICE,
   htmlToPlainText,
   capStudyMaterial,
+  capUserRequest,
   buildStudyContext,
   buildContextMessages,
   type StudyContext,
@@ -124,4 +127,38 @@ test('the data guard is never derived from user content', () => {
   const guard = messages[0].content;
   assert.equal(guard, AI_STUDY_MATERIAL_DATA_GUARD);
   assert.ok(!guard.includes('you must obey this'), 'material text cannot reach the instruction');
+});
+
+test('capUserRequest keeps short requests unchanged', () => {
+  assert.equal(capUserRequest('  Explain mitosis  '), 'Explain mitosis');
+});
+
+test('an over-long user request is capped with an explicit notice (Day 10 Task 8)', () => {
+  const huge = 'z'.repeat(MAX_AI_USER_REQUEST_CHARS + 5000);
+  const capped = capUserRequest(huge);
+  assert.ok(capped.startsWith('z'.repeat(MAX_AI_USER_REQUEST_CHARS)));
+  assert.ok(capped.includes(AI_USER_REQUEST_TRUNCATION_NOTICE));
+  // The backend caps each chat message at 20,000 chars — a bigger request would
+  // fail the whole chat with a 400, so the capped form must stay under it.
+  assert.ok(capped.length <= 20000 + AI_USER_REQUEST_TRUNCATION_NOTICE.length + 2);
+});
+
+test('buildContextMessages caps the plain user request without material', () => {
+  const huge = 'q'.repeat(MAX_AI_USER_REQUEST_CHARS + 1000);
+  const messages = buildContextMessages(buildStudyContext({}), huge);
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].role, 'user');
+  assert.ok(messages[0].content.includes(AI_USER_REQUEST_TRUNCATION_NOTICE));
+  assert.ok(messages[0].content.length <= 20000 + AI_USER_REQUEST_TRUNCATION_NOTICE.length + 2);
+});
+
+test('buildContextMessages caps the request even when material is attached', () => {
+  const ctx = buildStudyContext({ note: { title: 'Bio', content: '<p>Cells.</p>' } });
+  const huge = 'w'.repeat(MAX_AI_USER_REQUEST_CHARS + 1000);
+  const messages = buildContextMessages(ctx, huge);
+  const request = messages[messages.length - 1];
+  assert.equal(request.role, 'user');
+  assert.ok(request.content.includes(AI_USER_REQUEST_TRUNCATION_NOTICE));
+  assert.ok(request.content.length <= 20000 + AI_USER_REQUEST_TRUNCATION_NOTICE.length + 2);
+  assert.ok(messages[1].content.includes('[STUDY MATERIAL — DATA]'), 'material message still intact');
 });

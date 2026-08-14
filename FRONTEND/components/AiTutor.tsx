@@ -31,6 +31,16 @@ const QUICK_CHIPS = [
 
 const GREETING_MESSAGE = '👋 Hi! I\'m your AI Tutor. Ask me anything about your studies, or try one of the quick actions below!';
 
+/**
+ * Day 10 Task 8 — the request payload carries only the LAST N conversation
+ * turns. The backend caps a chat request at 100 messages, so an unbounded
+ * history would eventually fail every send with a 400, and forwarding the
+ * entire history every turn bloats the payload and risks overflowing the model
+ * context. Older turns stay in the persisted UI history; only the request is
+ * trimmed to the recent window.
+ */
+const MAX_CHAT_HISTORY_MESSAGES = 16;
+
 interface Message {
   role: 'user' | 'assistant';
   content: string;
@@ -524,7 +534,7 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
       file: attachedFileRef.current,
     });
     const contextMessages: { role: 'user' | 'assistant' | 'system'; content: string }[] = [
-      ...messages.map((m) => ({ role: m.role, content: m.content })),
+      ...messages.slice(-MAX_CHAT_HISTORY_MESSAGES).map((m) => ({ role: m.role, content: m.content })),
       ...buildContextMessages(context, msg),
     ];
     runAIChat(contextMessages);
@@ -548,8 +558,9 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
       note: noteContextRef.current,
       file: attachedFileRef.current,
     });
+    const historyStart = Math.max(0, idx - MAX_CHAT_HISTORY_MESSAGES);
     const ctx: { role: 'user' | 'assistant' | 'system'; content: string }[] = [
-      ...arr.slice(0, idx).map((m) => ({ role: m.role, content: m.content })),
+      ...arr.slice(historyStart, idx).map((m) => ({ role: m.role, content: m.content })),
       ...buildContextMessages(context, prompt),
     ];
     runAIChat(ctx);
@@ -635,10 +646,19 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
         setPendingTool(null);
         handleSendRef.current(TOOL_PROMPTS[tool]);
       }
-    } catch {
+    } catch (err) {
       attachedFileRef.current = null;
       setAttachedFile(null);
-      setAttachError('Could not read this file. Try a .txt or .md file, or copy-paste the text.');
+      // Day 10 Task 8 — a password-protected PDF now throws a fixable, friendly
+      // message from lib/pdf; surface it for PDFs, otherwise keep the generic
+      // guidance (raw pdf.js errors are too technical to show to a student).
+      const e = err as { message?: string } | null;
+      const isPdf = /\.pdf$/i.test(file.name);
+      const fallback = 'Could not read this file. Try a .txt or .md file, or copy-paste the text.';
+      const friendly = isPdf && e?.message?.toLowerCase().includes('password')
+        ? e.message
+        : fallback;
+      setAttachError(friendly);
     }
   };
 

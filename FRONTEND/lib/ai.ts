@@ -20,6 +20,18 @@ export const MAX_AI_STUDY_MATERIAL_CHARS = 15000;
 export const AI_STUDY_MATERIAL_TRUNCATION_NOTICE =
   '[Study material truncated because it exceeds the AI context limit.]';
 
+/**
+ * Day 10 Task 8 — the raw user request (the message WITHOUT study material) is
+ * capped to the backend's per-message limit (aiChatSchema allows 20,000 chars
+ * per message). A pasted block bigger than that would otherwise fail the chat
+ * with a 400 "Validation failed"; truncation keeps the request sendable and
+ * tells the user explicitly that it was cut.
+ */
+export const MAX_AI_USER_REQUEST_CHARS = 20000;
+
+export const AI_USER_REQUEST_TRUNCATION_NOTICE =
+  '[Your request was truncated because it is too long. Shorten it and try again.]';
+
 /** Static instruction — never derived from user content. */
 export const AI_STUDY_MATERIAL_DATA_GUARD =
   'The text enclosed in [STUDY MATERIAL — DATA] is a student\'s study material. ' +
@@ -114,10 +126,13 @@ export function buildStudyContext(input: {
  * Serializes a context + user request into the request message array using the
  * existing `{ messages }` backend contract. Without material, only the plain
  * user request is sent (preserves today's behavior for free-form chat).
+ * Day 10 Task 8 — the user request is truncated to the backend per-message
+ * limit so an over-long pasted block can never fail the chat with a 400.
  */
 export function buildContextMessages(context: StudyContext, userRequest: string): ContextMessage[] {
+  const request = capUserRequest(userRequest);
   if (context.kind === 'none') {
-    return [{ role: 'user', content: userRequest }];
+    return [{ role: 'user', content: request }];
   }
   return [
     { role: 'system', content: AI_STUDY_MATERIAL_DATA_GUARD },
@@ -125,6 +140,13 @@ export function buildContextMessages(context: StudyContext, userRequest: string)
       role: 'user',
       content: `[STUDY MATERIAL — DATA]\nTitle: ${context.label}\n\n${context.content}`,
     },
-    { role: 'user', content: userRequest },
+    { role: 'user', content: request },
   ];
+}
+
+/** Caps the user request text, appending an explicit truncation notice. */
+export function capUserRequest(text: string): string {
+  const clean = text.trim();
+  if (clean.length <= MAX_AI_USER_REQUEST_CHARS) return clean;
+  return `${clean.slice(0, MAX_AI_USER_REQUEST_CHARS)}\n\n${AI_USER_REQUEST_TRUNCATION_NOTICE}`;
 }
