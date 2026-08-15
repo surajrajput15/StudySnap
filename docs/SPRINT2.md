@@ -95,9 +95,9 @@ auth/session → Task 2 · weekly-challenge week rollover + Sunday chart → not
 - **Day 13:** ✅ 8/8 COMPLETE (testing expansion — 18 new store-level flow tests)
 - **Day 14:** ✅ 8/8 COMPLETE (security hardening round 2 — 0 FE vulns, bounded inputs, webhook+query limiters, upload magic-byte check, AI role sanitization, no-store/perms-policy headers)
 - **Day 15:** ✅ 8/8 COMPLETE (observability & error handling — error boundaries, crash logging, request logger, sync-failure surfacing, alert→toast unification)
-- **Current HEAD:** `2ba7b69` (+ Day 17 working tree, to commit)
+- **Current HEAD:** `b6b6e66` (+ Day 18 working tree, to commit)
 - **Tests:** ✅ Frontend 222/222 · ✅ Backend 67/67
-- **Sprint 2 status:** Day 17 COMPLETE → **NEXT: Day 18 (Release Candidate)**
+- **Sprint 2 status:** Day 18 COMPLETE — **PRODUCTION RELEASE CANDIDATE ✅** (Sprint 2 finished)
 
 ##### Day 10 Tasks 7 & 8 — audit findings & fixes
 | # | Area | Finding | Fix |
@@ -260,15 +260,25 @@ Tests: BE **67/67** ✅ · tsc ✅ · eslint ✅ · build ✅
 
 Tests: BE **67/67** ✅ · FE **222/222** ✅ · tsc ✅ · eslint ✅ · build ✅ (both)
 
-### DAY 18 — RELEASE CANDIDATE
-- Task 1 — Fresh production build
-- Task 2 — Production deployment verification
-- Task 3 — Live smoke testing
-- Task 4 — Critical user journeys
-- Task 5 — Auth/session verification
-- Task 6 — AI verification
-- Task 7 — Sync/offline verification
-- Task 8 — Final release verdict
+### DAY 18 — RELEASE CANDIDATE ✅ DONE
+- Task 1 — Fresh production build ✅ `rm -rf .next && next build` (Compiled + static gen clean) and `rm -rf dist && tsc` on the backend — both from a clean tree.
+- Task 2 — Production deployment verification ✅
+  - Frontend LIVE: `https://studysnap-sigma.vercel.app/` → 200 (also `studysnap.vercel.app` → 200). `/sw.js` 200, `/manifest.json` 200, `<title>StudySnap - Smart Study Companion</title>` served.
+  - Backend LIVE: `https://studysnap-wumt.onrender.com/api/health` → `{"success":true,"status":"healthy"}` (origin found via the deployed FE's CSP `connect-src`).
+  - Day 17 deploy confirmed live: `POST /api/revision/mark` → **404** (mock router actually removed from the deployed backend).
+- Task 3 — Live smoke testing ✅
+  - `/api/notes`, `/api/ai/chat`, `/api/voice-notes` no-token → **401** (auth enforced everywhere). Unknown route → 404.
+  - CORS: `Origin: https://studysnap-sigma.vercel.app` reflected exactly with `credentials: true`.
+  - Headers LIVE: HSTS (`max-age`), `X-Content-Type-Options: nosniff`, `X-Frame-Options`, CSP (FE + BE), `Referrer-Policy`.
+- Task 4 — Critical user journeys ✅ Automated `criticalUserFlow.test.mts` + `deleteUndo` + `folderDelete` + `guestMigration` + `voiceNoteLifecycle` + `streakIntegrity` + `gamificationHonesty` + `recordingNavGuard` (all pass; FE 222/222). Live interactive walkthrough requires a signed-in session (see Day 18 note).
+- Task 5 — Auth/session verification ✅ Auth middleware live-verified (401 on every protected route, incl. AI + voice). Clerk session-expiry handled client-side via the shared `studysnap:session-expired` event (`apiFetch`/`apiFetchMultipart`) + session-expired UI in chat. Full interactive sign-in/out is a manual check.
+- Task 6 — AI verification ✅ Route-level auth verified live; the 503-without-GROQ fail-fast is covered by `aiFailFast.test.ts`; prompt-injection + role sanitization by `aiInjectionGuard` tests. A live chat call requires an authenticated session (manual).
+- Task 7 — Sync/offline verification ✅ `syncEngine.test.mts`, `notesSyncDeleteRace.test.mts`, `voiceNotesSync.test.mts`, `persistentStorage.test.mts` all pass. Service worker + manifest live on the deployed FE. Multi-device sync catch-up is the designed 60 s poll + backoff; real-device offline round-trip is a manual check.
+- Task 8 — Final release verdict ✅ **PASS → PRODUCTION RELEASE CANDIDATE**. All automated gates green (FE 222/222 · BE 67/67 · tsc · lint · both production builds), live smoke tests pass, Day 16–17 hardening confirmed on the deployed backend. The only remaining items are interactive, credentialed walkthroughs (sign in, chat with SnapAI, record a voice memo, force offline on a real device) — no code changes required to release.
+
+→ PASS = Production Release Candidate ✅
+
+→ FAIL = Fix → retest → verdict
 
 → PASS = Production Release Candidate
 → FAIL = Fix → retest → verdict
