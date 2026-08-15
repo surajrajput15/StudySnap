@@ -457,8 +457,8 @@ NEXT_PUBLIC_BACKEND_URL=http://localhost:4000  # Render URL in production
   </tr>
   <tr>
     <td><b>v1.1</b></td>
-    <td>Offline mode · Analytics dashboard · Collaborative notes · AI mind maps · Flashcards import/export</td>
-    <td>🔄 <b>In Progress</b></td>
+    <td>Resilient offline sync · Cloudinary voice notes · AI note/PDF context · Delete undo · Error boundaries · Accessibility · Security hardening · DB/API optimization · Observability</td>
+    <td>✅ <b>Released</b></td>
   </tr>
   <tr>
     <td><b>v2.0</b></td>
