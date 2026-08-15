@@ -254,25 +254,38 @@ studysnap/
 │   ├── app/
 │   │   ├── page.tsx                     # Main SPA layout
 │   │   ├── layout.tsx                   # Root layout + Clerk provider
+│   │   ├── error.tsx / global-error.tsx / not-found.tsx
 │   │   └── globals.css                  # MD3 design system
 │   ├── components/
 │   │   ├── HomeScreen.tsx               # Dashboard with hero, stats, notes
 │   │   ├── NoteEditor.tsx               # Rich text editor with auto-save
-│   │   ├── VoiceNotes.tsx              # Audio recorder + transcription
-│   │   ├── AiTutor.tsx                 # AI chat with streaming
-│   │   ├── RevisionCalendar.tsx        # Spaced repetition scheduler
-│   │   ├── GamificationHub.tsx         # Achievements, XP, leaderboard
-│   │   ├── ProfileView.tsx             # Student profile + study zones
-│   │   ├── MobileDrawer.tsx            # MD3 navigation drawer
-│   │   ├── HeroAI.tsx                  # AI landing hero section
-│   │   └── EmptyState.tsx              # Empty state illustrations
+│   │   ├── NoteCards.tsx                # Memoized note card/list items
+│   │   ├── VoiceNotes.tsx               # Audio recorder + transcription
+│   │   ├── AiTutor.tsx                  # AI chat with streaming
+│   │   ├── RevisionCalendar.tsx         # Spaced repetition scheduler
+│   │   ├── GamificationHub.tsx          # Achievements, XP, leaderboard
+│   │   ├── ProfileView.tsx              # Student profile + study zones
+│   │   ├── MobileDrawer.tsx             # MD3 navigation drawer
+│   │   ├── HeroAI.tsx                   # AI landing hero section
+│   │   ├── EmptyState.tsx               # Empty state illustrations
+│   │   ├── ErrorBoundary.tsx / ErrorToast.tsx / DeleteUndoToast.tsx
+│   │   ├── OfflineBanner.tsx / SyncStatusIndicator.tsx
+│   │   ├── GuestMigrationNotice.tsx / SessionExpiredModal.tsx
+│   │   ├── SignInPrompt.tsx / LoadingShell.tsx
+│   │   ├── PwaRegister.tsx / ThemeSync.tsx
 │   ├── lib/
 │   │   ├── store/useStore.ts            # Zustand persisted store
-│   │   └── config.ts                   # API config + apiFetch helper
+│   │   ├── sync/                       # SyncEngine + notes/voice sync layers
+│   │   ├── security/csp.ts              # Content-Security-Policy builder
+│   │   ├── config.ts                   # API config + apiFetch helper
+│   │   ├── observability.ts            # Client crash logging
+│   │   ├── useDialogFocus.ts           # Focus-trap hook for dialogs
+│   │   └── ai.ts / editorCode.ts / pdf.ts / pin.ts / gamification.ts ...
+│   ├── tests/                           # Node test runner suites (26 files)
 │   ├── public/
 │   │   ├── window.svg                  # App icon
 │   │   ├── studysnap-logo.svg          # Full logo
-│   │   └── manifest.json              # PWA manifest
+│   │   └── manifest.json               # PWA manifest
 │   └── docs/
 │
 ├── BACKEND/                             # Express.js + TypeScript
@@ -281,19 +294,21 @@ studysnap/
 │       ├── routes/                     # REST API endpoints
 │       │   ├── ai.ts                   # /api/ai/* — Groq integration
 │       │   ├── notes.ts                # /api/notes/* — CRUD
-│   │       ├── voice-notes.ts           # /api/voice-notes/*
-│   │       ├── revision.ts            # /api/revision/*
-│   │       └── webhooks.ts            # External webhooks
+│       │   ├── voice-notes.ts          # /api/voice-notes/*
+│       │   └── webhooks.ts             # External webhooks
 │       ├── services/                   # Business logic
 │       │   ├── ai.ts                   # Groq chat, summarize, MCQ, translate
-│       │   └── cache.ts                # Redis caching
+│       │   ├── cache.ts                # Redis caching
+│       │   └── storage.ts              # Cloudinary fail-closed upload/destroy
 │       ├── middleware/
-│       │   ├── auth.ts                # Clerk JWT verification
-│       │   ├── security.ts            # CORS, Helmet, CSRF
-│       │   └── rateLimiter.ts         # 20 req/min AI limit
+│       │   ├── auth.ts                 # Clerk JWT verification
+│       │   ├── security.ts             # CORS, Helmet, CSRF
+│       │   ├── rateLimiter.ts          # Global + per-route limiters
+│       │   ├── requestLogger.ts        # Metric-only per-request logging
+│       │   └── validate.ts             # Shared validation helpers
 │       ├── db/                         # Drizzle ORM schema + migrations
-│       ├── config/                      # env.ts + constants
-│       └── types/                       # TypeScript interfaces (express.d.ts)
+│       ├── config/                     # env.ts + constants
+│       └── types/                      # TypeScript interfaces (express.d.ts)
 │
 ├── .env.example                        # Environment template
 └── package.json                        # Root scripts

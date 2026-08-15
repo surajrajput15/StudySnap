@@ -95,7 +95,7 @@ auth/session → Task 2 · weekly-challenge week rollover + Sunday chart → not
 - **Day 13:** ✅ 8/8 COMPLETE (testing expansion — 18 new store-level flow tests)
 - **Day 14:** ✅ 8/8 COMPLETE (security hardening round 2 — 0 FE vulns, bounded inputs, webhook+query limiters, upload magic-byte check, AI role sanitization, no-store/perms-policy headers)
 - **Day 15:** ✅ 8/8 COMPLETE (observability & error handling — error boundaries, crash logging, request logger, sync-failure surfacing, alert→toast unification)
-- **Current HEAD:** `b6b6e66` (+ Day 18 working tree, to commit)
+- **Current HEAD:** `b455751` (Day 18 release-candidate PASS committed)
 - **Tests:** ✅ Frontend 222/222 · ✅ Backend 67/67
 - **Sprint 2 status:** Day 18 COMPLETE — **PRODUCTION RELEASE CANDIDATE ✅** (Sprint 2 finished)
 
@@ -277,8 +277,4 @@ Tests: BE **67/67** ✅ · FE **222/222** ✅ · tsc ✅ · eslint ✅ · build 
 - Task 8 — Final release verdict ✅ **PASS → PRODUCTION RELEASE CANDIDATE**. All automated gates green (FE 222/222 · BE 67/67 · tsc · lint · both production builds), live smoke tests pass, Day 16–17 hardening confirmed on the deployed backend. The only remaining items are interactive, credentialed walkthroughs (sign in, chat with SnapAI, record a voice memo, force offline on a real device) — no code changes required to release.
 
 → PASS = Production Release Candidate ✅
-
-→ FAIL = Fix → retest → verdict
-
-→ PASS = Production Release Candidate
 → FAIL = Fix → retest → verdict
