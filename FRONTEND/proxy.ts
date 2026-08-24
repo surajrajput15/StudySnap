@@ -1,6 +1,14 @@
 import { clerkMiddleware } from '@clerk/nextjs/server';
 
-export default clerkMiddleware();
+/**
+ * Proxy-mode live keys REQUIRE the app to serve Clerk's Frontend API under
+ * `/__clerk/*` (the production publishable key decodes to
+ * `clerk.studysnap-sigma.vercel.app$` — trailing `$` = proxy mode). Clerk only
+ * AUTO-enables this on *.vercel.app hosts, so it is pinned here explicitly:
+ * sign-in breaks with 404s on any other host otherwise. Harmless with test
+ * keys — the browser SDK never calls /__clerk outside proxy mode.
+ */
+export default clerkMiddleware({ frontendApiProxy: { enabled: true } });
 
 export const config = {
   matcher: ['/((?!.*\\..*|_next).*)', '/', '/(api|trpc)(.*)'],
