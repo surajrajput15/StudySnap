@@ -11,5 +11,10 @@ import { clerkMiddleware } from '@clerk/nextjs/server';
 export default clerkMiddleware({ frontendApiProxy: { enabled: true } });
 
 export const config = {
-  matcher: ['/((?!.*\\..*|_next).*)', '/', '/(api|trpc)(.*)'],
+  // '/__clerk/:path*' MUST come first and stand alone: the generic pattern
+  // excludes dotted paths (static-file optimisation), but proxy mode serves
+  // Clerk's JS bundles under /__clerk/npm/@clerk/*.js — without this entry
+  // those requests skip the middleware entirely and die as Next 404 HTML
+  // pages ("MIME type 'text/html' is not executable" in the browser).
+  matcher: ['/__clerk/:path*', '/((?!.*\\..*|_next).*)', '/', '/(api|trpc)(.*)'],
 };
