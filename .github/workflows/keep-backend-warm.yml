@@ -1,0 +1,27 @@
+# Render free tier sleeps the backend after ~15 min idle; every cold start
+# costs 30-60s on the next request. This pings /api/health every 10 minutes
+# so the service stays warm for real users.
+# NOTE: GitHub auto-disables schedules after 60 days without repo activity —
+# any push resets that timer.
+name: Keep backend warm
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping /api/health
+        run: |
+          set -e
+          for i in 1 2 3; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 60 https://studysnap-wumt.onrender.com/api/health || true)
+            echo "attempt $i -> HTTP $code"
+            [ "$code" = "200" ] && exit 0
+            sleep 20
+          done
+          echo "::warning::backend health check failed after retries"
+          exit 1
