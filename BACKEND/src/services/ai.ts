@@ -121,7 +121,9 @@ export async function chatCompletion(messages: ChatCompletionMessageParam[]) {
         ...safeMessages
       ],
       temperature: 0.7,
-      max_tokens: 1024,
+      // gpt-oss is a reasoning model — reasoning tokens share this budget, so
+      // 1024 could exhaust it mid-answer and return an empty content.
+      max_tokens: 2048,
     });
     const content = response.choices[0]?.message?.content;
     if (!content) throw new Error('Groq returned empty response');

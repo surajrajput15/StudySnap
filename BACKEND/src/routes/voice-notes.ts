@@ -138,7 +138,10 @@ router.get('/', voiceQueryLimiter, async (req: Request, res: Response) => {
 
     await cacheSet(cacheKey, rows, CACHE_TTL_NOTES_SECONDS);
     res.json({ success: true, voiceNotes: rows });
-  } catch {
+  } catch (error) {
+    // Silent 500s here made a prod schema drift undiagnosable for weeks; log
+    // the actual failure so server logs always explain this endpoint's errors.
+    console.error('[voice-notes] GET failed:', error instanceof Error ? error.message : error);
     res.status(500).json({ success: false, error: 'Failed to fetch voice notes' });
   }
 });
