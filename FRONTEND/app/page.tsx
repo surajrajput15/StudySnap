@@ -21,6 +21,7 @@ import LoadingShell from '@/components/LoadingShell';
 import GuestMigrationNotice from '@/components/GuestMigrationNotice';
 import { RECORDING_NAV_CONFIRM_MESSAGE, shouldConfirmRecordingNav } from '@/lib/utils';
 import { requestPersistentStorage } from '@/lib/persistence';
+import { warmUpBackend } from '@/lib/config';
 
 const NoteEditor = dynamic(() => import('@/components/NoteEditor'), { ssr: false });
 const VoiceNotes = dynamic(() => import('@/components/VoiceNotes'), { ssr: false });
@@ -88,6 +89,14 @@ export default function Page() {
   // local-first store. Idempotent: once granted, later calls short-circuit.
   useEffect(() => {
     void requestPersistentStorage();
+  }, []);
+
+  // Wake a sleeping free-tier backend as soon as the app opens (fire-and-forget).
+  // The first AI message after a cold boot otherwise races the server boot and
+  // times out; pinging /api/health here means SnapAI is warm by the time the
+  // user actually sends something.
+  useEffect(() => {
+    warmUpBackend();
   }, []);
 
   const clerkId = clerkUser?.id ?? null;

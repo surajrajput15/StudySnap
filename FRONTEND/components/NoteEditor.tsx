@@ -822,6 +822,8 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
         method: 'POST',
         body: JSON.stringify({ messages: contextMessages }),
         token: (await getToken()) ?? undefined,
+        // Same rationale as AiTutor: survive free-tier backend cold boots.
+        timeoutMs: 60000,
       });
       if (data.success) {
         const text = (data.message?.content) || (data as { response?: string }).response || (data as { text?: string }).text || '';

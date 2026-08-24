@@ -441,6 +441,10 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
         body: JSON.stringify({ messages: contextMessages }),
         token: (await getToken()) ?? undefined,
         returnTo: 'ai',
+        // 60s: a free-tier backend cold boot alone takes 20-50s; the default
+        // 25s aborted the first message after every app open before the
+        // server even finished waking up.
+        timeoutMs: 60000,
       });
 
       if (data.success) {

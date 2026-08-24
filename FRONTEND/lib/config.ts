@@ -32,6 +32,7 @@ const BACKEND_URL = detectBackendURL();
 
 export const API = {
   base: BACKEND_URL,
+  health: `${BACKEND_URL}/api/health`,
   notes: `${BACKEND_URL}/api/notes`,
   categories: `${BACKEND_URL}/api/notes/categories`,
   voiceNotes: `${BACKEND_URL}/api/voice-notes`,
@@ -72,6 +73,20 @@ export function parseRetryAfterMs(value: string | null): number | null {
   const dateMs = Date.parse(trimmed);
   if (!Number.isNaN(dateMs)) return Math.max(0, dateMs - Date.now());
   return null;
+}
+
+/**
+ * Fire-and-forget wake-up ping for serverless/free-tier backends (Render free
+ * tier sleeps after ~15 min idle; a cold boot takes 20-50s). Called once when
+ * the app mounts so the backend boots while the user reads the dashboard —
+ * by the time the first AI message is sent, the server is already warm.
+ * Deliberately uses raw fetch (no AbortController timeout): the whole point is
+ * to let a slow boot finish in the background. Failures are ignored — this is
+ * best-effort and must never surface as an error.
+ */
+export function warmUpBackend(): void {
+  if (!isBrowser) return;
+  void fetch(`${BACKEND_URL}/api/health`, { cache: 'no-store' }).catch(() => {});
 }
 
 export async function apiFetch<T = ApiResponse>(
