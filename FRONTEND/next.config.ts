@@ -37,7 +37,14 @@ const productionCspHeader =
 
 const nextConfig: NextConfig = {
   turbopack: { root: process.cwd() },
-  output: 'standalone',
+  // Next 16.3 + Vercel bug (vercel/next.js#96646): when an adapter is active
+  // (Vercel injects one at build time), the whole-server trace file
+  // (.next/next-server.js.nft.json) is no longer emitted, but the standalone
+  // finalizer still reads it — the build then dies with ENOENT right after
+  // "Finalizing page optimization". Standalone is only consumed by the
+  // self-hosted path (Railway `next start` works without it too), so it stays
+  // ON everywhere EXCEPT Vercel builds, where VERCEL=1 is always set.
+  output: process.env.VERCEL ? undefined : 'standalone',
   poweredByHeader: false,
   reactStrictMode: true,
   async headers() {
