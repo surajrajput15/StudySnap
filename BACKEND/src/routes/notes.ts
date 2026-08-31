@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, gt } from 'drizzle-orm';
 import { z } from 'zod';
 import { getDb, notes, categories, voiceNotes } from '../db';
 import { authMiddleware } from '../middleware/auth';
@@ -7,6 +7,7 @@ import { pinLimiter } from '../middleware/rateLimiter';
 import { generateId } from '../utils/helpers';
 import { hashPin, verifyPin } from '../utils/pin';
 import { checkNoteIdAvailability } from '../utils/noteOwnership';
+import { computeCursor, isUpdatedAfter } from '../utils/delta';
 import { validate, noteSchema, verifyPinSchema } from '../middleware/validate';
 import { cacheGet, cacheSet, invalidateUserCache } from '../services/cache';
 import { CACHE_TTL_NOTES_SECONDS, DEFAULT_CATEGORIES } from '../config/constants';
@@ -87,8 +88,7 @@ router.get('/', async (req: Request, res: Response) => {
 
     // Day 16 Task 5 — optional, validated `?limit=1..200`. The local-first sync
     // contract pulls ALL notes (no limit sent), so default behavior is
-    // unchanged; a limit lets list-style consumers bound the response. Cursor
-    // (updated_at) delta-sync is the planned next step and stays out of scope.
+    // unchanged; a limit lets list-style consumers bound the response.
     let limit: number | null = null;
     if (req.query.limit !== undefined) {
       const parsed = z.coerce.number().int().min(1).max(200).safeParse(req.query.limit);
@@ -99,12 +99,36 @@ router.get('/', async (req: Request, res: Response) => {
       limit = parsed.data;
     }
 
+    // Delta-sync cursor (P0): `?since=<RFC3339/ISO timestamp>`. When present,
+    // ONLY notes whose updated_at is strictly after `since` are returned, plus a
+    // `cursor` equal to the newest updated_at in the result (or `since` when no
+    // row qualifies). A client that stores the cursor after each pull can do
+    // incremental syncs. This is ADDITIVE: the default (no `since`) is the
+    // original full pull, so the correctness of the LWW/tombstone merge is
+    // unchanged for callers that never opt into delta mode.
+    let since: Date | null = null;
+    if (req.query.since !== undefined) {
+      const raw = typeof req.query.since === 'string' ? req.query.since : String(req.query.since);
+      const parsed = z.string().datetime().safeParse(raw);
+      if (!parsed.success) {
+        res.status(400).json({ success: false, error: 'Invalid since (must be an ISO datetime)' });
+        return;
+      }
+      since = new Date(parsed.data);
+      if (Number.isNaN(since.getTime())) {
+        res.status(400).json({ success: false, error: 'Invalid since (must be a valid datetime)' });
+        return;
+      }
+    }
+
+    const sinceISO = since ? since.toISOString() : null;
+
     const cacheKey = `${userId}:notes`;
 
     // Day 16 Task 4 — the cached payload is the STRIPPED shape (no pinLock
-    // hashes) so Redis never holds sensitive material. Limited requests bypass
-    // the cache — a slice must always be live.
-    if (limit === null) {
+    // hashes) so Redis never holds sensitive material. Only the full-pull path
+    // (no limit, no since) is cacheable; a slice or delta must always be live.
+    if (limit === null && since === null) {
       const cached = await cacheGet<Array<NoteWithoutPinLock>>(cacheKey);
       if (cached) {
         res.json({ success: true, notes: cached });
@@ -114,19 +138,41 @@ router.get('/', async (req: Request, res: Response) => {
 
     const db = getDb();
     if (!db) {
-      const filtered = mockNotes.filter(n => n.userId === userId);
-      res.json({ success: true, notes: filtered.slice(0, limit ?? undefined).map(stripPinLock) });
+      // Mock path: honour `since` by filtering on updatedAt, and mirror the
+      // cursor semantics of the DB path for API parity.
+      let filtered = mockNotes.filter(n => n.userId === userId);
+      if (sinceISO !== null) {
+        filtered = filtered.filter((n) => isUpdatedAfter(n, sinceISO));
+      }
+      const sliced = filtered.slice(0, limit ?? undefined).map(stripPinLock);
+      const cursor = sinceISO !== null
+        ? computeCursor(filtered, sinceISO)
+        : new Date().toISOString();
+      res.json({
+        success: true,
+        notes: sliced,
+        ...(sinceISO !== null ? { cursor } : {}),
+      });
       return;
     }
+
+    const filters = [eq(notes.userId, userId), eq(notes.isArchived, false)];
+    if (since !== null) filters.push(gt(notes.updatedAt, since));
 
     const query = db
       .select()
       .from(notes)
-      .where(and(eq(notes.userId, userId), eq(notes.isArchived, false)))
+      .where(and(...filters))
       .orderBy(desc(notes.isPinned), desc(notes.updatedAt));
     const dbNotes = limit !== null ? await query.limit(limit) : await query;
 
     const stripped = dbNotes.map(stripPinLock);
+    if (since !== null) {
+      // Delta mode: never cached (must always be live relative to the cursor).
+      res.json({ success: true, notes: stripped, cursor: computeCursor(dbNotes, sinceISO!) });
+      return;
+    }
+    // Full-pull mode: cacheable only when no limit bounds the slice.
     if (limit === null) await cacheSet(cacheKey, stripped, CACHE_TTL_NOTES_SECONDS);
     res.json({ success: true, notes: stripped });
   } catch {

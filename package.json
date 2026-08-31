@@ -9,6 +9,7 @@
     "build": "npm run build:backend && npm run build:frontend",
     "build:frontend": "cd FRONTEND && npm run build",
     "build:backend": "cd BACKEND && npm run build",
+    "e2e": "playwright test",
     "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
     "start:frontend": "cd FRONTEND && npm start",
     "start:backend": "cd BACKEND && npm start",

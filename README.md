@@ -22,7 +22,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-1.0.0-0061A4?style=flat-square&labelColor=1a1d23" alt="Version">
+  <img src="https://img.shields.io/badge/Version-1.1.0-0061A4?style=flat-square&labelColor=1a1d23" alt="Version">
   <img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square&labelColor=1a1d23" alt="License">
   <img src="https://img.shields.io/github/stars/surajrajput999/StudySnap?style=flat-square&logo=github&label=Stars&labelColor=1a1d23" alt="Stars">
   <img src="https://img.shields.io/badge/PRs-Welcome-7C3AED?style=flat-square&labelColor=1a1d23" alt="PRs Welcome">

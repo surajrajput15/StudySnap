@@ -5,8 +5,11 @@ dist
 .env.local
 .env.*.local
 *.log
+*.tsbuildinfo
 .DS_Store
 Thumbs.db
 FRONTEND/.env.local
 shot.mjs
-checkpoint.txt
+test-results
+playwright-report
+blob-report

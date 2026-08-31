@@ -25,9 +25,12 @@ sequenceDiagram
 ## 1. Study Notes Endpoints
 
 ### `GET /api/notes`
-Fetches all active study notes for the authenticated student.
+Fetches active study notes for the authenticated student.
 * **Headers:** `Authorization: Bearer <clerk_token>` (Optional fallback to mock)
-* **Response (Success):**
+* **Query params:**
+  * `limit` (optional, `1..200`) — bounds the response for list-style consumers. When present the slice is never served from cache.
+  * `since` (optional, ISO datetime) — **delta-sync cursor**. When present, only notes whose `updatedAt` is strictly after `since` are returned, plus a `cursor` equal to the newest `updatedAt` in the result (or `since` when no row qualifies). Store the returned `cursor` and pass it back on the next pull for incremental syncs. When absent, the full pull (unchanged, cacheable) is returned.
+* **Response (Success, full/`limit` mode):**
   ```json
   {
     "success": true,
@@ -46,6 +49,11 @@ Fetches all active study notes for the authenticated student.
     ]
   }
   ```
+* **Response (delta mode, `?since=<ts>`):** same `notes` shape plus a `cursor` field:
+  ```json
+  { "success": true, "notes": [ ... ], "cursor": "2026-08-05T14:30:00.000Z" }
+  ```
+* **Errors:** `400` invalid `limit`/`since`; `500` on failure.
 
 ### `POST /api/notes`
 Upserts a single note. If `id` is provided and exists, updates the note. Otherwise, inserts a new note.
@@ -72,8 +80,8 @@ Deletes a specific note.
 
 ## 2. Subject Categories Endpoints
 
-### `GET /api/categories`
-Lists presets and custom subject categories.
+### `GET /api/notes/categories`
+Lists preset and custom subject categories for the user.
 * **Response:** `{ "success": true, "categories": [...] }`
 
 ### `POST /api/categories`
