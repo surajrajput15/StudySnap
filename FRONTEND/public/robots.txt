@@ -1,4 +1,58 @@
+# StudySnap — robots.txt
+# https://www.robotstxt.org/robotstxt.html
+
+# Default policy: all reputable crawlers may index the public app shell.
 User-agent: *
 Allow: /
+Disallow: /sign-in
+Disallow: /sign-up
+Disallow: /api/
 
-Sitemap: https://studysnap.vercel.app/sitemap.xml
+# General AI / LLM crawlers — allowed on public content, session routes excluded.
+User-agent: GPTBot
+Allow: /
+Disallow: /sign-in
+Disallow: /sign-up
+Disallow: /api/
+
+User-agent: ChatGPT-User
+Allow: /
+Disallow: /sign-in
+Disallow: /sign-up
+Disallow: /api/
+
+User-agent: ClaudeBot
+Allow: /
+Disallow: /sign-in
+Disallow: /sign-up
+Disallow: /api/
+
+User-agent: Claude-Web
+Allow: /
+Disallow: /sign-in
+Disallow: /sign-up
+Disallow: /api/
+
+User-agent: PerplexityBot
+Allow: /
+Disallow: /sign-in
+Disallow: /sign-up
+Disallow: /api/
+
+User-agent: Google-Extended
+Allow: /
+Disallow: /sign-in
+Disallow: /sign-up
+Disallow: /api/
+
+User-agent: Bingbot
+Allow: /
+Disallow: /sign-in
+Disallow: /sign-up
+
+User-agent: Applebot
+Allow: /
+Disallow: /sign-in
+Disallow: /sign-up
+
+Sitemap: https://studysnap-sigma.vercel.app/sitemap.xml

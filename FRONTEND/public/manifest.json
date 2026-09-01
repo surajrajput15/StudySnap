@@ -4,9 +4,12 @@
   "description": "Smart study companion. Create, organize, revise, and master your notes with AI.",
   "start_url": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "background_color": "#F8F9FF",
   "theme_color": "#0061A4",
   "orientation": "portrait",
+  "lang": "en",
+  "categories": ["education", "productivity"],
   "icons": [
     {
       "src": "/window.svg",
