@@ -42,7 +42,7 @@ export const metadata: Metadata = {
     },
   },
   alternates: {
-    canonical: "/",
+    canonical: SITE_URL,
   },
   verification: {
     google: "JShkc5ukY_Gw4mTItEeE8lb8pUurWNxzJ9jLGVCm4XE",

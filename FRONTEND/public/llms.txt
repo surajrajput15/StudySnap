@@ -2,12 +2,13 @@
 
 StudySnap is a high-performance, AI-powered study companion web application (PWA). It helps students capture, structure, listen to, and revise notes using artificial intelligence. Built with Next.js 16, React 19, Express, Drizzle ORM, Neon PostgreSQL, Upstash Redis, Clerk auth, and Groq AI (Llama 3).
 
-## Docs
+---
 
-- Homepage: https://studysnap-sigma.vercel.app/
-- Sitemap: https://studysnap-sigma.vercel.app/sitemap.xml
-- Repository: https://github.com/surajrajput15/StudySnap
-- Author: Suraj Bhan Pratap Singh (Full-Stack AI Engineer)
+- https://studysnap-sigma.vercel.app/ : Homepage - smart study companion dashboard
+- https://studysnap-sigma.vercel.app/sitemap.xml : Sitemap - all public pages
+- https://studysnap-sigma.vercel.app/robots.txt : Robots - crawler access policy
+- https://github.com/surajrajput15/StudySnap : Source Code - GitHub repository
+- https://github.com/surajrajput15/StudySnap/blob/master/README.md : README - project overview and setup guide
 
 ## Features
 
@@ -29,41 +30,35 @@ StudySnap is a high-performance, AI-powered study companion web application (PWA
 
 ## API Endpoints (base: backend on Render)
 
-- `GET /api/health` — liveness check; returns `{ success, status, timestamp, version }`.
-- `GET /api/notes` — list notes. Query: `limit` (1–200), `since` (ISO datetime, delta-sync cursor). Returns `{ success, notes, cursor? }`.
-- `POST /api/notes` — upsert a note (update by id or insert).
-- `POST /api/notes/verify-pin` — verify PIN for a locked note. Body: `{ noteId, pin }`.
-- `DELETE /api/notes?id=<uuid>` — delete a note (also purges linked voice audio).
-- `GET /api/notes/categories` — list categories.
-- `GET /api/voice-notes` — list voice notes.
-- `POST /api/voice-notes` — multipart upload `file` (audio/webm|mp4|ogg|mpeg|wav), fields `id` (uuid), `noteId` (optional), `duration` (optional), `transcript` (optional).
-- `DELETE /api/voice-notes?id=<uuid>` — delete a voice note.
-- `POST /api/ai/chat` — AI tutor chat. Body: `{ messages: [{ role, content }] }`.
-- `POST /api/ai/summarize` — summarize a note. Body: `{ title, content }`.
-- `POST /api/ai/mcqs` — generate MCQs or flashcards. Body: `{ title, content, type: "mcq" | "flashcard" }`.
-- `POST /api/ai/translate` — translate. Body: `{ content, targetLanguage: "hindi" | "english" }`.
+- `GET /api/health` - liveness check; returns `{ success, status, timestamp, version }`.
+- `GET /api/notes` - list notes. Query: `limit` (1-200), `since` (ISO datetime, delta-sync cursor). Returns `{ success, notes, cursor? }`.
+- `POST /api/notes` - upsert a note (update by id or insert).
+- `POST /api/notes/verify-pin` - verify PIN for a locked note. Body: `{ noteId, pin }`.
+- `DELETE /api/notes?id=<uuid>` - delete a note (also purges linked voice audio).
+- `GET /api/notes/categories` - list categories.
+- `GET /api/voice-notes` - list voice notes.
+- `POST /api/voice-notes` - multipart upload `file` (audio/webm|mp4|ogg|mpeg|wav), fields `id` (uuid), `noteId` (optional), `duration` (optional), `transcript` (optional).
+- `DELETE /api/voice-notes?id=<uuid>` - delete a voice note.
+- `POST /api/ai/chat` - AI tutor chat. Body: `{ messages: [{ role, content }] }`.
+- `POST /api/ai/summarize` - summarize a note. Body: `{ title, content }`.
+- `POST /api/ai/mcqs` - generate MCQs or flashcards. Body: `{ title, content, type: "mcq" | "flashcard" }`.
+- `POST /api/ai/translate` - translate. Body: `{ content, targetLanguage: "hindi" | "english" }`.
 
 ## Data Model (Neon PostgreSQL, via Drizzle ORM)
 
-- `users` — id (Clerk user id), name, college, semester, study_goals, streak_count, last_active_date, created_at.
-- `categories` — id, user_id, name, color, created_at. Index: (user_id).
-- `folders` — id, user_id, name, created_at. Index: (user_id).
-- `notes` — id, user_id, title, content, tags, is_pinned, is_favorite, pin_lock, category_id (FK→categories, set null), folder_id (FK→folders, cascade), last_revised_at, next_revision_at, revision_streak, is_archived, created_at, updated_at. Index: (user_id, is_archived, updated_at).
-- `voice_notes` — id, user_id, note_id (FK→notes, cascade), audio_url, duration, transcript, created_at, updated_at. Index: (user_id, created_at).
-- `revision_logs` — id, note_id (FK→notes, cascade), revised_at, rating (easy|medium|hard), next_scheduled_at. Index: (note_id).
+- `users` - id (Clerk user id), name, college, semester, study_goals, streak_count, last_active_date, created_at.
+- `categories` - id, user_id, name, color, created_at.
+- `folders` - id, user_id, name, created_at.
+- `notes` - id, user_id, title, content, tags, is_pinned, is_favorite, pin_lock, category_id, folder_id, last_revised_at, next_revision_at, revision_streak, is_archived, created_at, updated_at.
+- `voice_notes` - id, user_id, note_id, audio_url, duration, transcript, created_at, updated_at.
+- `revision_logs` - id, note_id, revised_at, rating (easy|medium|hard), next_scheduled_at.
 
-## Frontend routes
-
-- `/` — the app (dashboard shell; login via Clerk).
-- `/sign-in` — Clerk sign-in completion route (catch-all).
-- `/sign-up` — Clerk sign-up completion route (catch-all).
-
-## Technology notes for LLM agents
+## Technology
 
 - Framework: Next.js 16 (App Router), React 19, TypeScript.
 - Styling: Material Design 3 CSS tokens (globals.css).
 - State: Zustand (persistent middleware, localStorage).
-- Backend: Express + TypeScript (BACKEND/).
+- Backend: Express + TypeScript.
 - Database: Drizzle ORM + @neondatabase/serverless.
 - Cache: Upstash Redis.
 - AI: Groq SDK (Llama 3).
@@ -71,3 +66,9 @@ StudySnap is a high-performance, AI-powered study companion web application (PWA
 - Audio storage: Cloudinary.
 - PDF export: jsPDF.
 - Markdown/math rendering: react-markdown, remark-gfm, remark-math, rehype-katex, KaTeX.
+
+## Frontend routes
+
+- `/` - the app (dashboard shell; login via Clerk).
+- `/sign-in` - Clerk sign-in completion route (catch-all).
+- `/sign-up` - Clerk sign-up completion route (catch-all).

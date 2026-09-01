@@ -5713,7 +5713,7 @@ textarea:focus-visible,
 .bottom-nav-label {
   font-size: 9px;
   font-weight: 500;
-  color: var(--outline);
+  color: #6b7280;
   letter-spacing: -0.01em;
 }
 
