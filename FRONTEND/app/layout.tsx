@@ -124,8 +124,8 @@ export default function RootLayout({
           <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
           <link rel="icon" href="/favicon.ico" sizes="any" />
           <meta name="author" content={AUTHOR_FULL} />
-          <link rel="preconnect" href="https://fonts.googleapis.com" />
-          <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+          <link rel="preconnect" href="https://clerk.accounts.dev" crossOrigin="anonymous" />
+          <link rel="preconnect" href={process.env.NEXT_PUBLIC_BACKEND_URL || "https://studysnap-backend.onrender.com"} crossOrigin="anonymous" />
           <script
             type="application/ld+json"
             dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}

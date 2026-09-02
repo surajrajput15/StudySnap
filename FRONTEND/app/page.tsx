@@ -29,12 +29,13 @@ const AiTutor = dynamic(() => import('@/components/AiTutor'), { ssr: false });
 const RevisionCalendar = dynamic(() => import('@/components/RevisionCalendar'), { ssr: false });
 const ProfileView = dynamic(() => import('@/components/ProfileView'), { ssr: false });
 const GamificationHub = dynamic(() => import('@/components/GamificationHub'), { ssr: false });
-import { 
-  Home, FileText, Mic, Calendar, Sparkles, User, Sun, Moon, 
-  LogIn, ChevronRight, Trophy, Menu
+import {
+  Home, FileText, Mic, Calendar, Sparkles, User, Sun, Moon,
+  ChevronRight, Trophy, Menu
 } from 'lucide-react';
-import { SignInButton, UserButton, useAuth, useUser } from '@clerk/nextjs';
+import { useAuth, useUser } from '@clerk/nextjs';
 import Image from 'next/image';
+import AuthButtons from '@/components/AuthButtons';
 
 export default function Page() {
   const theme = useStore((s) => s.theme);
@@ -234,7 +235,7 @@ export default function Page() {
       {/* ─── Desktop Sidebar ─── */}
       <aside className="app-sidebar">
         <div className="sidebar-brand" role="button" tabIndex={0} onClick={() => navigate('home')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate('home'); } }}>
-          <Image src="/window.svg" alt="" className="sidebar-logo" width={512} height={512} unoptimized />
+          <Image src="/window.svg" alt="StudySnap" className="sidebar-logo" width={512} height={512} unoptimized priority fetchPriority="high" />
           <span className="sidebar-name">StudySnap</span>
         </div>
         <nav className="sidebar-nav">
@@ -286,7 +287,7 @@ export default function Page() {
               <Menu size={22} />
             </button>
             <span className="header-title" role="button" tabIndex={0} onClick={() => navigate('home')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate('home'); } }}>
-              <Image src="/window.svg" alt="" className="header-mobile-logo" width={512} height={512} unoptimized />
+              <Image src="/window.svg" alt="StudySnap" className="header-mobile-logo" width={512} height={512} unoptimized priority fetchPriority="high" />
               <span className="header-brand-text">StudySnap</span>
               <span className="header-tab-name">{navItems.find(t => t.id === activeTab)?.label}</span>
             </span>
@@ -296,15 +297,7 @@ export default function Page() {
             <button onClick={toggleTheme} className="header-icon-btn" aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}>
               {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
             </button>
-            {isSignedIn ? (
-              <UserButton />
-            ) : (
-              <SignInButton mode="modal" forceRedirectUrl="/" signUpForceRedirectUrl="/">
-                <button className="header-signin">
-                  <LogIn size={14} /> <span>Sign In</span>
-                </button>
-              </SignInButton>
-            )}
+            <AuthButtons isSignedIn={isSignedIn} />
           </div>
         </div>
       </header>
