@@ -5,7 +5,7 @@ import { LogIn } from 'lucide-react';
 
 const UserButton = dynamic(
   () => import('@clerk/nextjs').then((m) => m.UserButton),
-  { ssr: false, loading: () => <span className="header-icon-btn" aria-hidden="true" style={{ width: 32, height: 32 }} /> }
+  { ssr: false }
 );
 
 const SignInButton = dynamic(
@@ -18,17 +18,17 @@ interface AuthButtonsProps {
 }
 
 export default function AuthButtons({ isSignedIn }: AuthButtonsProps) {
-  if (isSignedIn === undefined) {
-    return null;
-  }
-  if (isSignedIn) {
-    return <UserButton />;
-  }
   return (
-    <SignInButton mode="modal" forceRedirectUrl="/" signUpForceRedirectUrl="/">
-      <button className="header-signin" type="button">
-        <LogIn size={14} /> <span>Sign In</span>
-      </button>
-    </SignInButton>
+    <span className="auth-buttons-slot" aria-live="polite">
+      {isSignedIn === undefined ? null : isSignedIn ? (
+        <UserButton />
+      ) : (
+        <SignInButton mode="modal" forceRedirectUrl="/" signUpForceRedirectUrl="/">
+          <button className="header-signin" type="button">
+            <LogIn size={14} /> <span>Sign In</span>
+          </button>
+        </SignInButton>
+      )}
+    </span>
   );
 }

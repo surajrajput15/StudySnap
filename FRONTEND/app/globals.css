@@ -5642,6 +5642,13 @@ textarea:focus-visible,
   box-shadow: 0 4px 16px rgba(0,97,164,0.3);
   transition: box-shadow var(--transition-fast);
 }
+.auth-buttons-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 90px;
+  min-height: 32px;
+}
 .header-signin:hover { box-shadow: 0 6px 24px rgba(0,97,164,0.4); }
 
 /* Mobile main: full width, padded */
