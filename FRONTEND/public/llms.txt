@@ -4,11 +4,11 @@ StudySnap is a high-performance, AI-powered study companion web application (PWA
 
 ---
 
-- https://studysnap-sigma.vercel.app/ : Homepage - smart study companion dashboard
-- https://studysnap-sigma.vercel.app/sitemap.xml : Sitemap - all public pages
-- https://studysnap-sigma.vercel.app/robots.txt : Robots - crawler access policy
-- https://github.com/surajrajput15/StudySnap : Source Code - GitHub repository
-- https://github.com/surajrajput15/StudySnap/blob/master/README.md : README - project overview and setup guide
+- [StudySnap Homepage](https://studysnap-sigma.vercel.app/) : Homepage - smart study companion dashboard
+- [Sitemap](https://studysnap-sigma.vercel.app/sitemap.xml) : Sitemap - all public pages
+- [Robots](https://studysnap-sigma.vercel.app/robots.txt) : Robots - crawler access policy
+- [Source Code](https://github.com/surajrajput15/StudySnap) : Source Code - GitHub repository
+- [README](https://github.com/surajrajput15/StudySnap/blob/master/README.md) : README - project overview and setup guide
 
 ## Features
 

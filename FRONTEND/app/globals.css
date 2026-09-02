@@ -5874,7 +5874,7 @@ textarea:focus-visible,
 }
 .sidebar-version {
   font-size: 11px;
-  color: var(--outline);
+  color: #6b7280;
   font-weight: 500;
 }
 
