@@ -13,3 +13,6 @@ shot.mjs
 test-results
 playwright-report
 blob-report
+# Lighthouse local run artifacts
+lh-*.json
+.lh-profile/
