@@ -118,9 +118,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <ClerkProvider
-      prefetchUI={false}
-    >
+    <ClerkProvider>
       <html lang="en">
         <head>
           <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
