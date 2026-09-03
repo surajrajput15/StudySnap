@@ -325,8 +325,6 @@ html {
   scroll-behavior: smooth;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  height: var(--viewport-height, 100dvh);
-  overflow: hidden;
 }
 
 body {
@@ -334,8 +332,7 @@ body {
   background: var(--background);
   color: var(--on-background);
   line-height: 1.6;
-  height: var(--viewport-height, 100dvh);
-  overflow: hidden;
+  min-height: var(--viewport-height, 100dvh);
   transition: background var(--transition-normal), color var(--transition-normal);
 }
 
