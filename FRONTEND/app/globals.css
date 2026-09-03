@@ -6985,3 +6985,350 @@ textarea:focus-visible,
 .error-toast-dismiss:hover {
   background: rgba(0, 0, 0, 0.08);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Marketing landing page — static, server-rendered, zero client JS.
+   Scoped to .marketing-root to avoid clashing with the app shell.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.marketing-root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, var(--background) 0%, #ffffff 100%);
+  color: var(--on-background);
+  font-family: var(--font-body);
+}
+
+.marketing-nav {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(0, 97, 164, 0.08);
+}
+
+.marketing-nav-inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.marketing-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: var(--on-background);
+  font-family: var(--font-title);
+  font-weight: 700;
+  font-size: 18px;
+}
+
+.marketing-brand img {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+}
+
+.marketing-nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.marketing-link {
+  text-decoration: none;
+  color: var(--on-background);
+  font-weight: 500;
+  font-size: 14px;
+  padding: 8px 14px;
+  border-radius: 100px;
+  transition: background var(--transition-fast);
+}
+
+.marketing-link:hover {
+  background: var(--surface-variant);
+}
+
+.marketing-cta-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: var(--on-primary);
+  font-weight: 600;
+  font-size: 14px;
+  padding: 9px 18px;
+  border-radius: 100px;
+  box-shadow: 0 4px 16px rgba(0, 97, 164, 0.25);
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.marketing-cta-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(0, 97, 164, 0.35);
+}
+
+.marketing-cta-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+  color: var(--primary);
+  font-weight: 600;
+  font-size: 14px;
+  padding: 9px 18px;
+  border-radius: 100px;
+  border: 1.5px solid var(--primary);
+  transition: background var(--transition-fast);
+}
+
+.marketing-cta-secondary:hover {
+  background: var(--primary-container);
+}
+
+.marketing-hero {
+  padding: 60px 20px 40px;
+  text-align: center;
+}
+
+.marketing-hero-inner {
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.marketing-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 100px;
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 20px;
+}
+
+.marketing-title {
+  font-family: var(--font-title);
+  font-size: clamp(2.2rem, 5vw, 3.4rem);
+  font-weight: 800;
+  line-height: 1.1;
+  margin: 0 0 16px;
+  letter-spacing: -0.02em;
+}
+
+.marketing-gradient {
+  background: linear-gradient(135deg, var(--primary), #00b4d8);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+.marketing-subtitle {
+  font-size: clamp(1rem, 2.4vw, 1.15rem);
+  line-height: 1.6;
+  color: var(--on-surface-variant);
+  margin: 0 0 32px;
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.marketing-hero-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: 32px;
+}
+
+.marketing-cta-lg {
+  font-size: 15px;
+  padding: 12px 24px;
+}
+
+.marketing-benefits {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  justify-content: center;
+  font-size: 13px;
+  color: var(--on-surface-variant);
+}
+
+.marketing-benefits li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.marketing-benefits li svg {
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.marketing-features {
+  padding: 60px 20px;
+  background: #ffffff;
+}
+
+.marketing-features-inner {
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.marketing-section-title {
+  font-family: var(--font-title);
+  font-size: clamp(1.6rem, 3.5vw, 2.2rem);
+  font-weight: 700;
+  text-align: center;
+  margin: 0 0 40px;
+  letter-spacing: -0.01em;
+}
+
+.marketing-feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 20px;
+}
+
+.marketing-feature-card {
+  background: var(--background);
+  border: 1px solid rgba(0, 97, 164, 0.08);
+  border-radius: 16px;
+  padding: 24px;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.marketing-feature-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 97, 164, 0.08);
+}
+
+.marketing-feature-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--primary-container);
+  color: var(--primary);
+  margin-bottom: 14px;
+}
+
+.marketing-feature-card h3 {
+  font-family: var(--font-title);
+  font-size: 17px;
+  font-weight: 700;
+  margin: 0 0 6px;
+}
+
+.marketing-feature-card p {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--on-surface-variant);
+  margin: 0;
+}
+
+.marketing-trust {
+  padding: 50px 20px;
+  background: linear-gradient(135deg, var(--primary-container) 0%, #f0f4ff 100%);
+}
+
+.marketing-trust-inner {
+  max-width: 700px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.marketing-trust-inner svg {
+  color: var(--primary);
+  margin-bottom: 12px;
+}
+
+.marketing-trust-inner h2 {
+  font-family: var(--font-title);
+  font-size: clamp(1.4rem, 3vw, 1.8rem);
+  font-weight: 700;
+  margin: 0 0 12px;
+}
+
+.marketing-trust-inner p {
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--on-surface-variant);
+  margin: 0;
+}
+
+.marketing-footer {
+  padding: 30px 20px;
+  border-top: 1px solid rgba(0, 97, 164, 0.08);
+  background: #ffffff;
+}
+
+.marketing-footer-inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 13px;
+  color: var(--on-surface-variant);
+}
+
+.marketing-footer-inner p {
+  margin: 0;
+}
+
+.marketing-footer-inner nav {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.marketing-footer-inner a {
+  color: var(--on-surface-variant);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+
+.marketing-footer-inner a:hover {
+  color: var(--primary);
+}
+
+@media (max-width: 640px) {
+  .marketing-hero { padding: 40px 16px 30px; }
+  .marketing-features { padding: 40px 16px; }
+  .marketing-trust { padding: 36px 16px; }
+  .marketing-feature-card { padding: 20px; }
+  .marketing-cta-lg { font-size: 14px; padding: 10px 18px; }
+  .marketing-nav-inner { padding: 12px 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marketing-cta-primary,
+  .marketing-feature-card {
+    transition: none;
+  }
+  .marketing-cta-primary:hover,
+  .marketing-feature-card:hover {
+    transform: none;
+  }
+}

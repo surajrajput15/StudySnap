@@ -5,15 +5,14 @@ import ThemeSync from "@/components/ThemeSync";
 import SessionExpiredModal from "@/components/SessionExpiredModal";
 import ErrorToast from "@/components/ErrorToast";
 import "./globals.css";
-
-// Single source of truth for author identity — keep EXACTLY consistent across
-// GitHub, Vercel, package.json, README, docs, and JSON-LD (E-E-A-T).
-const AUTHOR_NAME = "Suraj Bhan Pratap Singh";
-const AUTHOR_JOB = "Full-Stack AI Engineer";
-const AUTHOR_FULL = `${AUTHOR_NAME} - ${AUTHOR_JOB}`;
-const AUTHOR_GITHUB = "https://github.com/surajkumar";
-const AUTHOR_PORTFOLIO = "https://surajbhan-15.vercel.app/";
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://studysnap-sigma.vercel.app";
+import {
+  AUTHOR_NAME,
+  AUTHOR_JOB,
+  AUTHOR_FULL,
+  AUTHOR_GITHUB,
+  AUTHOR_PORTFOLIO,
+  SITE_URL,
+} from "@/lib/marketing/constants";
 
 export const metadata: Metadata = {
   title: "StudySnap - Smart Study Companion",

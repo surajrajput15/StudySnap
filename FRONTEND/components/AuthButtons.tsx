@@ -23,7 +23,7 @@ export default function AuthButtons({ isSignedIn }: AuthButtonsProps) {
       {isSignedIn === undefined ? null : isSignedIn ? (
         <UserButton />
       ) : (
-        <SignInButton mode="modal" forceRedirectUrl="/" signUpForceRedirectUrl="/">
+        <SignInButton mode="modal" forceRedirectUrl="/app" signUpForceRedirectUrl="/app">
           <button className="header-signin" type="button">
             <LogIn size={14} /> <span>Sign In</span>
           </button>
