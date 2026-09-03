@@ -1,0 +1,215 @@
+/* ═══════════════════════════════════════════
+   BASE STYLES — loaded on every page
+   Just the essentials: CSS variables, reset, body, focus-visible.
+   App-specific styles live in globals.css (loaded only by the
+   authenticated route group). Marketing-specific styles live in
+   marketing.css (loaded only by the marketing page).
+   ═══════════════════════════════════════════ */
+
+/* ─── Light Theme (default) ─── */
+:root {
+  /* ═══ Color Tokens — MD3 Blue ═══ */
+  --primary: #0061A4;
+  --primary-light: #3399FF;
+  --primary-dark: #00497E;
+  --on-primary: #ffffff;
+  --primary-container: #d1e4ff;
+  --on-primary-container: #001d36;
+  --secondary: #535f70;
+  --on-secondary: #ffffff;
+  --secondary-container: #d6e4f7;
+  --on-secondary-container: #101c2b;
+  --tertiary: #6b5778;
+  --tertiary-container: #f3daff;
+  --error: #ba1a1a;
+  --error-container: #ffdad6;
+  --background: #f0f4f8;
+  --on-background: #1a1d23;
+  --surface: #ffffff;
+  --on-surface: #1a1d23;
+  --surface-variant: #e8ecf4;
+  --on-surface-variant: #44474f;
+  --outline: #8e929b;
+  --outline-variant: #c4c7d0;
+
+  /* ═══ Spacing Scale ═══ */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 40px;
+  --space-9: 48px;
+  --space-10: 64px;
+
+  /* ═══ Radius Scale ═══ */
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 20px;
+  --radius-xl: 24px;
+  --radius-2xl: 32px;
+  --radius-full: 100px;
+
+  /* ═══ Elevation / Shadow ═══ */
+  --shadow-ambient: rgba(0, 0, 0, 0.04);
+  --shadow-key: rgba(0, 0, 0, 0.06);
+  --shadow-color: rgba(0, 97, 164, 0.08);
+  --shadow-color-strong: rgba(0, 97, 164, 0.15);
+
+  /* ═══ Typography ═══ */
+  --font-display: 'Outfit', 'Inter', -apple-system, sans-serif;
+  --font-title: 'Outfit', 'Inter', -apple-system, sans-serif;
+  --font-body: 'Inter', -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  --text-display: 2.25rem;
+  --text-headline: 1.75rem;
+  --text-title-lg: 1.375rem;
+  --text-title: 1.125rem;
+  --text-title-sm: 1rem;
+  --text-body: 0.875rem;
+  --text-body-sm: 0.8125rem;
+  --text-label: 0.75rem;
+  --text-label-sm: 0.6875rem;
+  --text-caption: 0.625rem;
+
+  --weight-light: 300;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+  --weight-extrabold: 800;
+
+  /* ═══ Transitions ═══ */
+  --transition-fast: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+
+  --card-radius-sm: 8px;
+  --card-radius-md: 12px;
+  --card-radius-lg: 16px;
+  --card-radius-xl: 20px;
+
+  --elevation-1: 0 1px 2px var(--shadow-ambient), 0 2px 4px var(--shadow-ambient);
+  --elevation-2: 0 2px 4px var(--shadow-ambient), 0 4px 12px var(--shadow-ambient);
+  --elevation-3: 0 4px 12px var(--shadow-ambient), 0 8px 24px rgba(0, 0, 0, 0.08);
+  --elevation-4: 0 8px 24px var(--shadow-ambient), 0 16px 48px rgba(0, 0, 0, 0.10);
+  --elevation-5: 0 12px 40px rgba(0, 0, 0, 0.08), 0 24px 64px rgba(0, 0, 0, 0.12);
+
+  --glass-bg: rgba(255, 255, 255, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.25);
+  --glass-shadow: 0px 4px 24px rgba(0, 0, 0, 0.06);
+
+  --viewport-height: 100dvh;
+}
+
+/* ─── Dark Theme ─── */
+[data-theme="dark"] {
+  --primary: #80bfff;
+  --primary-light: #b3d9ff;
+  --primary-dark: #4da6ff;
+  --on-primary: #002d52;
+  --primary-container: #00457a;
+  --on-primary-container: #cce4ff;
+  --secondary: #b8c4d9;
+  --on-secondary: #233044;
+  --secondary-container: #394455;
+  --on-secondary-container: #d4dfe9;
+  --tertiary: #d9b8e3;
+  --on-tertiary: #3d2949;
+  --tertiary-container: #553f63;
+  --on-tertiary-container: #f5d9ff;
+  --error: #ffb4ab;
+  --error-container: #93000a;
+  --background: #1a1c23;
+  --on-background: #e3e3e8;
+  --surface: #1a1c23;
+  --on-surface: #e3e3e8;
+  --surface-variant: #3a3e48;
+  --on-surface-variant: #c2c6cf;
+  --outline: #8d9199;
+  --outline-variant: #44474f;
+  --shadow-ambient: rgba(0, 0, 0, 0.15);
+  --shadow-key: rgba(0, 0, 0, 0.2);
+  --shadow-color: rgba(0, 0, 0, 0.3);
+  --shadow-color-strong: rgba(0, 0, 0, 0.45);
+  --elevation-1: 0 1px 2px rgba(0, 0, 0, 0.15), 0 2px 4px rgba(0, 0, 0, 0.18);
+  --elevation-2: 0 2px 4px rgba(0, 0, 0, 0.18), 0 4px 12px rgba(0, 0, 0, 0.2);
+  --elevation-3: 0 4px 12px rgba(0, 0, 0, 0.2), 0 8px 24px rgba(0, 0, 0, 0.22);
+  --elevation-4: 0 8px 24px rgba(0, 0, 0, 0.22), 0 16px 48px rgba(0, 0, 0, 0.25);
+  --elevation-5: 0 12px 40px rgba(0, 0, 0, 0.25), 0 24px 64px rgba(0, 0, 0, 0.3);
+  --glass-bg: rgba(26, 28, 35, 0.78);
+  --glass-border: rgba(128, 191, 255, 0.12);
+  --glass-shadow: 0px 4px 24px rgba(0, 0, 0, 0.2);
+}
+
+/* ─── Reset ─── */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+* {
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font-body);
+  background: var(--background);
+  color: var(--on-background);
+  line-height: 1.6;
+  min-height: var(--viewport-height, 100dvh);
+  transition: background var(--transition-normal), color var(--transition-normal);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-title);
+  font-weight: 600;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+img, svg, video {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+  font-size: inherit;
+  color: inherit;
+}
+
+/* ─── Keyboard Focus ─── */
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ─── Reduced Motion ─── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

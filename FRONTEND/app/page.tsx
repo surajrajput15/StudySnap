@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
+import "./marketing.css";
 import { AUTHOR_NAME, AUTHOR_JOB, SITE_URL } from "@/lib/marketing/constants";
 
 export const metadata: Metadata = {

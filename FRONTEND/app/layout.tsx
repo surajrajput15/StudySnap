@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import PwaRegister from "@/components/PwaRegister";
 import ThemeSync from "@/components/ThemeSync";
-import "./globals.css";
+import "./globals-base.css";
 import {
   AUTHOR_NAME,
   AUTHOR_JOB,
