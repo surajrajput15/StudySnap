@@ -116,7 +116,7 @@ const benefits = [
 
 export default function MarketingLanding() {
   return (
-    <main className="marketing-root">
+    <main className="marketing-root" aria-label="StudySnap — AI-powered study companion">
       <header className="marketing-nav">
         <div className="marketing-nav-inner">
           <Link href="/" className="marketing-brand" aria-label="StudySnap home">
@@ -132,12 +132,12 @@ export default function MarketingLanding() {
         </div>
       </header>
 
-      <section className="marketing-hero">
+      <section className="marketing-hero" aria-labelledby="hero-title">
         <div className="marketing-hero-inner">
           <span className="marketing-badge">
             <Zap size={14} /> AI-powered study companion
           </span>
-          <h1 className="marketing-title">
+          <h1 id="hero-title" className="marketing-title">
             Study smarter, <br />
             <span className="marketing-gradient">not harder.</span>
           </h1>
