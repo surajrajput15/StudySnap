@@ -1,9 +1,6 @@
 import type { Metadata, Viewport } from "next";
-import { ClerkProvider } from "@clerk/nextjs";
 import PwaRegister from "@/components/PwaRegister";
 import ThemeSync from "@/components/ThemeSync";
-import SessionExpiredModal from "@/components/SessionExpiredModal";
-import ErrorToast from "@/components/ErrorToast";
 import "./globals.css";
 import {
   AUTHOR_NAME,
@@ -117,27 +114,23 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <ClerkProvider>
-      <html lang="en">
-        <head>
-          <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-          <link rel="icon" href="/favicon.ico" sizes="any" />
-          <meta name="author" content={AUTHOR_FULL} />
-          <link rel="preconnect" href="https://clerk.accounts.dev" crossOrigin="anonymous" />
-          <link rel="preconnect" href={process.env.NEXT_PUBLIC_BACKEND_URL || "https://studysnap-backend.onrender.com"} crossOrigin="anonymous" />
-          <script
-            type="application/ld+json"
-            dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
-          />
-        </head>
-        <body>
-          <ThemeSync />
-          <PwaRegister />
-          <SessionExpiredModal />
-          <ErrorToast />
-          {children}
-        </body>
-      </html>
-    </ClerkProvider>
+    <html lang="en">
+      <head>
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+        <link rel="icon" href="/favicon.ico" sizes="any" />
+        <meta name="author" content={AUTHOR_FULL} />
+        <link rel="preconnect" href="https://clerk.accounts.dev" crossOrigin="anonymous" />
+        <link rel="preconnect" href={process.env.NEXT_PUBLIC_BACKEND_URL || "https://studysnap-backend.onrender.com"} crossOrigin="anonymous" />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+        />
+      </head>
+      <body>
+        <ThemeSync />
+        <PwaRegister />
+        {children}
+      </body>
+    </html>
   );
 }
