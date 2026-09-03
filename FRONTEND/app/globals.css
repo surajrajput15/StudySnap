@@ -3527,6 +3527,9 @@ textarea:focus-visible,
   color: var(--outline);
   line-height: 20px;
 }
+.tutor-input:focus-visible {
+  outline: none;
+}
 
 .tutor-send-btn {
   display: flex;
@@ -4723,6 +4726,9 @@ textarea:focus-visible,
 }
 .editor-ai-input:focus {
   border-color: var(--primary);
+}
+.editor-ai-input:focus-visible {
+  outline: none;
 }
 
 .editor-ai-send {
