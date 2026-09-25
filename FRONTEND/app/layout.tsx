@@ -116,11 +116,24 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
+        {/* Phase B P2: pre-paint theme so dark users never flash light. Reads
+            the guest-scope persisted theme (per-account keys are unknowable
+            pre-hydration); falls back to the OS preference. Runs before any
+            stylesheet so first paint already matches. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=null;try{var r=localStorage.getItem('studysnap-store');if(r){var s=JSON.parse(r);t=s&&s.state&&s.state.theme;}}catch(e){}if(t!=='light'&&t!=='dark'){t=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';}document.documentElement.setAttribute('data-theme',t);document.documentElement.style.colorScheme=t;var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute('content',t==='dark'?'#1a1c23':'#0061A4');}catch(e){}})();`,
+          }}
+        />
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-        <link rel="icon" href="/favicon.ico" sizes="any" />
-        <meta name="author" content={AUTHOR_FULL} />
-        <link rel="preconnect" href="https://clerk.accounts.dev" crossOrigin="anonymous" />
-        <link rel="preconnect" href={process.env.NEXT_PUBLIC_BACKEND_URL || "https://studysnap-backend.onrender.com"} crossOrigin="anonymous" />
+          <link rel="icon" href="/favicon.ico" sizes="any" />
+          <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+          <meta name="author" content={AUTHOR_FULL} />
+          <link rel="preconnect" href="https://clerk.accounts.dev" crossOrigin="anonymous" />
+          <link rel="preconnect" href={process.env.NEXT_PUBLIC_BACKEND_URL || "https://studysnap-backend.onrender.com"} crossOrigin="anonymous" />
+          {/* Phase B P2: avatar + voice-audio origins allowed by the CSP. */}
+          <link rel="preconnect" href="https://img.clerk.com" crossOrigin="anonymous" />
+          <link rel="preconnect" href="https://res.cloudinary.com" crossOrigin="anonymous" />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}

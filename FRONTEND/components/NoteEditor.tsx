@@ -12,7 +12,7 @@ import {
   Undo2, Redo2, Sparkles, Send, X
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import confetti from 'canvas-confetti';
+import { celebrate } from '@/lib/confetti';
 import { SpeechRecognition, SpeechRecognitionEvent, SpeechRecognitionErrorEvent } from '@/lib/speech';
 import { PIN_LENGTH } from '@/lib/constants';
 import { stripHtml } from '@/lib/utils';
@@ -740,7 +740,7 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
   };
 
   const handleLockToggle = () => {
-    if (pinLock) { setPinLock(null); confetti({ particleCount: 30, colors: ['#a0c9ff'] }); markDirty(); }
+    if (pinLock) { setPinLock(null); celebrate({ particleCount: 30, colors: ['#a0c9ff'] }); markDirty(); }
     else { setShowPinModal(true); setPinCode(''); }
   };
 
@@ -755,7 +755,7 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
       setPinLock(storedPin);
       setShowPinModal(false);
       markDirty();
-      confetti({ particleCount: 50, colors: ['#0061A4'] });
+      celebrate({ particleCount: 50, colors: ['#0061A4'] });
     } finally {
       setIsPinSetting(false);
     }
@@ -784,7 +784,7 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
     const splitText = doc.splitTextToSize(textContent || "No text content.", 170);
     doc.text(splitText, 20, 48);
     doc.save(`${title || 'study-note'}.pdf`);
-    confetti({ particleCount: 40, colors: ['#10B981'] });
+    celebrate({ particleCount: 40, colors: ['#10B981'] });
   };
 
   const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -806,7 +806,7 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
         contentStore.current.html = safeHtml;
         markDirty();
       }
-      confetti({ particleCount: 50, colors: ['#0061A4'] });
+      celebrate({ particleCount: 50, colors: ['#0061A4'] });
     };
     reader.readAsText(file);
   };

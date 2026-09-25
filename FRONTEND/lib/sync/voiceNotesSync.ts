@@ -1,6 +1,6 @@
 import { useStore, getStoreScopeKey, type VoiceNote } from '../store/useStore.ts';
 import { API, apiFetch, apiFetchMultipart } from '../config.ts';
-import { getVoiceAudioBlob, purgeOrphanedVoiceAudio } from '../storage/voiceNotes.ts';
+import { getVoiceAudioBlob, purgeOrphanedVoiceAudio, MAX_VOICE_TRANSCRIPT_CHARS } from '../storage/voiceNotes.ts';
 import { notifyError } from '../observability.ts';
 import type { SyncChildStatusEvent } from './syncEngine.ts';
 
@@ -36,8 +36,9 @@ const MAX_VOICE_UPLOAD_BYTES = 50 * 1024 * 1024;
 /**
  * Day 10 Task 7 — mirrors the server-side transcript truncation (voice-notes.ts)
  * as defense-in-depth for legacy rows created before the cap existed.
+ * Phase B P3: single source of truth lives in lib/storage/voiceNotes.ts.
  */
-const MAX_TRANSCRIPT_CHARS = 50000;
+const MAX_TRANSCRIPT_CHARS = MAX_VOICE_TRANSCRIPT_CHARS;
 
 /** Day 10 Task 7 — true when a blob's byte size fits the backend upload cap
  *  (50MB multer limit). Pure predicate so the skip rule is unit-testable. */

@@ -127,7 +127,7 @@ export default function MobileDrawer({ open, onClose, activeTab, onNavigate }: M
       >
         <div className="drawer-header">
           <div className="drawer-header-top">
-            <Image src="/window.svg" alt="StudySnap" className="drawer-logo" width={512} height={512} unoptimized />
+            <img src="/window.svg" alt="StudySnap" className="drawer-logo" width={32} height={32} />
             <button className="drawer-close" onClick={onClose} aria-label="Close menu">
               <X size={20} />
             </button>
@@ -163,7 +163,7 @@ export default function MobileDrawer({ open, onClose, activeTab, onNavigate }: M
           )}
         </div>
 
-        <nav className="drawer-nav">
+        <nav className="drawer-nav" aria-label="Study sections">
           {DRAWER_ITEMS.filter((item) => isValidAppTab(item.id)).map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
@@ -172,6 +172,7 @@ export default function MobileDrawer({ open, onClose, activeTab, onNavigate }: M
                 key={item.id}
                 className={`drawer-item ${isActive ? 'drawer-item--active' : ''}`}
                 onClick={() => handleNav(item.id)}
+                aria-current={isActive ? 'page' : undefined}
               >
                 <Icon size={20} strokeWidth={isActive ? 2.5 : 1.5} />
                 <span className="drawer-item-label">{item.label}</span>

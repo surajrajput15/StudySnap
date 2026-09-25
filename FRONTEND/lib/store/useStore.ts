@@ -301,9 +301,14 @@ function makeInitialState(set: SetStateFn): AppState {
 
     toggleTheme: () => set((state) => ({ theme: state.theme === 'light' ? 'dark' : 'light' })),
 
-    updateProfile: (updates) => set((state) => ({
-      user: { ...state.user, ...updates, name: updates.name || state.user.name }
-    })),
+    updateProfile: (updates) => set((state) => {
+      // Phase B P3: trim whitespace; an empty/blank name keeps the existing
+      // one instead of silently storing '' (the editor requires a name).
+      const name = updates.name !== undefined
+        ? (updates.name.trim() || state.user.name)
+        : state.user.name;
+      return { user: { ...state.user, ...updates, name } };
+    }),
     syncProfileNameFromClerk: (fullName) => set((state) => {
       if (!fullName || !fullName.trim()) return {};
       const name = fullName.trim();

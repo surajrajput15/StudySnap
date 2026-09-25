@@ -6,7 +6,7 @@ import {
   User, School, BookOpen, GraduationCap, Award, CheckCircle, FileText, Music, Sparkles,
   TrendingUp, Clock, Target, Flame, Zap, Trophy, BarChart3, CalendarDays, Download
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
+import { celebrate } from '@/lib/confetti';
 import { WEEKDAYS } from '@/lib/constants';
 import { getXpLevel, getMonthlyReport } from '@/lib/gamification';
 
@@ -36,7 +36,7 @@ export default function ProfileView() {
     e.preventDefault();
     updateProfile({ name, college, field, semester, studyGoals });
     setIsEditing(false);
-    confetti({ particleCount: 50, colors: ['#0061A4', '#10B981'] });
+    celebrate({ particleCount: 50, colors: ['#0061A4', '#10B981'] });
   };
 
   const totalNotes = notes.length;
@@ -119,7 +119,7 @@ export default function ProfileView() {
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
-    confetti({ particleCount: 40, colors: ['#0061A4', '#10B981'] });
+    celebrate({ particleCount: 40, colors: ['#0061A4', '#10B981'] });
   };
 
   return (

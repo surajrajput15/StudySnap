@@ -7,7 +7,7 @@ import {
   TrendingUp, BarChart3, Target, Zap, ChevronLeft, ChevronRight,
   CheckCircle2, AlertCircle, Timer, Award
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
+import { celebrate } from '@/lib/confetti';
 import EmptyState, { EmptyRevisionIllustration } from './EmptyState';
 import { MONTHS, DAYS_SHORT, DAILY_GOAL } from '@/lib/constants';
 import { formatShortDate } from '@/lib/utils';
@@ -151,7 +151,7 @@ export default function RevisionCalendar() {
 
   const handleRevise = (noteId: string, rating: 'easy' | 'medium' | 'hard') => {
     markAsRevised(noteId, rating);
-    confetti({ particleCount: 50, spread: 60, colors: rating === 'easy' ? ['#10B981'] : rating === 'medium' ? ['#3B82F6'] : ['#F59E0B'] });
+    celebrate({ particleCount: 50, spread: 60, colors: rating === 'easy' ? ['#10B981'] : rating === 'medium' ? ['#3B82F6'] : ['#F59E0B'] });
   };
 
   const handleCalPrev = () => {

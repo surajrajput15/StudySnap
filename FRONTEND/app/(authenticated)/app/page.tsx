@@ -23,18 +23,17 @@ import { RECORDING_NAV_CONFIRM_MESSAGE, shouldConfirmRecordingNav } from '@/lib/
 import { requestPersistentStorage } from '@/lib/persistence';
 import { warmUpBackend } from '@/lib/config';
 
-const NoteEditor = dynamic(() => import('@/components/NoteEditor'), { ssr: false });
-const VoiceNotes = dynamic(() => import('@/components/VoiceNotes'), { ssr: false });
-const AiTutor = dynamic(() => import('@/components/AiTutor'), { ssr: false });
-const RevisionCalendar = dynamic(() => import('@/components/RevisionCalendar'), { ssr: false });
-const ProfileView = dynamic(() => import('@/components/ProfileView'), { ssr: false });
-const GamificationHub = dynamic(() => import('@/components/GamificationHub'), { ssr: false });
+const NoteEditor = dynamic(() => import('@/components/NoteEditor'), { ssr: false, loading: () => <LoadingShell /> });
+const VoiceNotes = dynamic(() => import('@/components/VoiceNotes'), { ssr: false, loading: () => <LoadingShell /> });
+const AiTutor = dynamic(() => import('@/components/AiTutor'), { ssr: false, loading: () => <LoadingShell /> });
+const RevisionCalendar = dynamic(() => import('@/components/RevisionCalendar'), { ssr: false, loading: () => <LoadingShell /> });
+const ProfileView = dynamic(() => import('@/components/ProfileView'), { ssr: false, loading: () => <LoadingShell /> });
+const GamificationHub = dynamic(() => import('@/components/GamificationHub'), { ssr: false, loading: () => <LoadingShell /> });
 import {
   Home, FileText, Mic, Calendar, Sparkles, User, Sun, Moon,
   ChevronRight, Trophy, Menu
 } from 'lucide-react';
 import { useAuth, useUser } from '@clerk/nextjs';
-import Image from 'next/image';
 import AuthButtons from '@/components/AuthButtons';
 
 export default function Page() {
@@ -143,6 +142,13 @@ export default function Page() {
   // SyncThrottledError so the engine honors Retry-After. `syncStatus` is written
   // into the ephemeral store slice for the SyncStatusIndicator.
   const engineRef = useRef<SyncEngine | null>(null);
+  // Phase B P3: getToken identity changes on Clerk re-renders; capturing it
+  // in a ref keeps the engine effect from tearing down + recreating (and
+  // re-running an initial sync) on every such render.
+  const getTokenRef = useRef(getToken);
+  useEffect(() => {
+    getTokenRef.current = getToken;
+  }, [getToken]);
   // Phase B P1: expiry circuit-breaker state. After N consecutive 401
   // cooldowns the token is dead — retrying on backoff is a 401 loop, so the
   // engine is halted and the sticky pill (P0-4) becomes the explicit resume
@@ -173,14 +179,19 @@ export default function Page() {
     const engine = createSyncEngine(`studysnap:sync:${clerkId}`, {
       runTasks: () => {
         let throttled: SyncThrottledError | null = null;
+        // Phase B P3: one run = one token fetch. Previously notes sync, voice
+        // sync and the fire-and-forget writes each called getToken(), hitting
+        // the Clerk network 3+ times per run.
+        let tokenCache: Promise<string | null> | null = null;
+        const tokenOnce = () => (tokenCache ??= getTokenRef.current().catch(() => null));
         const report: (event: SyncChildStatusEvent) => void = (event) => {
           if (event.type === 'rateLimited') {
             throttled = new SyncThrottledError(event.status, event.retryAfterMs);
           }
         };
         return Promise.all([
-          syncNotesForUser(clerkId, () => getToken(), { onStatus: report }),
-          syncVoiceNotesForUser(clerkId, () => getToken(), { onStatus: report }),
+          syncNotesForUser(clerkId, tokenOnce, { onStatus: report }),
+          syncVoiceNotesForUser(clerkId, tokenOnce, { onStatus: report }),
         ]).then(() => {
           // A 429 in either layer makes this whole run back off per Retry-After.
           if (throttled) throw throttled;
@@ -221,7 +232,7 @@ export default function Page() {
       engineRef.current = null;
       useStore.getState().setSyncStatus(null);
     };
-  }, [isLoaded, isSignedIn, clerkId, getToken, engineEpoch]);
+  }, [isLoaded, isSignedIn, clerkId, engineEpoch]);
 
   // Day 11 Task 2 — stable identity so the HomeScreen note-card memo can skip
   // re-renders; a new function identity here would ripple through every card.
@@ -276,12 +287,12 @@ export default function Page() {
       />
 
       {/* ─── Desktop Sidebar ─── */}
-      <aside className="app-sidebar">
+      <aside className="app-sidebar" aria-label="Primary">
         <div className="sidebar-brand" role="button" tabIndex={0} onClick={() => navigate('home')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate('home'); } }}>
-          <Image src="/window.svg" alt="StudySnap" className="sidebar-logo" width={512} height={512} unoptimized priority fetchPriority="high" />
+          <img src="/window.svg" alt="StudySnap" className="sidebar-logo" width={32} height={32} fetchPriority="high" />
           <span className="sidebar-name">StudySnap</span>
         </div>
-        <nav className="sidebar-nav">
+        <nav className="sidebar-nav" aria-label="Study sections">
           {navItems.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -290,6 +301,7 @@ export default function Page() {
                 key={tab.id}
                 className={`sidebar-link ${isActive ? 'active' : ''}`}
                 onClick={() => navigate(tab.id)}
+                aria-current={isActive ? 'page' : undefined}
               >
                 <Icon size={18} strokeWidth={isActive ? 2.5 : 1.5} />
                 <span>{tab.label}</span>
@@ -303,34 +315,14 @@ export default function Page() {
         </div>
       </aside>
 
-      {/* ─── Tablet Mini Sidebar ─── */}
-      <aside className="app-rail">
-        {navItems.slice(0, 6).map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              className={`rail-link ${isActive ? 'active' : ''}`}
-              onClick={() => navigate(tab.id)}
-              title={tab.label}
-              aria-label={tab.label}
-            >
-              <Icon size={20} strokeWidth={isActive ? 2.5 : 1.5} />
-            </button>
-          );
-        })}
-      </aside>
-
       {/* ─── Header ─── */}
       <header className="app-header">
         <div className="header-inner">
           <div className="header-left">
             <button className="header-hamburger" onClick={() => setDrawerOpen(true)} aria-label="Open menu" aria-expanded={drawerOpen} aria-controls="mobile-menu">
               <Menu size={22} />
-            </button>
-            <span className="header-title" role="button" tabIndex={0} onClick={() => navigate('home')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate('home'); } }}>
-              <Image src="/window.svg" alt="StudySnap" className="header-mobile-logo" width={512} height={512} unoptimized priority fetchPriority="high" />
+            </button>            <span className="header-title" role="button" tabIndex={0} onClick={() => navigate('home')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate('home'); } }}>
+              <img src="/window.svg" alt="StudySnap" className="header-mobile-logo" width={32} height={32} fetchPriority="high" />
               <span className="header-brand-text">StudySnap</span>
               <span className="header-tab-name">{navItems.find(t => t.id === activeTab)?.label}</span>
             </span>
@@ -379,7 +371,7 @@ export default function Page() {
       </main>
 
       {/* ─── Mobile Bottom Nav ─── */}
-      <nav className="app-bottom-nav">
+      <nav className="app-bottom-nav" aria-label="Study sections">
         {navItems.slice(0, 5).map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -388,6 +380,7 @@ export default function Page() {
               key={tab.id}
               className={`bottom-nav-link ${isActive ? 'active' : ''}`}
               onClick={() => navigate(tab.id)}
+              aria-current={isActive ? 'page' : undefined}
             >
               <div className="bottom-nav-icon-wrap">
                 <Icon size={20} strokeWidth={isActive ? 2.5 : 1.5} />
@@ -399,6 +392,7 @@ export default function Page() {
         <button
           className={`bottom-nav-link ${activeTab === 'gamification' || activeTab === 'profile' ? 'active' : ''}`}
           onClick={() => navigate(activeTab === 'gamification' || activeTab === 'profile' ? activeTab : 'profile')}
+          aria-current={activeTab === 'gamification' || activeTab === 'profile' ? 'page' : undefined}
         >
           <div className="bottom-nav-icon-wrap">
             <User size={20} />

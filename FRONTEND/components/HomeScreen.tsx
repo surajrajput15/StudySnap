@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import dynamic from 'next/dynamic';
 import { useStore, type Folder } from '@/lib/store/useStore';
 import {
   Sparkles, BookOpen, FileText, Clock,
@@ -8,10 +9,15 @@ import {
   CheckCircle2, Flame, Plus, Search, Star, Pin,
   Layers, FolderPlus, Grid3X3, List, Lock, ArrowRight
 } from 'lucide-react';
-import { motion } from 'framer-motion';
-import confetti from 'canvas-confetti';
+import { celebrate } from '@/lib/confetti';
 import EmptyState, { EmptyNotesIllustration, EmptySearchIllustration } from './EmptyState';
-import HeroAI from './HeroAI';
+// Phase B P2: HeroAI pulls framer-motion (~100KB) for entrance/blob
+// animations. It renders mid-page below the hero, so it loads lazily behind
+// a reserved-space placeholder (no layout shift) instead of bloating the
+// initial /app chunk.
+const HeroAI = dynamic(() => import('./HeroAI'), {
+  loading: () => <div className="hero-ai-fallback" aria-hidden="true" />,
+});
 import { NoteCard, NoteListItem } from './NoteCards';
 import { WEEKDAYS, DAILY_GOAL, AI_TOOLS } from '@/lib/constants';
 import { formatShortDate, stripHtml, hasActiveSearch, noteMatchesSearch, SEARCH_EMPTY_MESSAGE, SEARCH_EMPTY_TIP, handleCardKeyDown } from '@/lib/utils';
@@ -338,7 +344,7 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
                         <div className="hero-revision-title">{note.title}</div>
                         <div className="hero-revision-streak">Streak {note.revisionStreak}x</div>
                       </div>
-                      <button onClick={(e) => { e.stopPropagation(); markAsRevised(note.id, 'easy'); confetti({ particleCount: 20, colors: ['#10B981'] }); }} className="hero-revise-btn">
+                      <button onClick={(e) => { e.stopPropagation(); markAsRevised(note.id, 'easy'); celebrate({ particleCount: 20, colors: ['#10B981'] }); }} className="hero-revise-btn">
                         <CheckCircle2 size={12} /> Revise
                       </button>
                     </div>
@@ -414,16 +420,11 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
         </div>
         <div className="ai-tools-grid">
           {AI_TOOLS.map((tool, index) => (
-            <motion.button
+            <button
               key={tool.id}
-              className="ai-tool-card"
+              className="ai-tool-card animate-fade-up"
               onClick={() => { setActiveAiTool(tool.id); onNavigate('ai'); }}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.05, duration: 0.35, ease: 'easeOut' }}
-              whileHover={{ scale: 1.03, y: -4 }}
-              whileTap={{ scale: 0.97 }}
-              style={{ '--tool-gradient': tool.gradient } as React.CSSProperties}
+              style={{ animationDelay: `${index * 0.05}s`, '--tool-gradient': tool.gradient } as React.CSSProperties}
             >
               <span className="ai-tool-emoji">{tool.emoji}</span>
               <div className="ai-tool-info">
@@ -431,19 +432,17 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
                 <div className="ai-tool-desc">{tool.desc}</div>
               </div>
               <div className="ai-tool-ripple" />
-            </motion.button>
+            </button>
           ))}
         </div>
-        <motion.button
-          className="ai-tools-explore-btn"
+        <button
+          className="ai-tools-explore-btn animate-fade-up"
           onClick={() => onNavigate('ai')}
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
         >
           <Sparkles size={14} />
           Explore all AI Tools
           <ArrowRight size={14} />
-        </motion.button>
+        </button>
       </div>
 
       {/* ─── Recent Notes + Weekly Progress Row ─── */}
@@ -662,7 +661,7 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
       {/* ─── Modals ─── */}
       {showFolderModal && (
         <div ref={modalRef} className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="folder-modal-title" onClick={() => setShowFolderModal(false)}>
-          <form className="modal-content" onClick={e => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); if (!newFolderName.trim()) return; addFolder({ name: newFolderName.trim() }); setNewFolderName(''); setShowFolderModal(false); confetti({ particleCount: 30, spread: 40, colors: ['#0061A4'] }); }}>
+          <form className="modal-content" onClick={e => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); if (!newFolderName.trim()) return; addFolder({ name: newFolderName.trim() }); setNewFolderName(''); setShowFolderModal(false); celebrate({ particleCount: 30, spread: 40, colors: ['#0061A4'] }); }}>
             <h3 id="folder-modal-title" style={{ fontSize: '18px', marginBottom: '16px' }}>Create Folder</h3>
             <input type="text" placeholder='e.g. Semester 2, Assignments' value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)} className="md3-input" autoFocus required />
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>
@@ -675,7 +674,7 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
 
       {showCategoryModal && (
         <div ref={modalRef} className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="category-modal-title" onClick={() => setShowCategoryModal(false)}>
-          <form className="modal-content" onClick={e => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); if (!newCategoryName.trim()) return; addCategory({ name: newCategoryName.trim(), color: newCategoryColor }); setNewCategoryName(''); setShowCategoryModal(false); confetti({ particleCount: 30, spread: 40, colors: [newCategoryColor] }); }}>
+          <form className="modal-content" onClick={e => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); if (!newCategoryName.trim()) return; addCategory({ name: newCategoryName.trim(), color: newCategoryColor }); setNewCategoryName(''); setShowCategoryModal(false); celebrate({ particleCount: 30, spread: 40, colors: [newCategoryColor] }); }}>
             <h3 id="category-modal-title" style={{ fontSize: '18px', marginBottom: '16px' }}>Add Subject</h3>
             <input type="text" placeholder="e.g. Computer Science" value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} className="md3-input" autoFocus required />
             <div style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>

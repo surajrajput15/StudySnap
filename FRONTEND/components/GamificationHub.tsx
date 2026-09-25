@@ -8,7 +8,7 @@ import {
   TrendingUp, CalendarDays, Sparkles, CheckCircle, Gift,
   Lock, GiftIcon
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
+import { celebrate } from '@/lib/confetti';
 import { WEEKDAYS } from '@/lib/constants';
 import {
   getXpLevel,
@@ -154,7 +154,7 @@ export default function GamificationHub() {
   const triggerReward = useCallback((xpAmt: number, coinAmt: number, msg: string) => {
     setShowReward({ xp: xpAmt, coins: coinAmt, message: msg });
     addCoins(coinAmt);
-    confetti({ particleCount: 40, spread: 60, colors: ['#0061A4', '#F59E0B', '#10B981'] });
+    celebrate({ particleCount: 40, spread: 60, colors: ['#0061A4', '#F59E0B', '#10B981'] });
     // Day 17 Task 1 fix — track the dismissal timer so it never fires setState
     // after the tab unmounts (and never leaks a stale reward toast on remount).
     if (rewardTimerRef.current) clearTimeout(rewardTimerRef.current);

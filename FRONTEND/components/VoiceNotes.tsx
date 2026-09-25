@@ -16,7 +16,7 @@ import {
   Mic, Square, Play, Pause, Trash2, FileText, Volume2,
   ArrowLeft, Check, X, Edit3, ChevronUp, AlertTriangle, RefreshCw
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
+import { celebrate } from '@/lib/confetti';
 import EmptyState, { EmptyVoiceIllustration } from './EmptyState';
 import { SpeechRecognition, SpeechRecognitionEvent } from '@/lib/speech';
 import { formatShortDate, RECORDING_NAV_CONFIRM_MESSAGE } from '@/lib/utils';
@@ -489,7 +489,7 @@ export default function VoiceNotes({ onBack, onLinkToNote, onRecordingChange }: 
     void uploadVoiceNote(created, () => getToken()).catch((err: unknown) => {
       console.error('[studysnap] voice upload rejected (will retry on next sync):', err);
     });
-    confetti({ particleCount: 40, colors: ['#0061A4', '#bdc7dc'] });
+    celebrate({ particleCount: 40, colors: ['#0061A4', '#bdc7dc'] });
   };
 
   const handlePauseRecording = () => {
@@ -659,7 +659,7 @@ export default function VoiceNotes({ onBack, onLinkToNote, onRecordingChange }: 
       pinLock: null,
     });
     updateNote(created.id, { content: (vn.transcript || 'Voice recording') + '\n\n[Audio Recording]' });
-    confetti({ particleCount: 30, colors: ['#10B981'] });
+    celebrate({ particleCount: 30, colors: ['#10B981'] });
     onLinkToNote(created.id);
   };
 
