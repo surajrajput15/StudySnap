@@ -1,5 +1,7 @@
 import { v2 as cloudinary } from 'cloudinary';
+import type { Readable } from 'node:stream';
 import { env } from '../config/env';
+import { VOICE_UPLOAD_TIMEOUT_MS, VOICE_DESTROY_TIMEOUT_MS } from '../config/constants';
 
 /**
  * Day 8 Task 1 (Phase 1) — Cloudinary-backed durable storage for voice audio.
@@ -97,7 +99,7 @@ export async function uploadVoiceAudio(audioBuffer: Buffer, publicId: string): P
     throw new TypeError('[storage] publicId must be a non-empty string');
   }
 
-  return new Promise<VoiceAudioUploadResult>((resolve, reject) => {
+  const upload = new Promise<VoiceAudioUploadResult>((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
       {
         public_id: publicId,
@@ -122,6 +124,71 @@ export async function uploadVoiceAudio(audioBuffer: Buffer, publicId: string): P
     );
     stream.end(audioBuffer);
   });
+  // Phase 1 P0: a hung upload previously pinned the Express handler (and its
+  // 50MB buffer) forever. Prefer uploadVoiceAudioStream for request handling.
+  return withTimeout(upload, VOICE_UPLOAD_TIMEOUT_MS, '[storage] Cloudinary audio upload timed out');
+}
+
+/**
+ * Phase 1 P0: stream-based upload for disk-spooled multipart files. The file
+ * never sits whole in the Node heap — multer writes to disk, this pipes the
+ * file stream straight into Cloudinary. Same idempotency as the Buffer
+ * wrapper. Rejects on Cloudinary error AND on timeout.
+ */
+export async function uploadVoiceAudioStream(audioStream: Readable, publicId: string): Promise<VoiceAudioUploadResult> {
+  assertConfigured();
+  if (!publicId || typeof publicId !== 'string') {
+    throw new TypeError('[storage] publicId must be a non-empty string');
+  }
+
+  const upload = new Promise<VoiceAudioUploadResult>((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      {
+        public_id: publicId,
+        resource_type: AUDIO_RESOURCE_TYPE,
+        overwrite: true,
+        // The client filename is never used as (or reflected in) the public ID.
+        use_filename: false,
+        unique_filename: false,
+        discard_original_filename: true,
+      },
+      (error, result) => {
+        if (error) {
+          reject(new Error(`[storage] Cloudinary audio upload failed: ${error.message}`, { cause: error }));
+          return;
+        }
+        if (!result?.public_id || !result?.secure_url) {
+          reject(new Error('[storage] Cloudinary audio upload returned an empty result'));
+          return;
+        }
+        resolve({ publicId: result.public_id, secureUrl: result.secure_url });
+      }
+    );
+    audioStream.on('error', (err) => {
+      try {
+        (stream as unknown as { destroy?: () => void }).destroy?.();
+      } catch { /* ignore */ }
+      reject(err instanceof Error ? err : new Error('[storage] audio read stream failed'));
+    });
+    audioStream.pipe(stream);
+  });
+
+  return withTimeout(upload, VOICE_UPLOAD_TIMEOUT_MS, '[storage] Cloudinary audio upload timed out');
+}
+
+/**
+ * Phase 1 P0: rejects if `promise` does not settle within `ms`. Used for
+ * Cloudinary calls that previously had no timeout and could pin an Express
+ * handler indefinitely.
+ */
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer !== undefined) clearTimeout(timer);
+  });
 }
 
 /**
@@ -135,7 +202,7 @@ export async function destroyVoiceAudio(publicId: string): Promise<boolean> {
     throw new TypeError('[storage] publicId must be a non-empty string');
   }
 
-  return new Promise<boolean>((resolve, reject) => {
+  const destroy = new Promise<boolean>((resolve, reject) => {
     cloudinary.uploader.destroy(
       publicId,
       { resource_type: AUDIO_RESOURCE_TYPE },
@@ -149,6 +216,8 @@ export async function destroyVoiceAudio(publicId: string): Promise<boolean> {
       }
     );
   });
+  // Phase 1 P0: bound destroy latency the same way as uploads.
+  return withTimeout(destroy, VOICE_DESTROY_TIMEOUT_MS, '[storage] Cloudinary audio destroy timed out');
 }
 
 function assertConfigured(): void {

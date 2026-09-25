@@ -1,7 +1,7 @@
 import Groq from 'groq-sdk';
 import type { ChatCompletionMessageParam } from 'groq-sdk/resources/chat/completions';
 import { env } from '../config/env';
-import { AI_MODEL } from '../config/constants';
+import { AI_MODEL, AI_REQUEST_TIMEOUT_MS } from '../config/constants';
 
 interface MockMcq {
   question: string;
@@ -93,6 +93,22 @@ function ensureAIAllowed(): void {
   }
 }
 
+/**
+ * Phase 1 P0: bounds every Groq round-trip. A hung upstream previously pinned
+ * the Express handler indefinitely (zero timeouts anywhere). The timeout
+ * surfaces through wrapAIError as a 500 with a clear message; routes map it
+ * via aiErrorBody like any other provider failure.
+ */
+function withGroqTimeout<T>(promise: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error('Groq request timed out')), AI_REQUEST_TIMEOUT_MS);
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer !== undefined) clearTimeout(timer);
+  });
+}
+
 export async function chatCompletion(messages: ChatCompletionMessageParam[]) {
   ensureAIAllowed();
   if (!groq) {
@@ -110,7 +126,7 @@ export async function chatCompletion(messages: ChatCompletionMessageParam[]) {
   });
   try {
     console.log('[ai] groq → chatCompletion', { messages: safeMessages.length });
-    const response = await groq.chat.completions.create({
+    const response = await withGroqTimeout(groq.chat.completions.create({
       model: AI_MODEL,
       messages: [
         {
@@ -124,7 +140,7 @@ export async function chatCompletion(messages: ChatCompletionMessageParam[]) {
       // gpt-oss is a reasoning model — reasoning tokens share this budget, so
       // 1024 could exhaust it mid-answer and return an empty content.
       max_tokens: 2048,
-    });
+    }));
     const content = response.choices[0]?.message?.content;
     if (!content) throw new Error('Groq returned empty response');
     console.log(`[ai] groq → chatCompletion ✓ ${content.length} chars`);
@@ -143,7 +159,7 @@ export async function summarizeNote(title: string, content: string) {
   }
   try {
     console.log('[ai] groq → summarizeNote', { contentLength: content.length, titleLength: title.length });
-    const response = await groq.chat.completions.create({
+    const response = await withGroqTimeout(groq.chat.completions.create({
       model: AI_MODEL,
       messages: [
         {
@@ -153,8 +169,15 @@ export async function summarizeNote(title: string, content: string) {
         { role: 'user', content: `Title: ${delimitUserData(title)}\n\nContent:\n${delimitUserData(content)}` }
       ],
       temperature: 0.3,
-    });
-    return response.choices[0]?.message?.content || 'Could not generate summary.';
+      // Phase 1 P0: bound completion size (cost blowup / giant-response DoS).
+      max_tokens: 1024,
+    }));
+    const summary = response.choices[0]?.message?.content;
+    // Phase 1 P0: an empty model reply is a failure, not a summary. The old
+    // `|| 'Could not generate summary.'` fallback returned 200 success with
+    // fake content the client would cache as real study material.
+    if (!summary) throw new Error('Groq returned empty response');
+    return summary;
   } catch (error) {
     console.error('[ai] groq → summarizeNote ❌', getErrorMessage(error, 'Summary generation failed'));
     throw wrapAIError(error, 'Summary generation failed');
@@ -169,7 +192,7 @@ export async function generateMcqs(title: string, content: string): Promise<Mock
   }
   try {
     console.log('[ai] groq → generateMcqs', { contentLength: content.length, titleLength: title.length });
-    const response = await groq.chat.completions.create({
+    const response = await withGroqTimeout(groq.chat.completions.create({
       model: AI_MODEL,
       messages: [
         {
@@ -179,8 +202,10 @@ export async function generateMcqs(title: string, content: string): Promise<Mock
         { role: 'user', content: `Text:\n${delimitUserData(content)}` }
       ],
       temperature: 0.5,
-    });
-    return parseJsonArray<MockMcq>(response.choices[0]?.message?.content);
+      // Phase 1 P0: bound completion size (cost blowup / giant-response DoS).
+      max_tokens: 1500,
+    }));
+    return parseJsonArray<MockMcq>(response.choices[0]?.message?.content, 'mcq');
   } catch (error) {
     console.error('[ai] groq → generateMcqs ❌', getErrorMessage(error, 'MCQ generation failed'));
     throw wrapAIError(error, 'MCQ generation failed');
@@ -195,7 +220,7 @@ export async function generateFlashcards(title: string, content: string): Promis
   }
   try {
     console.log('[ai] groq → generateFlashcards', { contentLength: content.length, titleLength: title.length });
-    const response = await groq.chat.completions.create({
+    const response = await withGroqTimeout(groq.chat.completions.create({
       model: AI_MODEL,
       messages: [
         {
@@ -205,8 +230,10 @@ export async function generateFlashcards(title: string, content: string): Promis
         { role: 'user', content: `Text:\n${delimitUserData(content)}` }
       ],
       temperature: 0.5,
-    });
-    return parseJsonArray<MockFlashcard>(response.choices[0]?.message?.content);
+      // Phase 1 P0: bound completion size (cost blowup / giant-response DoS).
+      max_tokens: 1500,
+    }));
+    return parseJsonArray<MockFlashcard>(response.choices[0]?.message?.content, 'flashcard');
   } catch (error) {
     console.error('[ai] groq → generateFlashcards ❌', getErrorMessage(error, 'Flashcard generation failed'));
     throw wrapAIError(error, 'Flashcard generation failed');
@@ -222,7 +249,7 @@ export async function translateText(content: string, lang: 'hindi' | 'english') 
   try {
     const label = lang === 'hindi' ? 'Hindi' : 'English';
     console.log('[ai] groq → translateText', { lang, contentLength: content.length });
-    const response = await groq.chat.completions.create({
+    const response = await withGroqTimeout(groq.chat.completions.create({
       model: AI_MODEL,
       messages: [
         {
@@ -232,17 +259,61 @@ export async function translateText(content: string, lang: 'hindi' | 'english') 
         { role: 'user', content: delimitUserData(content) }
       ],
       temperature: 0.2,
-    });
-    return response.choices[0]?.message?.content || 'Translation failed.';
+      // Phase 1 P0: bound completion size (cost blowup / giant-response DoS).
+      max_tokens: 2048,
+    }));
+    const translated = response.choices[0]?.message?.content;
+    // Phase 1 P0: same fail-honest rule as summarizeNote — no fake 200.
+    if (!translated) throw new Error('Groq returned empty response');
+    return translated;
   } catch (error) {
     console.error('[ai] groq → translateText ❌', getErrorMessage(error, 'Translation failed'));
     throw wrapAIError(error, 'Translation failed');
   }
 }
 
-function parseJsonArray<T>(raw: string | null | undefined): T[] {
-  const match = (raw || '[]').match(/\[\s*\{[\s\S]*\}\s*\]/);
-  return JSON.parse(match ? match[0] : '[]') as T[];
+function isMcqShape(item: unknown): boolean {
+  if (typeof item !== 'object' || item === null) return false;
+  const m = item as Record<string, unknown>;
+  return (
+    typeof m.question === 'string' &&
+    Array.isArray(m.options) &&
+    m.options.length >= 2 &&
+    m.options.every((o) => typeof o === 'string') &&
+    typeof m.answer === 'number' &&
+    m.answer >= 0 &&
+    m.answer < (m.options as unknown[]).length
+  );
+}
+
+function isFlashcardShape(item: unknown): boolean {
+  if (typeof item !== 'object' || item === null) return false;
+  const m = item as Record<string, unknown>;
+  return typeof m.question === 'string' && m.question.length > 0 && typeof m.answer === 'string';
+}
+
+// Exported for tests (same precedent as delimitUserData above).
+
+// Phase 1 P0: never trust model output. Malformed JSON, empty results, or
+// wrong-shaped items THROW (route reports honest 500) instead of returning
+// `[]` / fake strings with 200 success — a failure cached as real study
+// content is worse than an explicit error with retry.
+export function parseJsonArray<T>(raw: string | null | undefined, shape: 'mcq' | 'flashcard'): T[] {
+  const match = (raw || '').match(/\[\s*\{[\s\S]*\}\s*\]/);
+  if (!match) throw new Error('Model returned no JSON array');
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(match[0]);
+  } catch {
+    throw new Error('Model returned malformed JSON');
+  }
+  if (!Array.isArray(parsed) || parsed.length === 0) {
+    throw new Error('Model returned an empty result');
+  }
+  const check = shape === 'mcq' ? isMcqShape : isFlashcardShape;
+  const valid = parsed.filter(check);
+  if (valid.length === 0) throw new Error('Model returned unusable items');
+  return valid as T[];
 }
 
 function mockChatReply(messages: ChatCompletionMessageParam[]) {

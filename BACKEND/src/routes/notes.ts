@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { eq, and, desc, gt } from 'drizzle-orm';
 import { z } from 'zod';
-import { getDb, notes, categories, voiceNotes } from '../db';
+import { getDb, notes, categories, folders, voiceNotes } from '../db';
 import { authMiddleware } from '../middleware/auth';
 import { pinLimiter } from '../middleware/rateLimiter';
 import { generateId } from '../utils/helpers';
@@ -73,6 +73,42 @@ function isRecentlyDeleted(userId: string, noteId: string): boolean {
   if (Date.now() - deletedAt < DELETED_NOTE_TTL_MS) return true;
   deletedNotes.delete(key);
   return false;
+}
+
+// Phase 1 P0: per-note PIN attempt tracking. 5 wrong tries lock that single
+// note for 15 minutes (per account+note key, so one note's lockout never
+// affects others). Same single-process scope note as the sticky-delete guard
+// above: a restart clears lockouts (loosens only), acceptable for a 4-digit
+// PIN backed by the per-IP route limiter as the outer layer.
+export const PIN_MAX_ATTEMPTS = 5;
+export const PIN_LOCKOUT_MS = 15 * 60 * 1000;
+const pinFailures = new Map<string, { count: number; resetAt: number }>();
+
+function pinLockKey(userId: string, noteId: string): string {
+  return `${userId}:${noteId}`;
+}
+
+/** Exported for tests. True when this note is currently locked out. */
+export function checkPinLocked(userId: string, noteId: string): boolean {
+  const lock = pinFailures.get(pinLockKey(userId, noteId));
+  if (!lock) return false;
+  if (lock.count >= PIN_MAX_ATTEMPTS) {
+    if (Date.now() < lock.resetAt) return true;
+    pinFailures.delete(pinLockKey(userId, noteId));
+  }
+  return false;
+}
+
+/** Exported for tests. Records a wrong attempt; a success clears via clearPinFailures. */
+export function recordPinFailure(userId: string, noteId: string): void {
+  const key = pinLockKey(userId, noteId);
+  const prev = pinFailures.get(key);
+  pinFailures.set(key, { count: (prev?.count ?? 0) + 1, resetAt: Date.now() + PIN_LOCKOUT_MS });
+}
+
+/** Exported for tests. Clears failures after a correct PIN (or test reset). */
+export function clearPinFailures(userId: string, noteId: string): void {
+  pinFailures.delete(pinLockKey(userId, noteId));
 }
 
 router.use(authMiddleware);
@@ -192,6 +228,36 @@ router.post('/', validate(noteSchema), async (req: Request, res: Response) => {
       return;
     }
 
+    // Phase 1 P0: client-supplied categoryId/folderId must belong to the
+    // authenticated user. Without this check any account could link its notes
+    // to another account's folder/category UUID (IDOR + FK probe oracle).
+    // Same ownership pattern as the voice-note linked-note check.
+    const dbForLinks = getDb();
+    if (dbForLinks && (categoryId || folderId)) {
+      if (categoryId) {
+        const owned = await dbForLinks
+          .select({ id: categories.id })
+          .from(categories)
+          .where(and(eq(categories.id, categoryId), eq(categories.userId, userId)))
+          .limit(1);
+        if (owned.length === 0) {
+          res.status(400).json({ success: false, error: 'Unknown category' });
+          return;
+        }
+      }
+      if (folderId) {
+        const owned = await dbForLinks
+          .select({ id: folders.id })
+          .from(folders)
+          .where(and(eq(folders.id, folderId), eq(folders.userId, userId)))
+          .limit(1);
+        if (owned.length === 0) {
+          res.status(400).json({ success: false, error: 'Unknown folder' });
+          return;
+        }
+      }
+    }
+
     const createdAtValue = createdAt ? new Date(createdAt) : undefined;
 
     const noteData = {
@@ -272,6 +338,13 @@ router.post('/verify-pin', pinLimiter, validate(verifyPinSchema), async (req: Re
     const userId = req.userId!;
     const { noteId, pin } = req.body;
 
+    // Phase 1 P0: per-note lockout (see helpers above). The route limiter is
+    // per-IP on a 4-digit PIN space — IP rotation defeats it.
+    if (checkPinLocked(userId, noteId)) {
+      res.status(429).json({ success: false, error: 'Too many wrong PIN attempts for this note. Try again later.' });
+      return;
+    }
+
     let storedHash: string | null = null;
 
     const db = getDb();
@@ -289,6 +362,11 @@ router.post('/verify-pin', pinLimiter, validate(verifyPinSchema), async (req: Re
     }
 
     const valid = verifyPin(pin, storedHash);
+    if (!valid) {
+      recordPinFailure(userId, noteId);
+    } else {
+      clearPinFailures(userId, noteId);
+    }
     res.json({ success: valid });
   } catch {
     res.status(500).json({ success: false, error: 'PIN verification failed' });

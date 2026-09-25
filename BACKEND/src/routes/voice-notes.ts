@@ -1,15 +1,19 @@
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
+import { randomUUID } from 'node:crypto';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { mkdirSync, createReadStream, promises as fsPromises } from 'node:fs';
 import { z } from 'zod';
 import { eq, and, desc } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/auth';
 import { voiceUploadLimiter, voiceQueryLimiter } from '../middleware/rateLimiter';
 import { getDb, voiceNotes, notes } from '../db';
-import { MAX_FILE_SIZE_BYTES, CACHE_TTL_NOTES_SECONDS } from '../config/constants';
-import { cacheGet, cacheSet, invalidateUserCache } from '../services/cache';
+import { MAX_FILE_SIZE_BYTES, CACHE_TTL_NOTES_SECONDS, VOICE_DAILY_BYTE_QUOTA, VOICE_QUOTA_TTL_SECONDS } from '../config/constants';
+import { cacheGet, cacheSet, invalidateUserCache, cacheIncrBy } from '../services/cache';
 import {
   buildVoiceAudioPublicId,
-  uploadVoiceAudio,
+  uploadVoiceAudioStream,
   destroyVoiceAudio,
   StorageConfigurationError,
 } from '../services/storage';
@@ -31,7 +35,25 @@ const router = Router();
  */
 
 const upload = multer({
-  storage: multer.memoryStorage(),
+  // Phase 1 P0: disk spool instead of memoryStorage. A 50MB buffer per
+  // concurrent upload exhausts the Node heap (a handful of parallel uploads
+  // OOMs the process); spooled files stream straight to Cloudinary and are
+  // unlinked in a finally block below.
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => {
+      const dir = join(tmpdir(), 'studysnap-uploads');
+      try {
+        mkdirSync(dir, { recursive: true });
+      } catch {
+        // Best-effort; multer surfaces the error if the dir is unusable.
+      }
+      cb(null, dir);
+    },
+    filename: (_req, _file, cb) => {
+      // Server-generated name — the client filename is never trusted.
+      cb(null, `${Date.now()}-${randomUUID()}.upload`);
+    },
+  }),
   limits: { fileSize: MAX_FILE_SIZE_BYTES, files: 1 },
 });
 
@@ -79,6 +101,31 @@ export function hasAudioSignature(buffer: Buffer, normalizedMime: string): boole
   if (normalizedMime === 'audio/mp4') return buffer.subarray(4, 8).equals(FTYP_MAGIC);
   if (normalizedMime === 'audio/mpeg') return buffer[0] === 0xff && (buffer[1] & 0xe0) === 0xe0;
   return true;
+}
+
+/**
+ * Phase 1 P0: disk-spool variant of hasAudioSignature. Reads only the first
+ * 16 bytes via a file handle (same offsets the Buffer version checks) so a
+ * 50MB upload is never buffered to verify its header. Returns false on any
+ * read failure (fail-closed: unreadable bytes are not audio).
+ */
+async function hasSpooledAudioSignature(tmpPath: string, normalizedMime: string): Promise<boolean> {
+  let handle: import('node:fs/promises').FileHandle | null = null;
+  try {
+    const { open } = await import('node:fs/promises');
+    handle = await open(tmpPath, 'r');
+    const { bytesRead, buffer } = await handle.read(Buffer.alloc(16), 0, 16, 0);
+    if (bytesRead < 12) return false;
+    return hasAudioSignature(buffer.subarray(0, bytesRead), normalizedMime);
+  } catch {
+    return false;
+  } finally {
+    try {
+      await handle?.close();
+    } catch {
+      // ignore
+    }
+  }
 }
 
 // Multipart fields arrive as strings, so the shared JSON `validate` middleware
@@ -170,6 +217,17 @@ router.post('/', voiceUploadLimiter, (req: Request, res: Response) => {
 });
 
 async function handleVoiceNoteUpload(req: Request, res: Response): Promise<void> {
+  // Phase 1 P0: disk-spooled file — ALWAYS unlink, on every exit path, or the
+  // tmp dir fills up. All early returns below must go through cleanupFile().
+  const tmpPath: string | undefined = req.file?.path;
+  const cleanupFile = async (): Promise<void> => {
+    if (!tmpPath) return;
+    try {
+      await fsPromises.unlink(tmpPath);
+    } catch {
+      // Best-effort; OS tmp reclamation is the backstop.
+    }
+  };
   try {
     const userId = req.userId!;
     const file = req.file;
@@ -180,11 +238,14 @@ async function handleVoiceNoteUpload(req: Request, res: Response): Promise<void>
     }
     const normalizedMime = normalizeAudioMimeType(file.mimetype);
     if (!ALLOWED_AUDIO_MIME_TYPES.has(normalizedMime)) {
-      res.status(415).json({ success: false, error: `Unsupported audio type: ${file.mimetype}` });
+      // Phase 1 P1: generic message — the old code reflected the attacker-
+      // controlled mimetype string back in the 415 body.
+      res.status(415).json({ success: false, error: 'Unsupported audio type' });
       return;
     }
     // Day 14 Task 5 — the declared MIME must match the file's actual bytes.
-    if (!hasAudioSignature(file.buffer, normalizedMime)) {
+    // Disk-spooled: read just the header instead of holding file.buffer.
+    if (!(await hasSpooledAudioSignature(tmpPath!, normalizedMime))) {
       res.status(415).json({ success: false, error: 'File content does not match the declared audio type' });
       return;
     }
@@ -217,12 +278,28 @@ async function handleVoiceNoteUpload(req: Request, res: Response): Promise<void>
       }
     }
 
+    // Phase 1 P0: per-user daily byte quota (bill DoS guard). Checked BEFORE
+    // the Cloudinary upload so rejected bytes never cost anything. Fail-open
+    // when Redis is down (null) — availability beats strictness.
+    const quotaKey = `voice_bytes:${userId}:${new Date().toISOString().slice(0, 10)}`;
+    const currentBytes = await cacheGet<number>(quotaKey);
+    if (currentBytes !== null && currentBytes + file.size > VOICE_DAILY_BYTE_QUOTA) {
+      res.status(429).json({ success: false, error: 'Daily voice upload quota exceeded. Try again tomorrow.' });
+      return;
+    }
+
     // Upload bytes to Cloudinary FIRST; only persist the row once the audio is
     // durable. A failed upload (or missing config) never yields a fake URL.
+    // Phase 1 P0: stream the spooled file — never buffer 50MB in the heap.
     let audioUrl: string;
     try {
-      const uploaded = await uploadVoiceAudio(file.buffer, buildVoiceAudioPublicId(userId, id));
+      const uploaded = await uploadVoiceAudioStream(
+        createReadStream(tmpPath!),
+        buildVoiceAudioPublicId(userId, id)
+      );
       audioUrl = uploaded.secureUrl;
+      // Count only successful uploads toward the quota.
+      await cacheIncrBy(quotaKey, file.size, VOICE_QUOTA_TTL_SECONDS);
     } catch (error) {
       if (error instanceof StorageConfigurationError) {
         res.status(503).json({ success: false, error: error.message });
@@ -292,6 +369,9 @@ async function handleVoiceNoteUpload(req: Request, res: Response): Promise<void>
   } catch (error) {
     console.error('[voice-notes] Unexpected error:', error);
     res.status(500).json({ success: false, error: 'Failed to save voice note' });
+  } finally {
+    // Phase 1 P0: the spooled tmp file must go away on EVERY path.
+    await cleanupFile();
   }
 }
 

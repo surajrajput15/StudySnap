@@ -25,6 +25,12 @@ import webhooksRouter from './routes/webhooks';
 
 const app = express();
 
+// Phase 1 P0 note: `trust proxy: 1` is CORRECT here, not a vuln. Browsers call
+// this backend directly (the Vercel frontend is static hosting, not a proxy),
+// so the chain is client → Render router → app: exactly one proxy hop, and
+// Express reads the address the trusted last hop appended, ignoring anything
+// the client spoofed into X-Forwarded-For. Revisit only if another proxy
+// (CDN/WAF) is ever placed in front of Render.
 app.set('trust proxy', 1);
 
 app.use(securityMiddleware);
