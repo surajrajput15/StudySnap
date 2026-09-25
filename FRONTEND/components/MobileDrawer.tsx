@@ -150,7 +150,7 @@ export default function MobileDrawer({ open, onClose, activeTab, onNavigate }: M
             </div>
           ) : (
             <div className="drawer-signin-section">
-              <SignInButton mode="modal" forceRedirectUrl="/" signUpForceRedirectUrl="/">
+              <SignInButton mode="modal" forceRedirectUrl="/app" signUpForceRedirectUrl="/app">
                 <button className="drawer-signin-btn">
                   <LogIn size={18} />
                   Sign In

@@ -14,7 +14,7 @@ import { deferDelete } from '@/lib/undo';
 import { useAuth } from '@clerk/nextjs';
 import {
   Mic, Square, Play, Pause, Trash2, FileText, Volume2,
-  ArrowLeft, Check, X, Edit3, ChevronUp, AlertTriangle
+  ArrowLeft, Check, X, Edit3, ChevronUp, AlertTriangle, RefreshCw
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import EmptyState, { EmptyVoiceIllustration } from './EmptyState';
@@ -672,6 +672,16 @@ export default function VoiceNotes({ onBack, onLinkToNote, onRecordingChange }: 
     onBack();
   };
 
+  // Phase B P1: manual retry for rows stuck Pending. The upload is still
+  // fire-and-forget (never blocks UI); unrecoverable failures toast via the
+  // sync layer's notify path, recoverable ones just stay Pending for the
+  // next engine tick.
+  const handleRetryUpload = (vn: VoiceNote) => {
+    void uploadVoiceNote(vn, () => getToken()).catch((err: unknown) => {
+      console.error('[studysnap] voice retry rejected (will retry on next sync):', err);
+    });
+  };
+
   const handleDeleteVoice = (vn: VoiceNote) => {
     if (playingId === vn.id && activeAudioRef.current) {
       activeAudioRef.current.pause();
@@ -828,7 +838,15 @@ export default function VoiceNotes({ onBack, onLinkToNote, onRecordingChange }: 
                         {vn.synced ? (
                           <span className="voice-sync-status synced" title="Backed up to the cloud">Synced</span>
                         ) : vn.audioId ? (
-                          <span className="voice-sync-status pending" title="Waiting to upload to the cloud">Pending</span>
+                          <button
+                            type="button"
+                            className="voice-sync-status pending voice-sync-retry"
+                            title="Waiting to upload to the cloud — tap to retry now"
+                            aria-label="Retry voice memo upload"
+                            onClick={(e) => { e.stopPropagation(); handleRetryUpload(vn); }}
+                          >
+                            <RefreshCw size={11} aria-hidden="true" /> Pending
+                          </button>
                         ) : null}
                       </div>
                     </div>

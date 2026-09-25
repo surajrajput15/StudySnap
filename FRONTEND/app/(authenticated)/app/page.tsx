@@ -143,11 +143,29 @@ export default function Page() {
   // SyncThrottledError so the engine honors Retry-After. `syncStatus` is written
   // into the ephemeral store slice for the SyncStatusIndicator.
   const engineRef = useRef<SyncEngine | null>(null);
+  // Phase B P1: expiry circuit-breaker state. After N consecutive 401
+  // cooldowns the token is dead — retrying on backoff is a 401 loop, so the
+  // engine is halted and the sticky pill (P0-4) becomes the explicit resume
+  // path. Bumping engineEpoch recreates the engine (effect cleanup stops the
+  // old one first).
+  const [engineEpoch, setEngineEpoch] = useState(0);
+  const engineHaltedRef = useRef(false);
+
+  // Manual retry from the pill: resume a halted engine, otherwise nudge it.
+  const handleSyncRetry = useCallback(() => {
+    if (engineHaltedRef.current) {
+      engineHaltedRef.current = false;
+      setEngineEpoch((e) => e + 1);
+    } else {
+      engineRef.current?.requestSync();
+    }
+  }, []);
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn || !clerkId) {
       engineRef.current?.stop();
       engineRef.current = null;
+      engineHaltedRef.current = false;
       useStore.getState().setSyncStatus(null);
       return;
     }
@@ -169,16 +187,33 @@ export default function Page() {
         });
       },
       // Phase A P0: mirror the engine's last failure into a sticky banner
-      // state. The engine clears lastError on success, so this clears itself
-      // once a run fully succeeds — but while a remote write is failing, the
-      // user sees it even after the pill would otherwise go idle.
+      // state — but only clear it on a genuine success (idle + fresh retry
+      // staircase). Engine.stop() also emits idle, and that must NOT wipe a
+      // real failure (e.g. the expiry halt below stops with retryCount>0).
+      // Phase B P1: halt after 3 consecutive 401 cooldowns — the token is
+      // dead and further backoff retries are a 401 loop. The sticky pill +
+      // handleSyncRetry is the explicit resume path.
       onStatus: (status) => {
         const store = useStore.getState();
         store.setSyncStatus(status);
-        store.setLastSyncError(status.lastError ?? null);
+        if (status.lastError) {
+          store.setLastSyncError(status.lastError);
+        } else if (status.phase === 'idle' && status.retryCount === 0) {
+          store.setLastSyncError(null);
+        }
+        if (
+          status.phase === 'cooldown' &&
+          status.lastHttpStatus === 401 &&
+          status.retryCount >= 3 &&
+          !engineHaltedRef.current
+        ) {
+          engineHaltedRef.current = true;
+          engineRef.current?.stop();
+        }
       },
     });
     engineRef.current = engine;
+    engineHaltedRef.current = false;
     engine.start();
 
     return () => {
@@ -186,7 +221,7 @@ export default function Page() {
       engineRef.current = null;
       useStore.getState().setSyncStatus(null);
     };
-  }, [isLoaded, isSignedIn, clerkId, getToken]);
+  }, [isLoaded, isSignedIn, clerkId, getToken, engineEpoch]);
 
   // Day 11 Task 2 — stable identity so the HomeScreen note-card memo can skip
   // re-renders; a new function identity here would ripple through every card.
@@ -301,7 +336,7 @@ export default function Page() {
             </span>
           </div>
           <div className="header-right">
-            <SyncStatusIndicator onRetry={() => engineRef.current?.requestSync()} />
+            <SyncStatusIndicator onRetry={handleSyncRetry} />
             <button onClick={toggleTheme} className="header-icon-btn" aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}>
               {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
             </button>

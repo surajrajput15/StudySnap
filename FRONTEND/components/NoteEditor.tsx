@@ -142,7 +142,7 @@ export default function NoteEditor({ noteId, onBack }: NoteEditorProps) {
 }
 
 function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
-  const { getToken } = useAuth();
+  const { getToken, isSignedIn } = useAuth();
   const notes = useStore((s) => s.notes);
   const categories = useStore((s) => s.categories);
   const folders = useStore((s) => s.folders);
@@ -813,6 +813,13 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
 
   const handleAiAssist = async () => {
     if (!aiPrompt.trim() || isAiLoading) return;
+    // Phase B P1: guests have no token — never fire an unauthenticated
+    // request that 401s into a session-expired modal for someone who never
+    // signed in. (AiTutor gates the same way in handleSend/retryLast.)
+    if (!isSignedIn) {
+      setAiResponse('Sign in to use the AI assistant — your notes stay local until then.');
+      return;
+    }
     // Day 9 Task 2 — SnapAI now works on the student's actual material: selected
     // text when present, otherwise the full note content. The editor DOM is the
     // authoritative source (state only mirrors it). Nothing is sent when there

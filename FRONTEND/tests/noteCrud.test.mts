@@ -120,3 +120,21 @@ test('deleteNote keeps activeNoteId when a different note is deleted', () => {
   s.deleteNote(b.id);
   assert.equal(useStore.getState().activeNoteId, a.id);
 });
+
+test('deleteNote cascades revision logs and unlinks voice notes', () => {
+  const s = useStore.getState();
+  const a = s.addNote(makeNote('A'));
+  s.markAsRevised(a.id, 'easy');
+  s.addVoiceNote({ audioId: null, audioUrl: null, synced: true, duration: 10, transcript: 'hi', noteId: a.id });
+  assert.equal(useStore.getState().revisionLogs.length, 1);
+  s.deleteNote(a.id);
+  const state = useStore.getState();
+  assert.equal(state.revisionLogs.length, 0, 'revision history must not outlive the note');
+  assert.equal(state.voiceNotes[0]?.noteId ?? null, null, 'voice link must not dangle');
+});
+
+test('markAsRevised is a no-op for a nonexistent note (no ghost logs)', () => {
+  const before = useStore.getState().revisionLogs.length;
+  useStore.getState().markAsRevised('note-that-does-not-exist', 'easy');
+  assert.equal(useStore.getState().revisionLogs.length, before);
+});

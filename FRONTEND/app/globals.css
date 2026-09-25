@@ -2004,6 +2004,19 @@ textarea:focus-visible,
   border: 1px solid var(--outline-variant);
   animation: voice-sync-pulse 2s ease-in-out infinite;
 }
+/* Phase B P1 — Pending is now a retry <button>: reset native button chrome
+   and hint interactivity without changing the badge look. */
+button.voice-sync-status.pending {
+  font: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+button.voice-sync-status.pending:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
 @keyframes voice-sync-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.55; }
@@ -6915,6 +6928,22 @@ textarea:focus-visible,
   font-size: 14px;
   line-height: 1.55;
   color: var(--md3-on-surface-variant, var(--text-muted, #5a6472));
+}
+/* Phase B P1 — Clerk sign-in/up loading + failure states. Dark-surface
+   friendly since both pages render on bg-slate-950. */
+.signin-loading,
+.signin-failed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 32px 24px;
+  text-align: center;
+  color: #e3e3e8;
+  font-size: 14px;
+}
+.signin-failed svg {
+  color: var(--error, #ba1a1a);
 }
 .route-error-digest {
   margin: 0;

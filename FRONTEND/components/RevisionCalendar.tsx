@@ -140,8 +140,10 @@ export default function RevisionCalendar() {
   const todayStr = new Date().toISOString().split('T')[0];
   const todayRevised = revisionLogs.filter(l => l.revisedAt.startsWith(todayStr)).length;
 
-  // AI prediction (simple heuristic based on weekly pattern)
-  const aiPrediction = useMemo(() => {
+  // Estimated cards for today (simple heuristic based on weekly pattern:
+  // 120% of the daily average, at least the currently-due count). This is a
+  // local estimate, not a model prediction — the label must say so.
+  const estimatedToday = useMemo(() => {
     const avg = weeklyData.reduce((s, d) => s + d.count, 0) / 7;
     const predicted = Math.round(avg * 1.2);
     return Math.max(predicted, dueNotes.length);
@@ -175,7 +177,7 @@ export default function RevisionCalendar() {
           </p>
         </div>
         <div className="revision-dash-badge">
-          <Zap size={14} /> AI predicts {aiPrediction} cards today
+          <Zap size={14} /> Estimated {estimatedToday} cards today
         </div>
       </div>
 

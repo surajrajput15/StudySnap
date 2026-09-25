@@ -58,6 +58,10 @@ export interface ApiResponse {
   retryAfterMs?: number;
   /** True when the request layer aborted on its own client-side timeout. */
   _timedOut?: boolean;
+  /** True when the caller cancelled the request via an external AbortSignal
+   *  (Phase B P1 — AI Stop button). Callers should finalize quietly instead
+   *  of showing the timeout error. */
+  _cancelled?: boolean;
 }
 
 /** Parses the `Retry-After` header into milliseconds. Accepts either a
@@ -91,11 +95,18 @@ export function warmUpBackend(): void {
 
 export async function apiFetch<T = ApiResponse>(
   url: string,
-  options: RequestInit & { token?: string; returnTo?: string; timeoutMs?: number } = {}
+  options: RequestInit & { token?: string; returnTo?: string; timeoutMs?: number; signal?: AbortSignal } = {}
 ): Promise<T> {
-  const { token, returnTo, timeoutMs = 25000, ...fetchOptions } = options;
+  const { token, returnTo, timeoutMs = 25000, signal: externalSignal, ...fetchOptions } = options;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  // Phase B P1: link a caller-provided AbortSignal (AI Stop button) to the
+  // internal timeout controller so user cancellation aborts the fetch.
+  const onExternalAbort = () => controller.abort();
+  if (externalSignal) {
+    if (externalSignal.aborted) controller.abort();
+    else externalSignal.addEventListener('abort', onExternalAbort, { once: true });
+  }
 
   try {
     const headers: Record<string, string> = {
@@ -140,12 +151,18 @@ export async function apiFetch<T = ApiResponse>(
 
   } catch {
     if (controller.signal.aborted) {
+      // User-cancelled beats timed-out: the caller asked to stop, so report
+      // it distinctly and let the UI finalize quietly (no timeout error).
+      if (externalSignal?.aborted) {
+        return { success: false, error: 'Cancelled.', _cancelled: true } as T;
+      }
       return { success: false, error: 'The request timed out. Please try again or make your question shorter.', _timedOut: true } as T;
     }
 
     return { success: false, error: 'We could not reach the server. Please check your connection and try again.' } as T;
   } finally {
     clearTimeout(timer);
+    externalSignal?.removeEventListener('abort', onExternalAbort);
   }
 }
 

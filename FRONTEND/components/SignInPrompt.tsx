@@ -27,8 +27,8 @@ export default function SignInPrompt() {
     setHasError(false);
     try {
       openSignIn({
-        forceRedirectUrl: '/?returnTo=ai',
-        signUpForceRedirectUrl: '/?returnTo=ai',
+        forceRedirectUrl: '/app?returnTo=ai',
+        signUpForceRedirectUrl: '/app?returnTo=ai',
       });
     } catch {
       setHasError(true);

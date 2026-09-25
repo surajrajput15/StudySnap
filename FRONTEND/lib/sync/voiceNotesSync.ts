@@ -1,6 +1,7 @@
 import { useStore, getStoreScopeKey, type VoiceNote } from '../store/useStore.ts';
 import { API, apiFetch, apiFetchMultipart } from '../config.ts';
 import { getVoiceAudioBlob, purgeOrphanedVoiceAudio } from '../storage/voiceNotes.ts';
+import { notifyError } from '../observability.ts';
 import type { SyncChildStatusEvent } from './syncEngine.ts';
 
 /**
@@ -219,7 +220,11 @@ async function performVoiceUpload(
   voiceNote: VoiceNote,
   userId: string,
   token: string,
-  onStatus?: (event: SyncChildStatusEvent) => void
+  onStatus?: (event: SyncChildStatusEvent) => void,
+  // Phase B P1: when true (user-initiated save/retry), unrecoverable failures
+  // surface a toast so the row is never stuck "Pending" with no explanation.
+  // Engine hydration passes leave it false to avoid toasting on every tick.
+  notify?: boolean
 ): Promise<void> {
   // A row the server already holds does not need re-uploading.
   if (voiceNote.synced && voiceNote.audioUrl) return;
@@ -229,11 +234,19 @@ async function performVoiceUpload(
   if (readVTombstones(userId).has(voiceNote.id)) return;
 
   const blob = await getVoiceAudioBlob(voiceNote.audioId);
-  if (!blob) return; // durable bytes are gone — cannot upload; stays pending
+  // Durable bytes are gone — cannot upload; stays pending. Only the
+  // user-initiated path explains why; background sync stays quiet.
+  if (!blob) {
+    if (notify) notifyError('This voice memo’s audio is missing from this device, so it can’t be backed up. The memo itself is safe locally.');
+    return;
+  }
 
   // Day 10 Task 7 — skip uploads the server would reject with a 413: the bytes
   // exceed the backend cap, so every retry is a doomed network round-trip.
-  if (!isVoiceUploadWithinServerLimit(blob.size)) return;
+  if (!isVoiceUploadWithinServerLimit(blob.size)) {
+    if (notify) notifyError('This voice memo exceeds the 50MB upload limit and can’t be backed up. Shorter recordings upload normally.');
+    return;
+  }
 
   const formData = new FormData();
   formData.append('file', blob);
@@ -292,6 +305,8 @@ async function performVoiceUpload(
  * Fire-and-forget upload for a just-saved local voice note. Call RIGHT AFTER
  * `addVoiceNote`/IndexedDB save. Guest scope, offline state and already-synced
  * rows all no-op; failures leave the row pending for a later retry.
+ * Unrecoverable failures (missing audio, over the size cap) surface a toast
+ * because this entry point is always user-initiated.
  */
 export async function uploadVoiceNote(voiceNote: VoiceNote, getToken: TokenFn): Promise<void> {
   if (typeof window === 'undefined' || !isOnline()) return;
@@ -306,7 +321,7 @@ export async function uploadVoiceNote(voiceNote: VoiceNote, getToken: TokenFn): 
     return;
   }
   if (!token || getStoreScopeKey() !== scope) return;
-  await performVoiceUpload(voiceNote, userId, token);
+  await performVoiceUpload(voiceNote, userId, token, undefined, true);
 }
 
 /**

@@ -20,7 +20,7 @@ import 'katex/dist/katex.min.css';
 import {
   Sparkles, Send, Paperclip, Mic, Bot, User, BookOpen,
   FileText, LayoutGrid, HelpCircle, Languages, Lightbulb,
-  Copy, Check, X, Loader2,
+  Copy, Check, X, Loader2, Square,
   ArrowLeft, MessageSquarePlus
 } from 'lucide-react';
 import SignInPrompt from '@/components/SignInPrompt';
@@ -262,6 +262,10 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
   // answer is lost. The error-bubble timeout is tracked for the same reason.
   const streamCleanupRef = useRef<(() => void) | null>(null);
   const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Phase B P1 — in-flight request cancellation (Stop button). Aborting the
+  // controller rejects the apiFetch promise with _cancelled, which runAIChat
+  // finalizes quietly instead of rendering a timeout error.
+  const abortRef = useRef<AbortController | null>(null);
   const messagesRef = useRef(messages);
 
   useEffect(() => {
@@ -307,8 +311,12 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
   // Day 10 Task 1 — on unmount (navigation / tab switch) cancel any in-flight
   // character-reveal interval and pending error bubble, then persist whatever
   // was settled so an unanswered turn is not silently lost on return.
+  // Phase B P1 — also abort the in-flight request so it cannot resolve into
+  // a dead conversation.
   useEffect(() => {
     return () => {
+      abortRef.current?.abort();
+      abortRef.current = null;
       streamCleanupRef.current?.();
       streamCleanupRef.current = null;
       if (errorTimerRef.current) {
@@ -434,7 +442,7 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
     }, 100);
   }, [addStreamingMessage]);
 
-  const runAIChat = useCallback(async (contextMessages: { role: 'user' | 'assistant' | 'system'; content: string }[]) => {
+  const runAIChat = useCallback(async (contextMessages: { role: 'user' | 'assistant' | 'system'; content: string }[], signal?: AbortSignal) => {
     try {
       const data = await apiFetch(API.ai.chat, {
         method: 'POST',
@@ -445,7 +453,19 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
         // 25s aborted the first message after every app open before the
         // server even finished waking up.
         timeoutMs: 60000,
+        signal,
       });
+
+      // Phase B P1: user-pressed Stop. Finalize whatever partial content
+      // exists and reset — never render a timeout error for a deliberate stop.
+      if (data._cancelled) {
+        streamCleanupRef.current?.();
+        streamCleanupRef.current = null;
+        finalizeStreaming();
+        isSendingRef.current = false;
+        setIsLoading(false);
+        return;
+      }
 
       if (data.success) {
         setTutorReachable(true);
@@ -535,6 +555,11 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
   const handleSend = useCallback(async (text?: string) => {
     const msg = (text || input).trim();
     if (!msg || isSendingRef.current) return;
+    // Phase B P1: defense-in-depth guest gate. The UI already renders
+    // SignInPrompt for signed-out users, but a programmatic send must never
+    // fire an unauthenticated request that 401s into a session-expired modal
+    // for someone who never signed in.
+    if (!isSignedIn) return;
     isSendingRef.current = true;
     pendingToolRef.current = null;
     setPendingTool(null);
@@ -556,11 +581,30 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
       ...messages.slice(-MAX_CHAT_HISTORY_MESSAGES).map((m) => ({ role: m.role, content: m.content })),
       ...buildContextMessages(context, msg),
     ];
-    runAIChat(contextMessages);
-  }, [input, messages, runAIChat, scrollToBottom]);
+    abortRef.current?.abort();
+    abortRef.current = new AbortController();
+    runAIChat(contextMessages, abortRef.current.signal);
+  }, [input, messages, runAIChat, scrollToBottom, isSignedIn]);
+
+  // Phase B P1: Stop button — aborts the in-flight request AND any active
+  // character-reveal stream, then finalizes quietly (no error bubble).
+  const handleCancel = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    streamCleanupRef.current?.();
+    streamCleanupRef.current = null;
+    if (errorTimerRef.current) {
+      clearTimeout(errorTimerRef.current);
+      errorTimerRef.current = null;
+    }
+    finalizeStreaming();
+    isSendingRef.current = false;
+    setIsLoading(false);
+  }, [finalizeStreaming]);
 
   const retryLast = useCallback(() => {
     if (isSendingRef.current) return;
+    if (!isSignedIn) return;
     const arr = messages;
     let idx = -1;
     for (let i = arr.length - 1; i >= 0; i--) {
@@ -582,8 +626,10 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
       ...arr.slice(historyStart, idx).map((m) => ({ role: m.role, content: m.content })),
       ...buildContextMessages(context, prompt),
     ];
-    runAIChat(ctx);
-  }, [messages, runAIChat, scrollToBottom]);
+    abortRef.current?.abort();
+    abortRef.current = new AbortController();
+    runAIChat(ctx, abortRef.current.signal);
+  }, [messages, runAIChat, scrollToBottom, isSignedIn]);
 
   const handleSendRef = useRef(handleSend);
   const retryLastRef = useRef(retryLast);
@@ -693,6 +739,8 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
   // first so the old turn can never leak into the new conversation, and the
   // sending latch is reset so the input is immediately usable again.
   const handleNewChat = () => {
+    abortRef.current?.abort();
+    abortRef.current = null;
     streamCleanupRef.current?.();
     streamCleanupRef.current = null;
     if (errorTimerRef.current) {
@@ -918,14 +966,26 @@ export default function AiTutor({ onBack }: { onBack?: () => void }) {
               >
                 <Mic size={20} />
               </button>
-              <button
-                type="submit"
-                className="tutor-send-btn"
-                aria-label="Send message"
-                disabled={!input.trim() || isLoading}
-              >
-                {isLoading ? <Loader2 size={20} className="tutor-spin" /> : <Send size={20} />}
-              </button>
+              {isLoading ? (
+                <button
+                  type="button"
+                  className="tutor-send-btn tutor-stop-btn"
+                  aria-label="Stop AI response"
+                  title="Stop generating"
+                  onClick={handleCancel}
+                >
+                  <Square size={20} />
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  className="tutor-send-btn"
+                  aria-label="Send message"
+                  disabled={!input.trim()}
+                >
+                  <Send size={20} />
+                </button>
+              )}
           </form>
 
             {showAttachMenu && (
