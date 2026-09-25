@@ -17,6 +17,7 @@ import { SpeechRecognition, SpeechRecognitionEvent, SpeechRecognitionErrorEvent 
 import { PIN_LENGTH } from '@/lib/constants';
 import { stripHtml } from '@/lib/utils';
 import { notifyError } from '@/lib/observability';
+import EmptyState, { EmptyNotesIllustration } from '@/components/EmptyState';
 import { buildCodeBlockHtml, extractCodeBlockText, copyCodeToClipboard } from '@/lib/editorCode';
 import { buildStudyContext, buildContextMessages } from '@/lib/ai';
 import { API, apiFetch } from '@/lib/config';
@@ -150,6 +151,12 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
 
   const isNew = !noteId;
   const activeNote = notes.find(n => n.id === noteId);
+  // P0: the note may have been deleted while this editor was alive (folder
+  // cascade, undo-window expiry, another tab). Without this guard every
+  // keystroke autosaves into updateNote(missingId) which silently no-ops —
+  // typed content is lost with no feedback. When the note is gone we stop
+  // persisting and show a deleted notice with a way back instead.
+  const noteDeleted = !!noteId && !activeNote;
 
   const [title, setTitle] = useState(activeNote ? activeNote.title : '');
   const [content, setContent] = useState(activeNote ? activeNote.content : '');
@@ -333,6 +340,9 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
     // sent with Account B's authentication.
     if (getStoreScopeKey() !== scopeGuardRef.current) return false;
     const s = editorStateRef.current;
+    // P0: the note was deleted after this editor mounted — never persist
+    // into a missing id (updateNote would silently no-op and drop edits).
+    if (!s.isNew && s.noteId && !useStore.getState().notes.some((n) => n.id === s.noteId)) return false;
     if (s.isNew && !s.title.trim() && !s.content.trim() && s.tags.length === 0) {
       return; // empty draft — do not create a note
     }
@@ -399,6 +409,8 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
 
   // Debounced autosave
   useEffect(() => {
+    // P0: never autosave edits for a note that no longer exists.
+    if (noteDeleted) return;
     if (isNew && !title.trim() && !content.trim()) return;
     const timer = setTimeout(() => {
       if (saveStatusState.current.s !== 'unsaved') return;
@@ -409,7 +421,7 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
       setSaveStatus('saved');
     }, 1500);
     return () => clearTimeout(timer);
-  }, [title, content, tags, categoryId, folderId, isPinned, isFavorite, pinLock, isNew, persistNow, saveStatusState]);
+  }, [title, content, tags, categoryId, folderId, isPinned, isFavorite, pinLock, isNew, noteDeleted, persistNow, saveStatusState]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -876,6 +888,18 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
 
   return (
     <div className="editor-container">
+      {/* P0: the note was deleted while this editor was open (folder cascade,
+          undo-window expiry, another tab). Show an explicit notice instead of
+          a silently-broken editor whose autosave drops every keystroke. */}
+      {noteDeleted ? (
+        <EmptyState
+          illustration={<EmptyNotesIllustration />}
+          title="This note was deleted"
+          message="It was removed while you were editing. Your typed edits were not saved anywhere."
+          action={{ label: 'Back to notes', onClick: onBack }}
+        />
+      ) : (
+      <>
       {/* ─── Toolbar ─── */}
       <div className="editor-toolbar-wrapper">
         <div className="editor-toolbar">
@@ -1079,6 +1103,8 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
             </div>
           </form>
         </div>
+      )}
+      </>
       )}
     </div>
   );

@@ -42,16 +42,52 @@ test('undo cancels the deletion without performing it', async () => {
   assert.equal(getPendingDelete(), null);
 });
 
-test('deferring a new delete performs the superseded one immediately', async () => {
+test('deferring a new delete keeps the earlier one in its own undo window', async () => {
+  undoDelete();
   undoDelete();
   let ranA = 0;
   let ranB = 0;
   deferDelete('Note "A" deleted', () => { ranA += 1; }, 20);
   deferDelete('Note "B" deleted', () => { ranB += 1; }, 20);
-  assert.equal(ranA, 1, 'superseded pending deletion must still perform');
+  assert.equal(ranA, 0, 'earlier pending deletion must NOT fire early');
+  assert.equal(getPendingDelete()?.label, 'Note "B" deleted', 'toast shows the latest');
   await wait(60);
+  assert.equal(ranA, 1, 'earlier pending deletion fires on its own timer');
   assert.equal(ranB, 1, 'second pending deletion must perform');
   assert.equal(getPendingDelete(), null);
+});
+
+test('undo cancels only the latest pending deletion', async () => {
+  undoDelete();
+  undoDelete();
+  let ranA = 0;
+  let ranB = 0;
+  deferDelete('Note "A" deleted', () => { ranA += 1; }, 30);
+  deferDelete('Note "B" deleted', () => { ranB += 1; }, 30);
+  undoDelete();
+  assert.equal(getPendingDelete()?.label, 'Note "A" deleted', 'toast falls back to earlier item');
+  await wait(80);
+  assert.equal(ranB, 0, 'undone deletion must not perform');
+  assert.equal(ranA, 1, 'earlier deletion keeps its own timer');
+  assert.equal(getPendingDelete(), null);
+  undoDelete();
+});
+
+test('cancelling by key removes only the matching item', async () => {
+  undoDelete();
+  undoDelete();
+  let ranA = 0;
+  let ranB = 0;
+  deferDelete('Note "A" deleted', () => { ranA += 1; }, 30, 'note-aaa');
+  deferDelete('Note "B" deleted', () => { ranB += 1; }, 30, 'note-bbb');
+  cancelPendingDeleteFor('note-aaa');
+  assert.equal(ranA, 0, 'cancelled item must not perform');
+  assert.equal(getPendingDelete()?.label, 'Note "B" deleted');
+  await wait(80);
+  assert.equal(ranA, 0);
+  assert.equal(ranB, 1, 'other pending deletion untouched');
+  assert.equal(getPendingDelete(), null);
+  undoDelete();
 });
 
 test('subscribers are notified when a deletion is deferred or undone', () => {

@@ -196,6 +196,14 @@ interface AppState {
   // Sync observability action
   setSyncStatus: (status: SyncEngineStatus | null) => void;
 
+  // Phase A P0: sticky last-sync-failure (ephemeral — never persisted). The
+  // engine wipes `syncStatus.lastError` on the next success, but a user who
+  // was offline during a failed write needs to know the remote save did not
+  // land even after the pill goes idle. Mirrored from the engine status in
+  // app/(authenticated)/app/page.tsx; cleared on success and account switch.
+  lastSyncError: string | null;
+  setLastSyncError: (message: string | null) => void;
+
   // Day 9 Task 16 — one-time guest→account migration notice (ephemeral, never persisted).
   guestMigration: GuestMigrationResult | null;
   setGuestMigration: (migration: GuestMigrationResult | null) => void;
@@ -288,6 +296,7 @@ function makeInitialState(set: SetStateFn): AppState {
     activeAiTool: null,
     persistenceError: false,
     syncStatus: null,
+    lastSyncError: null,
     guestMigration: null,
 
     toggleTheme: () => set((state) => ({ theme: state.theme === 'light' ? 'dark' : 'light' })),
@@ -342,6 +351,13 @@ function makeInitialState(set: SetStateFn): AppState {
     })),
     deleteNote: (id) => set((state) => ({
       notes: state.notes.filter((n) => n.id !== id),
+      // Cascade: revision history and voice-note links must not outlive the
+      // note, otherwise revision dots/queues reference a ghost note and the
+      // voice tab shows broken "linked note" entries.
+      revisionLogs: state.revisionLogs.filter((l) => l.noteId !== id),
+      voiceNotes: state.voiceNotes.map((vn) =>
+        vn.noteId === id ? { ...vn, noteId: null } : vn
+      ),
       activeNoteId: state.activeNoteId === id ? null : state.activeNoteId
     })),
 
@@ -405,13 +421,25 @@ function makeInitialState(set: SetStateFn): AppState {
       set((state) => ({ folders: [...state.folders, newFolder] }));
       return newFolder;
     },
-    deleteFolder: (id) => set((state) => ({
-      folders: state.folders.filter((f) => f.id !== id),
-      notes: state.notes.filter((n) => n.folderId !== id), // cascade notes inside folders
-      activeFolderId: state.activeFolderId === id ? null : state.activeFolderId
-    })),
+    deleteFolder: (id) => set((state) => {
+      const removedIds = new Set(state.notes.filter((n) => n.folderId === id).map((n) => n.id));
+      return {
+        folders: state.folders.filter((f) => f.id !== id),
+        notes: state.notes.filter((n) => n.folderId !== id), // cascade notes inside folders
+        // Same cascade as deleteNote: no orphan revision logs or dangling
+        // voice-note links for the removed notes.
+        revisionLogs: state.revisionLogs.filter((l) => !removedIds.has(l.noteId)),
+        voiceNotes: state.voiceNotes.map((vn) =>
+          vn.noteId !== null && removedIds.has(vn.noteId) ? { ...vn, noteId: null } : vn
+        ),
+        activeFolderId: state.activeFolderId === id ? null : state.activeFolderId
+      };
+    }),
 
     markAsRevised: (noteId, rating) => set((state) => {
+      // Guard: never create revision history for a note that does not exist
+      // (e.g. a revision action racing a folder-cascade delete).
+      if (!state.notes.some((n) => n.id === noteId)) return state;
       const today = new Date();
 
       const nextRev = new Date();
@@ -472,6 +500,7 @@ function makeInitialState(set: SetStateFn): AppState {
     setActiveAiTool: (tool) => set({ activeAiTool: tool }),
     setPersistenceError: (hasError) => set((state) => (state.persistenceError === hasError ? state : { persistenceError: hasError })),
     setSyncStatus: (status) => set((state) => (state.syncStatus === status ? state : { syncStatus: status })),
+    setLastSyncError: (message) => set((state) => (state.lastSyncError === message ? state : { lastSyncError: message })),
     setGuestMigration: (migration) => set((state) => (state.guestMigration === migration ? state : { guestMigration: migration })),
   };
 }
@@ -607,6 +636,9 @@ export function switchStoreScopeForUser(clerkUserId: string | null) {
     activeCategoryId: null,
     searchQuery: '',
     activeAiTool: null,
+    // Sync/error banners belong to the previous account's engine run.
+    syncStatus: null,
+    lastSyncError: null,
     // A migration notice shown earlier must never carry across accounts.
     guestMigration: null,
   });
@@ -670,7 +702,10 @@ export function migrateGuestDataForUser(clerkUserId: string): GuestMigrationResu
   const accountWriteFailed = useStore.getState().persistenceError;
   if (!accountWriteFailed) {
     try {
-      const userKey = persistKeyForScope(activeStoreUserId);
+      // Confirm against the TARGET account key (clerkUserId), not whatever
+      // scope happens to be active — the caller switches scope before calling,
+      // but this function must not depend on that ordering.
+      const userKey = persistKeyForScope(clerkUserId);
       const confirmed = window.localStorage.getItem(userKey) !== null;
       if (confirmed) window.localStorage.removeItem(guestKey);
     } catch {

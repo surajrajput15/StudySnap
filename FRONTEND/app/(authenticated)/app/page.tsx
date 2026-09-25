@@ -168,7 +168,15 @@ export default function Page() {
           if (throttled) throw throttled;
         });
       },
-      onStatus: (status) => useStore.getState().setSyncStatus(status),
+      // Phase A P0: mirror the engine's last failure into a sticky banner
+      // state. The engine clears lastError on success, so this clears itself
+      // once a run fully succeeds — but while a remote write is failing, the
+      // user sees it even after the pill would otherwise go idle.
+      onStatus: (status) => {
+        const store = useStore.getState();
+        store.setSyncStatus(status);
+        store.setLastSyncError(status.lastError ?? null);
+      },
     });
     engineRef.current = engine;
     engine.start();

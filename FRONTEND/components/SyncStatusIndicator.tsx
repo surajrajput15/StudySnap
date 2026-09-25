@@ -7,11 +7,33 @@ import { RefreshCw } from 'lucide-react';
 /**
  * Day 8 Task 3 (Phase B) — minimal, unobtrusive sync status pill.
  * Reads the ephemeral `syncStatus` from the store (the sync engine writes it)
- * and renders only while a sync run, offline wait, or retry cooldown is active.
- * The button is the "manual retry" trigger the engine exposes.
+ * and renders while a sync run, offline wait, or retry cooldown is active.
+ * Phase A P0: also renders a sticky "Sync issue" pill when the engine is idle
+ * but `lastSyncError` is set — otherwise a remote write that failed while the
+ * user was offline disappears silently once the pill goes idle. The button is
+ * the "manual retry" trigger the engine exposes.
  */
 export default function SyncStatusIndicator({ onRetry }: { onRetry?: () => void }) {
   const status = useStore((s) => s.syncStatus);
+  const lastSyncError = useStore((s) => s.lastSyncError);
+
+  // Idle with a sticky failure: surface it instead of rendering nothing.
+  if (!status && lastSyncError) {
+    return (
+      <button
+        type="button"
+        className="sync-status-indicator sync-status-retrying"
+        onClick={onRetry}
+        title={`${lastSyncError}. Tap to retry now`}
+        aria-live="polite"
+        role="status"
+      >
+        <span className="sync-status-dot" aria-hidden="true" />
+        <span className="sync-status-label">Sync issue</span>
+        <RefreshCw size={12} aria-hidden="true" />
+      </button>
+    );
+  }
 
   if (!status) return null;
   const busy = status.phase === 'running';
