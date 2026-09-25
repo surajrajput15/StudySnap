@@ -13,8 +13,9 @@ import { Loader2, ShieldAlert } from 'lucide-react';
 // user on the marketing page), with a loading skeleton while the Clerk JS
 // loads and an explicit failure state when it cannot (offline/blocked).
 export default function SignInPage() {
+  // NOTE: no Tailwind in this project — layout via inline style (dark slate).
   return (
-    <main className="flex min-h-dvh items-center justify-center bg-slate-950 px-4">
+    <main style={{ display: 'flex', minHeight: '100dvh', alignItems: 'center', justifyContent: 'center', background: '#020617', padding: '16px' }}>
       <Suspense
         fallback={
           <div className="signin-loading" role="status" aria-live="polite">

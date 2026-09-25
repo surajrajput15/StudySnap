@@ -69,6 +69,7 @@ StudySnap is a high-performance, AI-powered study companion web application (PWA
 
 ## Frontend routes
 
-- `/` - the app (dashboard shell; login via Clerk).
-- `/sign-in` - Clerk sign-in completion route (catch-all).
-- `/sign-up` - Clerk sign-up completion route (catch-all).
+- `/` - marketing landing (static; the only indexed route).
+- `/app` - authenticated app shell (client route, not indexed; login via Clerk).
+- `/sign-in` - Clerk sign-in completion route (catch-all, not indexed).
+- `/sign-up` - Clerk sign-up completion route (catch-all, not indexed).

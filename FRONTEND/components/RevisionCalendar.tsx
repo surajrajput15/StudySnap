@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { celebrate } from '@/lib/confetti';
 import EmptyState, { EmptyRevisionIllustration } from './EmptyState';
-import { MONTHS, DAYS_SHORT, DAILY_GOAL } from '@/lib/constants';
+import { MONTHS, DAYS_SHORT } from '@/lib/constants';
 import { formatShortDate } from '@/lib/utils';
 
 function DonutChart({ easy, medium, hard }: { easy: number; medium: number; hard: number }) {
@@ -88,6 +88,8 @@ export default function RevisionCalendar() {
   const notes = useStore((s) => s.notes);
   const revisionLogs = useStore((s) => s.revisionLogs);
   const markAsRevised = useStore((s) => s.markAsRevised);
+  // Single source of truth for the goal (store, persisted per user).
+  const dailyGoal = useStore((s) => s.dailyGoal);
   const [calMonth, setCalMonth] = useState(new Date().getMonth());
   const [calYear, setCalYear] = useState(new Date().getFullYear());
 
@@ -215,7 +217,7 @@ export default function RevisionCalendar() {
             <Target size={16} style={{ color: '#EC4899' }} />
           </div>
           <div>
-            <div className="revision-stat-value">{todayRevised}<span style={{ fontSize: '12px', fontWeight: 500, opacity: 0.6 }}>/{DAILY_GOAL}</span></div>
+            <div className="revision-stat-value">{todayRevised}<span style={{ fontSize: '12px', fontWeight: 500, opacity: 0.6 }}>/{dailyGoal}</span></div>
             <div className="revision-stat-label">Daily Goal</div>
           </div>
         </div>
@@ -225,14 +227,14 @@ export default function RevisionCalendar() {
       <div className="revision-progress-section">
         <div className="revision-progress-header">
           <span>Today&apos;s Progress</span>
-          <span className="revision-progress-percent">{Math.round((todayRevised / DAILY_GOAL) * 100)}%</span>
+          <span className="revision-progress-percent">{Math.round((todayRevised / dailyGoal) * 100)}%</span>
         </div>
         <div className="revision-progress-track">
-          <div className="revision-progress-fill" style={{ width: `${Math.min((todayRevised / DAILY_GOAL) * 100, 100)}%` }} />
+          <div className="revision-progress-fill" style={{ width: `${Math.min((todayRevised / dailyGoal) * 100, 100)}%` }} />
         </div>
         <div className="revision-progress-labels">
           <span>{todayRevised} revised</span>
-          <span>{Math.max(DAILY_GOAL - todayRevised, 0)} remaining</span>
+          <span>{Math.max(dailyGoal - todayRevised, 0)} remaining</span>
         </div>
       </div>
 
@@ -299,15 +301,15 @@ export default function RevisionCalendar() {
             <div className="revision-goal-ring">
               <svg width="80" height="80" viewBox="0 0 80 80">
                 <circle cx="40" cy="40" r="32" fill="none" stroke="var(--outline-variant)" strokeWidth="6" />
-                <circle cx="40" cy="40" r="32" fill="none" stroke="var(--primary)" strokeWidth="6" strokeDasharray={`${(todayRevised / DAILY_GOAL) * 201} 201`} strokeLinecap="round" transform="rotate(-90 40 40)" style={{ transition: 'stroke-dasharray 0.5s ease' }} />
+                <circle cx="40" cy="40" r="32" fill="none" stroke="var(--primary)" strokeWidth="6" strokeDasharray={`${(todayRevised / dailyGoal) * 201} 201`} strokeLinecap="round" transform="rotate(-90 40 40)" style={{ transition: 'stroke-dasharray 0.5s ease' }} />
               </svg>
               <div className="revision-goal-ring-center">
                 <span className="revision-goal-value">{todayRevised}</span>
-                <span className="revision-goal-divider">/{DAILY_GOAL}</span>
+                <span className="revision-goal-divider">/{dailyGoal}</span>
               </div>
             </div>
             <div className="revision-goal-info">
-              <div className="revision-goal-text">{todayRevised >= DAILY_GOAL ? 'Goal Complete! 🎉' : `${DAILY_GOAL - todayRevised} more to reach goal`}</div>
+              <div className="revision-goal-text">{todayRevised >= dailyGoal ? 'Goal Complete! 🎉' : `${dailyGoal - todayRevised} more to reach goal`}</div>
               <div className="revision-goal-streak">
                 <Star size={12} fill="#F59E0B" color="#F59E0B" />
                 Consistency builds mastery

@@ -50,10 +50,11 @@ export const notes = pgTable('notes', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => [
-  // Day 16 Task 2 — the primary listing query filters by user + is_archived and
-  // sorts by is_pinned/updated_at; the composite below serves that scan without
-  // a full-table filter on every notes fetch. updated_at is appended so the
-  // ORDER BY updated_at DESC can be served from the index instead of a filesort.
+  // Day 16 Task 2 — the listing query filters by user + is_archived and
+  // orders by updated_at DESC; the composite serves that scan. NOTE: the
+  // ORDER BY also sorts is_pinned DESC, which is NOT in this key — pinned
+  // ordering is computed as a filesort on the (already small, user-scoped)
+  // result set, not served from the index.
   index('notes_user_archived_updated_idx').on(table.userId, table.isArchived, table.updatedAt),
 ]);
 

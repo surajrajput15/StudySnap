@@ -39,19 +39,29 @@ test('transcript and duration are optional but bounded', () => {
   }
 });
 
-test('an over-long transcript is truncated, never rejected (Day 10 Task 7)', () => {
-  // The old `.max(50000)` returned a 400, which the sync layer left pending and
-  // retried forever. Now the schema caps at the column limit so a long speech
-  // transcript can never wedge an upload.
+test('an over-long transcript is rejected at the wire cap (Phase 1 P1)', () => {
+  // The Day 10 truncate-instead-of-reject rule existed because OUR client used
+  // to send raw transcripts and a 400 wedged its sync retry loop. The client
+  // now truncates to 50k before sending (both sides agree), so only abusive
+  // direct-API callers can exceed the cap — and they get a 400 with no retry
+  // loop behind them. The transform stays as a backstop.
   const parsed = voiceNoteUploadSchema.safeParse({
     id: UUID,
     noteId: '',
     transcript: 'a'.repeat(60_000),
   });
+  assert.equal(parsed.success, false);
+});
+
+test('a transcript exactly at the cap is accepted', () => {
+  const parsed = voiceNoteUploadSchema.safeParse({
+    id: UUID,
+    noteId: '',
+    transcript: 'a'.repeat(50_000),
+  });
   assert.equal(parsed.success, true);
   if (parsed.success) {
     assert.equal(parsed.data.transcript!.length, 50_000);
-    assert.ok(parsed.data.transcript!.endsWith('a'.repeat(50_000)));
   }
 });
 

@@ -58,16 +58,19 @@ test('parseJsonArray validates flashcards shape', () => {
 // Phase 1 P0 — AI quota decision table.
 
 test('isAiQuotaExceeded fails open when Redis is down (null counters)', () => {
-  assert.equal(isAiQuotaExceeded(null, null, 10), false);
-  assert.equal(isAiQuotaExceeded(null, 100, 10), false);
-  assert.equal(isAiQuotaExceeded(10, null, 10), false);
+  assert.equal(isAiQuotaExceeded(null, null), false);
+  assert.equal(isAiQuotaExceeded(null, 100), false);
+  assert.equal(isAiQuotaExceeded(10, null), false);
 });
 
-test('isAiQuotaExceeded denies at either cap', () => {
-  assert.equal(isAiQuotaExceeded(50, 0, 10), true, 'request cap');
-  assert.equal(isAiQuotaExceeded(0, 499_999, 10), true, 'char cap with this request');
-  assert.equal(isAiQuotaExceeded(49, 499_990, 10), false, 'just under both caps');
-  assert.equal(isAiQuotaExceeded(0, 0, 0), false, 'empty request allowed');
+test('isAiQuotaExceeded denies past either cap (post-increment values)', () => {
+  // Counters are incremented BEFORE the check, so the 50th request reads 50
+  // (allowed) and the 51st reads 51 (denied). Same for the char budget.
+  assert.equal(isAiQuotaExceeded(51, 0), true, 'request cap');
+  assert.equal(isAiQuotaExceeded(50, 0), false, 'exactly 50 allowed');
+  assert.equal(isAiQuotaExceeded(1, 500_001), true, 'char cap');
+  assert.equal(isAiQuotaExceeded(1, 500_000), false, 'exactly 500k allowed');
+  assert.equal(isAiQuotaExceeded(0, 0), false, 'fresh counters allowed');
 });
 
 // Phase 1 P0 — per-note PIN lockout state machine.

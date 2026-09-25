@@ -19,7 +19,7 @@ const HeroAI = dynamic(() => import('./HeroAI'), {
   loading: () => <div className="hero-ai-fallback" aria-hidden="true" />,
 });
 import { NoteCard, NoteListItem } from './NoteCards';
-import { WEEKDAYS, DAILY_GOAL, AI_TOOLS } from '@/lib/constants';
+import { WEEKDAYS, AI_TOOLS } from '@/lib/constants';
 import { formatShortDate, stripHtml, hasActiveSearch, noteMatchesSearch, SEARCH_EMPTY_MESSAGE, SEARCH_EMPTY_TIP, handleCardKeyDown } from '@/lib/utils';
 import { pinMatchesStored } from '@/lib/pin';
 import { deleteRemoteNote, deleteFolderWithNotes } from '@/lib/sync/notesSync';
@@ -138,8 +138,10 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
 
   // Now-day activity comes from the store's counter (incrementing on note
   // creation, revisions, and voice notes) so the goal reflects real study
-  // actions instead of object timestamps.
-  const dailyProgress = Math.min(storedDailyProgress, DAILY_GOAL);
+  // actions instead of object timestamps. dailyGoal is the single source of
+  // truth (store, persisted per user) — not the dailyGoal constant.
+  const dailyGoal = useStore((s) => s.dailyGoal);
+  const dailyProgress = Math.min(storedDailyProgress, dailyGoal);
 
   const weeklyData = useMemo(() => {
     const today = new Date();
@@ -277,18 +279,18 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
               </div>
               <div className="hero-goal-body">
                 <div className="hero-ring-container">
-                  <CircularProgress value={dailyProgress} max={DAILY_GOAL} size={64} strokeWidth={6} color="#ffffff" />
+                  <CircularProgress value={dailyProgress} max={dailyGoal} size={64} strokeWidth={6} color="#ffffff" />
                   <div className="hero-ring-label">
                     <div className="hero-ring-value">{dailyProgress}</div>
-                    <div className="hero-ring-divider">/{DAILY_GOAL}</div>
+                    <div className="hero-ring-divider">/{dailyGoal}</div>
                   </div>
                 </div>
                 <div className="hero-goal-info">
                   <div className="hero-goal-text">
-                    {dailyProgress >= DAILY_GOAL ? 'Goal completed! 🎉' : `${DAILY_GOAL - dailyProgress} more to go`}
+                    {dailyProgress >= dailyGoal ? 'Goal completed! 🎉' : `${dailyGoal - dailyProgress} more to go`}
                   </div>
                   <div className="hero-progress-track">
-                    <div className="hero-progress-fill" style={{ width: `${(dailyProgress / DAILY_GOAL) * 100}%` }} />
+                    <div className="hero-progress-fill" style={{ width: `${(dailyProgress / dailyGoal) * 100}%` }} />
                   </div>
                 </div>
               </div>
@@ -520,6 +522,7 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
           <input
             type="text"
             placeholder="Search notes, tags, or content..."
+            aria-label="Search notes, tags, or content"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="md3-input"

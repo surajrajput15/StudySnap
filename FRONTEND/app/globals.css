@@ -3367,6 +3367,8 @@ button.voice-sync-status.pending:hover {
 }
 .tutor-message-bubble .katex-display {
   margin: 6px 0;
+  overflow-x: auto;
+  max-width: 100%;
 }
 
 /* ─── Input Area ─── */

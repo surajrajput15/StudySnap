@@ -1,52 +1,61 @@
 User-agent: *
 Allow: /
+Disallow: /app
 Disallow: /sign-in
 Disallow: /sign-up
 Disallow: /api/
 
 User-agent: GPTBot
 Allow: /
+Disallow: /app
 Disallow: /sign-in
 Disallow: /sign-up
 Disallow: /api/
 
 User-agent: ChatGPT-User
 Allow: /
+Disallow: /app
 Disallow: /sign-in
 Disallow: /sign-up
 Disallow: /api/
 
 User-agent: ClaudeBot
 Allow: /
+Disallow: /app
 Disallow: /sign-in
 Disallow: /sign-up
 Disallow: /api/
 
 User-agent: Claude-Web
 Allow: /
+Disallow: /app
 Disallow: /sign-in
 Disallow: /sign-up
 Disallow: /api/
 
 User-agent: PerplexityBot
 Allow: /
+Disallow: /app
 Disallow: /sign-in
 Disallow: /sign-up
 Disallow: /api/
 
 User-agent: Google-Extended
 Allow: /
+Disallow: /app
 Disallow: /sign-in
 Disallow: /sign-up
 Disallow: /api/
 
 User-agent: Bingbot
 Allow: /
+Disallow: /app
 Disallow: /sign-in
 Disallow: /sign-up
 
 User-agent: Applebot
 Allow: /
+Disallow: /app
 Disallow: /sign-in
 Disallow: /sign-up
 

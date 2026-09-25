@@ -4,7 +4,7 @@ import { authMiddleware } from '../middleware/auth';
 import { aiLimiter } from '../middleware/rateLimiter';
 import { validate, aiChatSchema, aiContentSchema, translateSchema } from '../middleware/validate';
 import { aiRequestLogMeta } from '../utils/aiLogging';
-import { cacheGet, cacheIncrBy } from '../services/cache';
+import { cacheIncrBy } from '../services/cache';
 import {
   AI_DAILY_REQUEST_QUOTA,
   AI_DAILY_CHAR_QUOTA,
@@ -34,23 +34,25 @@ function aiQuotaDay(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-function secondsTillMidnightUTC(): number {
+/** Exported for reuse (voice quota uses the same UTC-day Retry-After). */
+export function secondsTillMidnightUTC(): number {
   const now = new Date();
   const midnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
   return Math.max(1, Math.ceil((midnight - now.getTime()) / 1000));
 }
 
 /**
- * Exported for tests. Pure quota decision: null counters mean Redis is down
- * → fail OPEN (false). Otherwise either budget hitting its cap denies.
+ * Exported for tests. Pure quota decision on POST-increment counters: null
+ * means Redis is down → fail OPEN (false). Otherwise either budget exceeded
+ * denies. Callers increment first so first-day counters always exist (a
+ * check-then-increment design never created them and the quota never fired).
  */
 export function isAiQuotaExceeded(
-  usedReqs: number | null,
-  usedChars: number | null,
-  inputChars: number
+  newReqs: number | null,
+  newChars: number | null
 ): boolean {
-  if (usedReqs === null || usedChars === null) return false;
-  return usedReqs >= AI_DAILY_REQUEST_QUOTA || usedChars + inputChars > AI_DAILY_CHAR_QUOTA;
+  if (newReqs === null || newChars === null) return false;
+  return newReqs > AI_DAILY_REQUEST_QUOTA || newChars > AI_DAILY_CHAR_QUOTA;
 }
 
 async function checkAiQuota(
@@ -63,19 +65,25 @@ async function checkAiQuota(
   const day = aiQuotaDay();
   const reqKey = `ai_quota:req:${userId}:${day}`;
   const charKey = `ai_quota:chars:${userId}:${day}`;
-  const [usedReqs, usedChars] = await Promise.all([
-    cacheGet<number>(reqKey),
-    cacheGet<number>(charKey),
+  // Increment FIRST so first-day/first-user counters always come into
+  // existence (a check-then-increment design saw only nulls and never
+  // enforced anything). Redis down (null) → fail open.
+  const [newReqs, newChars] = await Promise.all([
+    cacheIncrBy(reqKey, 1, AI_QUOTA_TTL_SECONDS),
+    cacheIncrBy(charKey, inputChars, AI_QUOTA_TTL_SECONDS),
   ]);
-  // Redis down (null) → fail open.
-  if (usedReqs === null || usedChars === null) return true;
-  if (isAiQuotaExceeded(usedReqs, usedChars, inputChars)) {
+  if (newReqs === null || newChars === null) return true;
+  if (isAiQuotaExceeded(newReqs, newChars)) {
+    // Refund the reservation so denied attempts don't burn tomorrow's quota
+    // math (best-effort; a lost refund only errs toward generosity).
+    await Promise.all([
+      cacheIncrBy(reqKey, -1, AI_QUOTA_TTL_SECONDS),
+      cacheIncrBy(charKey, -inputChars, AI_QUOTA_TTL_SECONDS),
+    ]).catch(() => {});
     res.set('Retry-After', String(secondsTillMidnightUTC()));
     res.status(429).json({ success: false, error: 'Daily AI limit reached. Try again tomorrow.' });
     return false;
   }
-  await cacheIncrBy(reqKey, 1, AI_QUOTA_TTL_SECONDS);
-  await cacheIncrBy(charKey, inputChars, AI_QUOTA_TTL_SECONDS);
   return true;
 }
 
@@ -122,7 +130,7 @@ router.post('/chat', validate(aiChatSchema), async (req, res) => {
     const reply = await chatCompletion(messages);
     const duration = Date.now() - start;
     console.log(`[ai] ✓ /chat ${duration}ms — ${reply.length} chars`);
-    res.json({ success: true, message: { role: 'assistant', content: reply }, _duration: duration });
+    res.json({ success: true, message: { role: 'assistant', content: reply } });
   } catch (error) {
     logAIError('chat', req.userId, error);
     const { status, body } = aiErrorBody(error, 'AI chat failed');
@@ -139,7 +147,7 @@ router.post('/summarize', validate(aiContentSchema), async (req, res) => {
     const summary = await summarizeNote(title || 'Untitled', content);
     const duration = Date.now() - start;
     console.log(`[ai] ✓ /summarize ${duration}ms`);
-    res.json({ success: true, summary, _duration: duration });
+    res.json({ success: true, summary });
   } catch (error) {
     logAIError('summarize', req.userId, error);
     const { status, body } = aiErrorBody(error, 'Summarization failed');
@@ -157,13 +165,13 @@ router.post('/mcqs', validate(aiContentSchema), async (req, res) => {
       const flashcards = await generateFlashcards(title || 'Untitled', content);
       const duration = Date.now() - start;
       console.log(`[ai] ✓ /mcqs?type=flashcard ${duration}ms — ${flashcards.length} cards`);
-      res.json({ success: true, flashcards, _duration: duration });
+      res.json({ success: true, flashcards });
       return;
     }
     const mcqs = await generateMcqs(title || 'Untitled', content);
     const duration = Date.now() - start;
     console.log(`[ai] ✓ /mcqs ${duration}ms — ${mcqs.length} questions`);
-    res.json({ success: true, mcqs, _duration: duration });
+    res.json({ success: true, mcqs });
   } catch (error) {
     logAIError('mcqs', req.userId, error);
     const { status, body } = aiErrorBody(error, 'MCQ generation failed');
@@ -181,7 +189,7 @@ router.post('/translate', validate(translateSchema), async (req, res) => {
     const translatedText = await translateText(content, lang);
     const duration = Date.now() - start;
     console.log(`[ai] ✓ /translate → ${lang} ${duration}ms`);
-    res.json({ success: true, translatedText, _duration: duration });
+    res.json({ success: true, translatedText });
   } catch (error) {
     logAIError('translate', req.userId, error);
     const { status, body } = aiErrorBody(error, 'Translation failed');

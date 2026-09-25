@@ -10,8 +10,9 @@ import { Loader2, ShieldAlert } from 'lucide-react';
 // Phase B P1: force post-auth landing to /app, with loading + failure states
 // (see sign-in page for rationale).
 export default function SignUpPage() {
+  // NOTE: no Tailwind in this project — layout via inline style (dark slate).
   return (
-    <main className="flex min-h-dvh items-center justify-center bg-slate-950 px-4">
+    <main style={{ display: 'flex', minHeight: '100dvh', alignItems: 'center', justifyContent: 'center', background: '#020617', padding: '16px' }}>
       <Suspense
         fallback={
           <div className="signin-loading" role="status" aria-live="polite">

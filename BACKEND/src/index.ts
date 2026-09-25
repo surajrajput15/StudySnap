@@ -44,7 +44,11 @@ app.use('/api/', apiLimiter);
 app.get('/favicon.ico', (_req, res) => res.status(204).end());
 
 app.get('/api/health', (req, res) => {
-  const origin = req.headers.origin || req.headers.host || 'unknown';
+  // Phase 1 P1: never interpolate the raw Origin/host header into logs —
+  // crafted values with newlines/ANSI escape pollute log pipelines.
+  const origin = String(req.headers.origin || req.headers.host || 'unknown')
+    .replace(/[\r\n\t]/g, '')
+    .slice(0, 200);
   console.log(`[health] from origin="${origin}"`);
   res.json({
     success: true,

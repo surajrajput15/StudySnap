@@ -49,7 +49,7 @@ export interface StudyContext {
   truncated: boolean;
 }
 
-export type ContextMessage = { role: 'user' | 'system'; content: string };
+export type ContextMessage = { role: 'user' | 'assistant'; content: string };
 
 /**
  * Converts contentEditable HTML (note content) into plain text for the AI.
@@ -134,11 +134,14 @@ export function buildContextMessages(context: StudyContext, userRequest: string)
   if (context.kind === 'none') {
     return [{ role: 'user', content: request }];
   }
+  // HOTFIX: never emit a `system` role — the backend chat schema allows only
+  // user|assistant and rejects anything else with a 400, which broke EVERY
+  // material-attached request. The guard travels as a user-block prefix; the
+  // server-side system prompt + role downgrade remain the real defense.
   return [
-    { role: 'system', content: AI_STUDY_MATERIAL_DATA_GUARD },
     {
       role: 'user',
-      content: `[STUDY MATERIAL — DATA]\nTitle: ${context.label}\n\n${context.content}`,
+      content: `${AI_STUDY_MATERIAL_DATA_GUARD}\n\n[STUDY MATERIAL — DATA]\nTitle: ${context.label}\n\n${context.content}`,
     },
     { role: 'user', content: request },
   ];

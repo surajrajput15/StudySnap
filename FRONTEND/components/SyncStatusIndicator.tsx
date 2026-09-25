@@ -18,6 +18,8 @@ export default function SyncStatusIndicator({ onRetry }: { onRetry?: () => void 
   const lastSyncError = useStore((s) => s.lastSyncError);
 
   // Idle with a sticky failure: surface it instead of rendering nothing.
+  // HOTFIX: no role="status" on the <button> itself — that overrides the
+  // implicit button role in AT computation. aria-live alone announces.
   if (!status && lastSyncError) {
     return (
       <button
@@ -26,7 +28,6 @@ export default function SyncStatusIndicator({ onRetry }: { onRetry?: () => void 
         onClick={onRetry}
         title={`${lastSyncError}. Tap to retry now`}
         aria-live="polite"
-        role="status"
       >
         <span className="sync-status-dot" aria-hidden="true" />
         <span className="sync-status-label">Sync issue</span>
@@ -67,7 +68,6 @@ export default function SyncStatusIndicator({ onRetry }: { onRetry?: () => void 
             : 'Last sync needs attention — tap to retry now'
       }
       aria-live="polite"
-      role="status"
     >
       <span className="sync-status-dot" aria-hidden="true" />
       <span className="sync-status-label">{label}</span>

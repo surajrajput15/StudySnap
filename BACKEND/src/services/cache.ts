@@ -45,10 +45,19 @@ export async function cacheSet<T>(key: string, value: T, ttlSeconds = 300) {
 export async function invalidateUserCache(userId: string) {
   if (!redis) return;
   try {
-    const keys = await redis.keys(`${userId}:*`);
-    if (keys.length > 0) {
-      await redis.del(...keys);
-    }
+    // Phase 1 P1: SCAN instead of blocking KEYS, wrapped in the same 2s
+    // race as every other cache op. KEYS blocks the event loop / upstream
+    // on large keyspaces; SCAN iterates in bounded chunks.
+    let cursor = '0';
+    do {
+      const [next, keys] = await withTimeout(
+        redis.scan(cursor, { match: `${userId}:*`, count: 100 })
+      );
+      cursor = String(next);
+      if (keys.length > 0) {
+        await withTimeout(redis.del(...keys));
+      }
+    } while (cursor !== '0');
   } catch {
     // silently fail
   }

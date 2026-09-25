@@ -11,6 +11,7 @@ import { voiceUploadLimiter, voiceQueryLimiter } from '../middleware/rateLimiter
 import { getDb, voiceNotes, notes } from '../db';
 import { MAX_FILE_SIZE_BYTES, CACHE_TTL_NOTES_SECONDS, VOICE_DAILY_BYTE_QUOTA, VOICE_QUOTA_TTL_SECONDS } from '../config/constants';
 import { cacheGet, cacheSet, invalidateUserCache, cacheIncrBy } from '../services/cache';
+import { secondsTillMidnightUTC } from './ai';
 import {
   buildVoiceAudioPublicId,
   uploadVoiceAudioStream,
@@ -137,6 +138,11 @@ async function hasSpooledAudioSignature(tmpPath: string, normalizedMime: string)
 // Day 10 Task 7 — the transcript is TRUNCATED (never rejected) to the 50,000
 // column limit. The old `.max(50000)` rejected over-long speech transcripts
 // with a 400, which the sync layer silently left pending and retried forever.
+// Phase 1 P1: wire cap tightened to 50k as well — our own client already
+// truncates to 50k before sending, so only abusive direct-API callers can hit
+// the 400, and they get no retry loop (no client syncs their requests). The
+// transform stays as a backstop for any residual overage.
+// NOTE: keep in sync with the frontend slice limit (lib/storage/voiceNotes).
 const MAX_TRANSCRIPT_CHARS = 50000;
 const voiceNoteUploadSchema = z.object({
   id: z.string().uuid('Voice note id must be a UUID'),
@@ -147,7 +153,7 @@ const voiceNoteUploadSchema = z.object({
   duration: z.coerce.number().int('duration must be an integer').min(0).max(86400).optional(),
   transcript: z
     .string()
-    .max(200000, 'transcript is unreasonably long')
+    .max(MAX_TRANSCRIPT_CHARS, 'transcript exceeds the 50000 character limit')
     .transform((s) => s.slice(0, MAX_TRANSCRIPT_CHARS))
     .optional(),
 });
@@ -284,6 +290,9 @@ async function handleVoiceNoteUpload(req: Request, res: Response): Promise<void>
     const quotaKey = `voice_bytes:${userId}:${new Date().toISOString().slice(0, 10)}`;
     const currentBytes = await cacheGet<number>(quotaKey);
     if (currentBytes !== null && currentBytes + file.size > VOICE_DAILY_BYTE_QUOTA) {
+      // Phase 1 P1: Retry-After like the AI quota, so the client backs off
+      // precisely instead of polling on its generic backoff.
+      res.set('Retry-After', String(secondsTillMidnightUTC()));
       res.status(429).json({ success: false, error: 'Daily voice upload quota exceeded. Try again tomorrow.' });
       return;
     }

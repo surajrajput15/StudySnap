@@ -157,6 +157,14 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
   // typed content is lost with no feedback. When the note is gone we stop
   // persisting and show a deleted notice with a way back instead.
   const noteDeleted = !!noteId && !activeNote;
+  const deletedNoticeRef = useRef<HTMLDivElement | null>(null);
+
+  // HOTFIX: when the editor swaps to the deleted notice, move focus into it
+  // (with an assertive announcement) — otherwise keyboard/screen-reader focus
+  // is left inside the unmounted editor with no feedback.
+  useEffect(() => {
+    if (noteDeleted) deletedNoticeRef.current?.focus();
+  }, [noteDeleted]);
 
   const [title, setTitle] = useState(activeNote ? activeNote.title : '');
   const [content, setContent] = useState(activeNote ? activeNote.content : '');
@@ -899,12 +907,14 @@ function NoteEditorInner({ noteId, onBack }: NoteEditorProps) {
           undo-window expiry, another tab). Show an explicit notice instead of
           a silently-broken editor whose autosave drops every keystroke. */}
       {noteDeleted ? (
-        <EmptyState
-          illustration={<EmptyNotesIllustration />}
-          title="This note was deleted"
-          message="It was removed while you were editing. Your typed edits were not saved anywhere."
-          action={{ label: 'Back to notes', onClick: onBack }}
-        />
+        <div ref={deletedNoticeRef} tabIndex={-1} role="alert" aria-label="This note was deleted">
+          <EmptyState
+            illustration={<EmptyNotesIllustration />}
+            title="This note was deleted"
+            message="It was removed while you were editing. Your typed edits were not saved anywhere."
+            action={{ label: 'Back to notes', onClick: onBack }}
+          />
+        </div>
       ) : (
       <>
       {/* ─── Toolbar ─── */}

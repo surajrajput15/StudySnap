@@ -110,7 +110,7 @@ const features = [
 
 const benefits = [
   "Free to use, no credit card required",
-  "End-to-end encrypted sessions via Clerk",
+  "Secure sessions via Clerk (TLS)",
   "Works offline, syncs across devices",
   "AI-powered learning, human-friendly UX",
 ];
