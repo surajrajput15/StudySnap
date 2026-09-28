@@ -355,7 +355,8 @@ export default function ProfileView() {
             ) : (
               <div className="profile-empty-chart">
                 <BarChart3 size={32} style={{ color: 'var(--outline)', opacity: 0.4 }} />
-                <span style={{ fontSize: '13px', color: 'var(--outline)' }}>Start revising to see your monthly report</span>
+                <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--on-surface-variant)' }}>No revisions yet</span>
+                <span style={{ fontSize: '13px', color: 'var(--outline)' }}>Complete a revision to see your monthly report</span>
               </div>
             )}
           </div>

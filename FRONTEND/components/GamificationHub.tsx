@@ -309,7 +309,8 @@ export default function GamificationHub() {
           ) : (
             <div className="game-empty-chart">
               <CalendarDays size={24} style={{ opacity: 0.3 }} />
-              <span>No data yet</span>
+              <span style={{ fontWeight: 600 }}>No activity yet</span>
+              <span style={{ fontSize: '12px', opacity: 0.7 }}>Study to fill this chart</span>
             </div>
           )}
         </div>

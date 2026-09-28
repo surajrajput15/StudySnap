@@ -698,8 +698,8 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
             ) : (
               <EmptyState
                 illustration={<EmptyNotesIllustration />}
-                title="No Study Notes Yet"
-                message="Your learning journey starts here. Create a note and watch your knowledge grow!"
+                title="No study notes here"
+                message="Create a note to get started — it will appear here, organized by subject and folder."
                 action={{ label: 'Create Note', onClick: onCreateNote }}
                 tip="Organize notes with subjects, folders, and tags for easy retrieval."
               />

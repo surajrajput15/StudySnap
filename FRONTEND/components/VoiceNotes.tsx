@@ -787,7 +787,7 @@ export default function VoiceNotes({ onBack, onLinkToNote, onRecordingChange }: 
         {voiceNotes.length === 0 ? (
           <EmptyState
             illustration={<EmptyVoiceIllustration />}
-            title="No Recordings Yet"
+              title="No recordings yet"
             message="Your voice is a powerful study tool. Record lectures, ideas, or revision notes on the go."
             action={{ label: 'Start Recording', onClick: handleStartRecording }}
             tip="Transcripts are generated automatically — review and link recordings to notes."
