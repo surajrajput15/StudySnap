@@ -6,18 +6,29 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();
   const lastModified = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-  // HOTFIX (master audit): sitemap lists ONLY the marketing landing.
-  // /app is the authenticated client shell (guest dashboard renders, but it
-  // is session-scoped UI, not indexable content); /sign-in and /sign-up are
-  // auth flows. Listing them alongside robots Disallows contradicted the
-  // crawler directives. One canonical URL keeps discovery unambiguous —
-  // resubmit this sitemap in GSC/Bing after deploy.
+  // HOTFIX (master audit): /app is the authenticated client shell and
+  // /sign-in + /sign-up are auth flows — none are indexable content, so
+  // they stay out of the sitemap. The public static pages (landing,
+  // privacy, terms) are listed below. Resubmit this sitemap in GSC/Bing
+  // after deploy.
   return [
     {
       url: `${SITE_URL}/`,
       lastModified,
       changeFrequency: "weekly",
       priority: 1.0,
+    },
+    {
+      url: `${SITE_URL}/privacy`,
+      lastModified,
+      changeFrequency: "monthly",
+      priority: 0.5,
+    },
+    {
+      url: `${SITE_URL}/terms`,
+      lastModified,
+      changeFrequency: "monthly",
+      priority: 0.5,
     },
   ];
 }
