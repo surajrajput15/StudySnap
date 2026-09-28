@@ -846,6 +846,21 @@ textarea:focus-visible,
   align-items: center;
   gap: 10px;
   flex-shrink: 0;
+  flex-wrap: wrap;
+}
+/* Narrow screens: the actions row + 32px hero padding used to exceed the
+   viewport (overflow-x is hidden on .app-main, so content was silently
+   clipped). Smaller padding + wrapping keeps everything visible. */
+@media (max-width: 640px) {
+  .ai-hero { padding: 20px; }
+  /* Stack: side-by-side squishes the greeting (min-width:0 lets it shrink
+     instead of wrapping), so force a column on narrow screens. */
+  .hero-top-row { flex-direction: column; align-items: stretch; }
+  .hero-greeting { min-width: 0; }
+  .hero-actions-row { flex-shrink: 1; }
+  .hero-title { font-size: 26px; }
+  .hero-metric-card { min-width: 0; }
+  .dashboard-row > * { min-width: 0; }
 }
 
 .streak-btn {

@@ -188,7 +188,7 @@ export default function MobileDrawer({ open, onClose, activeTab, onNavigate }: M
               <span className="drawer-item-label">Logout</span>
             </button>
           ) : (
-            <SignInButton mode="modal" forceRedirectUrl="/" signUpForceRedirectUrl="/">
+            <SignInButton mode="modal" forceRedirectUrl="/app" signUpForceRedirectUrl="/app">
               <button className="drawer-item drawer-item--signin" onClick={onClose}>
                 <LogIn size={20} />
                 <span className="drawer-item-label">Sign In</span>
