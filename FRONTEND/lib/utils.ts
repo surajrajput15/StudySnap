@@ -39,22 +39,25 @@ export function hasActiveSearch(query: string): boolean {
 }
 
 // Day 9 Task 6 — search semantics for a note: a blank query matches everything
-// (no filtering); otherwise the title, content or any tag must contain the
-// (case-insensitive) query.
-export function noteMatchesSearch(query: string, note: { title: string; content: string; tags: string[] }): boolean {
+// (no filtering); otherwise the title, content, any tag, or the note's
+// subject (category name) must contain the (case-insensitive) query. The
+// subject is passed separately so the matcher stays a pure function of
+// strings — no store import, no signature break for existing callers.
+export function noteMatchesSearch(query: string, note: { title: string; content: string; tags: string[] }, subjectName?: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
   return (
     note.title.toLowerCase().includes(q) ||
     note.content.toLowerCase().includes(q) ||
-    note.tags.some((t) => t.toLowerCase().includes(q))
+    note.tags.some((t) => t.toLowerCase().includes(q)) ||
+    (subjectName || '').toLowerCase().includes(q)
   );
 }
 
 // Day 9 Task 6 — copy for the search-specific empty state (shown only when a
 // search is active but no note matches).
 export const SEARCH_EMPTY_MESSAGE = 'Try different keywords, or clear the search to see all your notes.';
-export const SEARCH_EMPTY_TIP = 'Search matches titles, content, and tags.';
+export const SEARCH_EMPTY_TIP = 'Search matches titles, content, tags, and subjects.';
 
 // Day 9 Task 8 — the canonical, genuinely rendered app tabs. Every navigation
 // entry point (mobile drawer, sidebar, rail, bottom nav) must map to one of

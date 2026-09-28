@@ -7,7 +7,7 @@ import {
   Sparkles, BookOpen, FileText, Clock,
   Target, ChevronRight, Play, BarChart3,
   CheckCircle2, Flame, Plus, Search, Star, Pin,
-  Layers, FolderPlus, Grid3X3, List, Lock, ArrowRight
+  Layers, FolderPlus, Folder as FolderIcon, Grid3X3, List, Lock, ArrowRight
 } from 'lucide-react';
 import { celebrate } from '@/lib/confetti';
 import EmptyState, { EmptyNotesIllustration, EmptySearchIllustration } from './EmptyState';
@@ -100,6 +100,10 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
   const [pinError, setPinError] = useState(false);
   const [isUnlocking, setIsUnlocking] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  // UI polish — the dashboard shows a concise subject row (first few) so a
+  // long subject list can't dominate the page; "View all" expands inline.
+  const [showAllSubjects, setShowAllSubjects] = useState(false);
+  const visibleCategories = showAllSubjects ? categories : categories.slice(0, 6);
 
   // Day 12 Tasks 2 & 4 — the dashboard dialogs share one focus/escape handler.
   // Only one dialog is open at a time, so a single ref on the currently-mounted
@@ -114,11 +118,14 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
   };
   useDialogFocus(anyModalOpen, modalRef, closeAllModals);
   const filteredNotes = useMemo(() => notes.filter((note) => {
-    const matchesSearch = noteMatchesSearch(searchQuery, note);
+    // Subject-aware search: the category name travels as a plain string so
+    // the matcher stays pure (see noteMatchesSearch).
+    const subjectName = categories.find((c) => c.id === note.categoryId)?.name;
+    const matchesSearch = noteMatchesSearch(searchQuery, note, subjectName);
     const matchesFolder = activeFolderId ? note.folderId === activeFolderId : true;
     const matchesCategory = activeCategoryId ? note.categoryId === activeCategoryId : true;
     return matchesSearch && matchesFolder && matchesCategory;
-  }), [notes, searchQuery, activeFolderId, activeCategoryId]);
+  }), [notes, searchQuery, activeFolderId, activeCategoryId, categories]);
 
   const pinnedNotes = useMemo(() => filteredNotes.filter(n => n.isPinned), [filteredNotes]);
   const unpinnedNotes = useMemo(() => filteredNotes.filter(n => !n.isPinned), [filteredNotes]);
@@ -154,8 +161,27 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
     });
   }, [notes]);
   const weeklyMax = Math.max(...weeklyData.map(d => d.count), 3);
+  const hasWeeklyActivity = weeklyData.some(d => d.count > 0);
 
   const lastEditedNote = useMemo(() => [...notes].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0], [notes]);
+
+  // UI polish — the greeting uses the authenticated user's first name only
+  // when it is a real name (never the "Student" placeholder or an empty
+  // string); otherwise a neutral fallback so new/guest users never see a
+  // broken "Good evening, !". The supporting line reflects live state.
+  const hour = new Date().getHours();
+  const daypart = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening';
+  const firstName = user.name.trim().split(' ')[0];
+  const hasRealName = firstName !== '' && firstName.toLowerCase() !== 'student';
+  const greetingTitle = hasRealName ? `Good ${daypart}, ${firstName} 👋` : `Good ${daypart}`;
+  const greetingSubcopy =
+    user.streakCount > 0
+      ? `🔥 ${user.streakCount}-day streak — keep it alive with one session today.`
+      : dueRevisionNotes.length > 0
+        ? `${dueRevisionNotes.length} revision${dueRevisionNotes.length === 1 ? '' : 's'} due today — small steps, strong memory.`
+        : notes.length > 0
+          ? 'Pick up where you left off — your notes are waiting.'
+          : 'Capture your first note or record a lecture to get started.';
 
   // Day 9 Task 13 — the streak is display-only. It grows exclusively through
   // real study activity (creating notes, recording voice notes, completing
@@ -251,17 +277,24 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
                 <Sparkles size={12} /> AI-Powered Study Companion
               </span>
               <h2 className="hero-title">
-                Good {new Date().getHours() < 12 ? 'Morning' : new Date().getHours() < 17 ? 'Afternoon' : 'Evening'}, {user.name.split(' ')[0]}!
+                {greetingTitle}
               </h2>
-              <p className="hero-subtitle">{user.studyGoals}</p>
+              <p className="hero-subtitle">{greetingSubcopy}</p>
             </div>
             <div className="hero-actions-row">
               <div className="streak-btn" title="Grows when you create notes, record voice notes, or complete revisions.">
                 <Flame size={22} color="#FBBF24" fill="#FBBF24" />
-                <div>
-                  <div className="streak-count">{user.streakCount}</div>
-                  <div className="streak-label">day streak</div>
-                </div>
+                {user.streakCount > 0 ? (
+                  <div>
+                    <div className="streak-count">{user.streakCount}</div>
+                    <div className="streak-label">day streak</div>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="streak-label" style={{ fontWeight: 700, fontSize: '13px' }}>Start your streak</div>
+                    <div className="streak-sub" style={{ fontSize: '11px', opacity: 0.85 }}>Finish your first session</div>
+                  </div>
+                )}
               </div>
               <button onClick={() => onNavigate('ai')} className="hero-ghost-btn">
                 <Sparkles size={15} /> Ask SnapAI
@@ -286,12 +319,26 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
                   </div>
                 </div>
                 <div className="hero-goal-info">
-                  <div className="hero-goal-text">
-                    {dailyProgress >= dailyGoal ? 'Goal completed! 🎉' : `${dailyGoal - dailyProgress} more to go`}
-                  </div>
-                  <div className="hero-progress-track">
-                    <div className="hero-progress-fill" style={{ width: `${(dailyProgress / dailyGoal) * 100}%` }} />
-                  </div>
+                  {dailyProgress === 0 ? (
+                    <>
+                      <div className="hero-goal-text">Start your first study goal</div>
+                      <div className="hero-goal-sub" style={{ fontSize: '12px', opacity: 0.85, marginTop: '2px' }}>
+                        Create a note or revise to begin today&apos;s progress.
+                      </div>
+                      <button onClick={onCreateNote} className="hero-goal-cta" style={{ marginTop: '8px', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '12.5px', fontWeight: 700, color: 'inherit', textDecoration: 'underline', textUnderlineOffset: '3px' }}>
+                        Start studying →
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <div className="hero-goal-text">
+                        {dailyProgress >= dailyGoal ? 'Goal completed! 🎉' : `${dailyGoal - dailyProgress} more to go`}
+                      </div>
+                      <div className="hero-progress-track">
+                        <div className="hero-progress-fill" style={{ width: `${(dailyProgress / dailyGoal) * 100}%` }} />
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -374,6 +421,41 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
 
       <HeroAI onNavigate={onNavigate} />
 
+      {/* ─── AI Study Tools ─── */}
+      <div id="ai-tools-section">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+          <Sparkles size={18} style={{ color: 'var(--primary)' }} />
+          <h3 style={{ fontSize: '17px', fontWeight: 700 }}>AI Study Tools</h3>
+        </div>
+        <div className="ai-tools-grid">
+          {/* Dashboard shows only the four core quick actions; the full set
+              lives one tap away in the AI Assistant tab. */}
+          {AI_TOOLS.slice(0, 4).map((tool, index) => (
+            <button
+              key={tool.id}
+              className="ai-tool-card animate-fade-up"
+              onClick={() => { setActiveAiTool(tool.id); onNavigate('ai'); }}
+              style={{ animationDelay: `${index * 0.05}s`, '--tool-gradient': tool.gradient } as React.CSSProperties}
+            >
+              <span className="ai-tool-emoji">{tool.emoji}</span>
+              <div className="ai-tool-info">
+                <div className="ai-tool-title">{tool.title}</div>
+                <div className="ai-tool-desc">{tool.desc}</div>
+              </div>
+              <div className="ai-tool-ripple" />
+            </button>
+          ))}
+        </div>
+        <button
+          className="ai-tools-explore-btn animate-fade-up"
+          onClick={() => onNavigate('ai')}
+        >
+          <Sparkles size={14} />
+          Explore all AI Tools
+          <ArrowRight size={14} />
+        </button>
+      </div>
+
       {/* ─── Stats Grid ─── */}
       <div className="stats-grid">
         <div className="stat-card">
@@ -414,37 +496,97 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
         </div>
       </div>
 
-      {/* ─── AI Study Tools ─── */}
-      <div id="ai-tools-section">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
-          <Sparkles size={18} style={{ color: 'var(--primary)' }} />
-          <h3 style={{ fontSize: '17px', fontWeight: 700 }}>✨ AI Study Tools</h3>
+      {/* ─── Search + Filters ─── */}
+      <div className="search-filters-row">
+        <div style={{ position: 'relative', flex: '1 1 280px', minWidth: '200px' }}>
+          <Search size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--outline)', pointerEvents: 'none' }} />
+          <input
+            type="text"
+            placeholder="Search notes, tags, subjects..."
+            aria-label="Search notes, tags, subjects"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="md3-input"
+            style={{ paddingLeft: '42px', borderRadius: '100px', paddingTop: '12px', paddingBottom: '12px', fontSize: '16px' }}
+          />
         </div>
-        <div className="ai-tools-grid">
-          {AI_TOOLS.map((tool, index) => (
+        <button onClick={onCreateNote} className="md3-btn md3-btn-primary" style={{ padding: '12px 24px', fontSize: '13px', flexShrink: 0 }}>
+          <Plus size={15} /> New Note
+        </button>
+      </div>
+
+      {/* ─── Categories ─── */}
+      <div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+          <h3 style={{ fontSize: '16px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Layers size={16} style={{ color: 'var(--primary)' }} /> Subjects
+          </h3>
+          <button onClick={() => setShowCategoryModal(true)} className="md3-btn md3-btn-text" style={{ fontSize: '12px', padding: '4px 12px' }}>
+            <Plus size={14} /> Add Subject
+          </button>
+        </div>
+        <div className="categories-scroll">
+          <button onClick={() => setActiveCategoryId(null)}
+            style={{ padding: '7px 16px', borderRadius: '100px', border: 'none', fontSize: '12px', fontWeight: 600, cursor: 'pointer', flexShrink: 0, transition: 'all 0.2s',
+              background: activeCategoryId === null ? 'var(--primary)' : 'var(--surface)', color: activeCategoryId === null ? 'var(--on-primary)' : 'var(--on-surface)',
+              boxShadow: activeCategoryId === null ? '0 4px 12px rgba(0,97,164,0.3)' : 'var(--elevation-1)' }}>
+            All
+          </button>
+          {visibleCategories.map((cat) => (
+            <div key={cat.id} style={{ position: 'relative', display: 'inline-flex', flexShrink: 0 }}>
+              <button onClick={() => setActiveCategoryId(cat.id)}
+                style={{ padding: '7px 16px', borderRadius: '100px', border: 'none', fontSize: '12px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s',
+                  background: activeCategoryId === cat.id ? cat.color : 'var(--surface)', color: activeCategoryId === cat.id ? '#fff' : 'var(--on-surface)',
+                  boxShadow: activeCategoryId === cat.id ? `0 4px 12px ${cat.color}44` : 'var(--elevation-1)' }}>
+                {cat.name}
+              </button>
+              {!cat.id.startsWith('cat-') && (
+                <button onClick={() => deleteCategory(cat.id)} aria-label={`Delete category ${cat.name}`} style={{ position: 'absolute', top: '-4px', right: '-4px', border: 'none', background: 'var(--error)', color: '#fff', borderRadius: '50%', width: '18px', height: '18px', fontSize: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+              )}
+            </div>
+          ))}
+          {categories.length > 6 && (
             <button
-              key={tool.id}
-              className="ai-tool-card animate-fade-up"
-              onClick={() => { setActiveAiTool(tool.id); onNavigate('ai'); }}
-              style={{ animationDelay: `${index * 0.05}s`, '--tool-gradient': tool.gradient } as React.CSSProperties}
+              onClick={() => setShowAllSubjects((v) => !v)}
+              className="md3-btn md3-btn-text"
+              style={{ fontSize: '12px', padding: '7px 12px', flexShrink: 0 }}
+              aria-expanded={showAllSubjects}
             >
-              <span className="ai-tool-emoji">{tool.emoji}</span>
-              <div className="ai-tool-info">
-                <div className="ai-tool-title">{tool.title}</div>
-                <div className="ai-tool-desc">{tool.desc}</div>
-              </div>
-              <div className="ai-tool-ripple" />
+              {showAllSubjects ? 'Show less' : 'View all subjects →'}
             </button>
+          )}
+        </div>
+      </div>
+
+      {/* ─── Folders ─── */}
+      <div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+          <h3 style={{ fontSize: '16px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <FolderPlus size={16} style={{ color: 'var(--primary)' }} /> Folders
+          </h3>
+          <button onClick={() => setShowFolderModal(true)} className="md3-btn md3-btn-text" style={{ fontSize: '12px', padding: '4px 12px' }}>
+            <Plus size={14} /> New Folder
+          </button>
+        </div>
+        <div className="folders-scroll">
+          <button onClick={() => setActiveFolderId(null)}
+            style={{ padding: '7px 16px', borderRadius: '12px', border: 'none', fontSize: '12px', fontWeight: 600, cursor: 'pointer', flexShrink: 0, transition: 'all 0.2s', display: 'inline-flex', alignItems: 'center', gap: '6px',
+              background: activeFolderId === null ? 'var(--primary)' : 'var(--surface)', color: activeFolderId === null ? 'var(--on-primary)' : 'var(--on-surface)',
+              boxShadow: activeFolderId === null ? '0 4px 12px rgba(0,97,164,0.3)' : 'var(--elevation-1)' }}>
+              <FolderIcon size={13} /> All Notes
+            </button>
+            {folders.map((folder) => (
+              <div key={folder.id} style={{ display: 'inline-flex', flexShrink: 0 }}>
+                <button onClick={() => setActiveFolderId(folder.id)}
+                  style={{ padding: '7px 16px', borderRadius: '12px', border: 'none', fontSize: '12px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', display: 'inline-flex', alignItems: 'center', gap: '6px',
+                    background: activeFolderId === folder.id ? 'var(--primary)' : 'var(--surface)', color: activeFolderId === folder.id ? 'var(--on-primary)' : 'var(--on-surface)',
+                    boxShadow: 'var(--elevation-1)' }}>
+                  <FolderIcon size={13} /> {folder.name}
+                </button>
+                <button onClick={() => handleDeleteFolder(folder)} aria-label={`Delete folder ${folder.name}`} style={{ border: 'none', background: 'none', padding: '4px', cursor: 'pointer', color: 'var(--error)', fontSize: '14px' }}>×</button>
+            </div>
           ))}
         </div>
-        <button
-          className="ai-tools-explore-btn animate-fade-up"
-          onClick={() => onNavigate('ai')}
-        >
-          <Sparkles size={14} />
-          Explore all AI Tools
-          <ArrowRight size={14} />
-        </button>
       </div>
 
       {/* ─── Recent Notes + Weekly Progress Row ─── */}
@@ -459,9 +601,9 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
           {recentNotes.length === 0 ? (
             <EmptyState
               illustration={<EmptyNotesIllustration />}
-              title="Your Canvas is Empty"
-              message="Every masterpiece starts with a single note. Begin your learning journey!"
-              action={{ label: 'Create First Note', onClick: onCreateNote }}
+              title="No notes yet"
+              message="Start capturing what you're learning."
+              action={{ label: 'Create your first note', onClick: onCreateNote }}
               tip="Try voice notes or AI summaries for faster capture."
             />
           ) : (
@@ -498,6 +640,17 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
             <BarChart3 size={18} style={{ color: 'var(--primary)' }} />
             <h3 style={{ fontSize: '16px', fontWeight: 700 }}>Weekly Progress</h3>
           </div>
+          {!hasWeeklyActivity ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '6px', padding: '8px 0' }}>
+              <div style={{ fontSize: '14px', fontWeight: 700 }}>No study activity yet</div>
+              <p style={{ fontSize: '13px', color: 'var(--on-surface-variant)', margin: 0, lineHeight: 1.5 }}>
+                Complete your first study session to see your weekly progress.
+              </p>
+              <button onClick={onCreateNote} className="md3-btn md3-btn-text" style={{ fontSize: '13px', padding: '6px 0' }}>
+                Start studying <ArrowRight size={14} />
+              </button>
+            </div>
+          ) : (
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', height: '120px', paddingTop: '8px' }}>
             {weeklyData.map((d) => (
               <div key={d.day} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', height: '100%', justifyContent: 'flex-end' }}>
@@ -509,93 +662,11 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
                   transition: 'height 0.5s ease',
                   minHeight: d.count > 0 ? '8px' : '4px',
                 }} />
-              <span style={{ fontSize: '10px', color: 'var(--outline)', fontWeight: 500, marginTop: '4px' }}>{d.day}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* ─── Search + Filters ─── */}
-      <div className="search-filters-row">
-        <div style={{ position: 'relative', flex: '1 1 280px', minWidth: '200px' }}>
-          <Search size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--outline)', pointerEvents: 'none' }} />
-          <input
-            type="text"
-            placeholder="Search notes, tags, or content..."
-            aria-label="Search notes, tags, or content"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="md3-input"
-            style={{ paddingLeft: '42px', borderRadius: '100px', paddingTop: '12px', paddingBottom: '12px', fontSize: '16px' }}
-          />
-        </div>
-        <button onClick={onCreateNote} className="md3-btn md3-btn-primary" style={{ padding: '12px 24px', fontSize: '13px', flexShrink: 0 }}>
-          <Plus size={15} /> New Note
-        </button>
-      </div>
-
-      {/* ─── Categories ─── */}
-      <div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-          <h3 style={{ fontSize: '16px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Layers size={16} style={{ color: 'var(--primary)' }} /> Subjects
-          </h3>
-          <button onClick={() => setShowCategoryModal(true)} className="md3-btn md3-btn-text" style={{ fontSize: '12px', padding: '4px 12px' }}>
-            <Plus size={14} /> Add Subject
-          </button>
-        </div>
-        <div className="categories-scroll">
-          <button onClick={() => setActiveCategoryId(null)}
-            style={{ padding: '7px 16px', borderRadius: '100px', border: 'none', fontSize: '12px', fontWeight: 600, cursor: 'pointer', flexShrink: 0, transition: 'all 0.2s',
-              background: activeCategoryId === null ? 'var(--primary)' : 'var(--surface)', color: activeCategoryId === null ? 'var(--on-primary)' : 'var(--on-surface)',
-              boxShadow: activeCategoryId === null ? '0 4px 12px rgba(0,97,164,0.3)' : 'var(--elevation-1)' }}>
-            All
-          </button>
-          {categories.map((cat) => (
-            <div key={cat.id} style={{ position: 'relative', display: 'inline-flex', flexShrink: 0 }}>
-              <button onClick={() => setActiveCategoryId(cat.id)}
-                style={{ padding: '7px 16px', borderRadius: '100px', border: 'none', fontSize: '12px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s',
-                  background: activeCategoryId === cat.id ? cat.color : 'var(--surface)', color: activeCategoryId === cat.id ? '#fff' : 'var(--on-surface)',
-                  boxShadow: activeCategoryId === cat.id ? `0 4px 12px ${cat.color}44` : 'var(--elevation-1)' }}>
-                {cat.name}
-              </button>
-              {!cat.id.startsWith('cat-') && (
-                <button onClick={() => deleteCategory(cat.id)} aria-label={`Delete category ${cat.name}`} style={{ position: 'absolute', top: '-4px', right: '-4px', border: 'none', background: 'var(--error)', color: '#fff', borderRadius: '50%', width: '18px', height: '18px', fontSize: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* ─── Folders ─── */}
-      <div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-          <h3 style={{ fontSize: '16px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <FolderPlus size={16} style={{ color: 'var(--primary)' }} /> Folders
-          </h3>
-          <button onClick={() => setShowFolderModal(true)} className="md3-btn md3-btn-text" style={{ fontSize: '12px', padding: '4px 12px' }}>
-            <Plus size={14} /> New Folder
-          </button>
-        </div>
-        <div className="folders-scroll">
-          <button onClick={() => setActiveFolderId(null)}
-            style={{ padding: '7px 16px', borderRadius: '12px', border: 'none', fontSize: '12px', fontWeight: 600, cursor: 'pointer', flexShrink: 0, transition: 'all 0.2s',
-              background: activeFolderId === null ? 'var(--primary)' : 'var(--surface)', color: activeFolderId === null ? 'var(--on-primary)' : 'var(--on-surface)',
-              boxShadow: activeFolderId === null ? '0 4px 12px rgba(0,97,164,0.3)' : 'var(--elevation-1)' }}>
-              📁 All Notes
-            </button>
-            {folders.map((folder) => (
-              <div key={folder.id} style={{ display: 'inline-flex', flexShrink: 0 }}>
-                <button onClick={() => setActiveFolderId(folder.id)}
-                  style={{ padding: '7px 16px', borderRadius: '12px', border: 'none', fontSize: '12px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s',
-                    background: activeFolderId === folder.id ? 'var(--primary)' : 'var(--surface)', color: activeFolderId === folder.id ? 'var(--on-primary)' : 'var(--on-surface)',
-                    boxShadow: 'var(--elevation-1)' }}>
-                  📁 {folder.name}
-                </button>
-                <button onClick={() => handleDeleteFolder(folder)} aria-label={`Delete folder ${folder.name}`} style={{ border: 'none', background: 'none', padding: '4px', cursor: 'pointer', color: 'var(--error)', fontSize: '14px' }}>×</button>
+                <span style={{ fontSize: '10px', color: 'var(--outline)', fontWeight: 500, marginTop: '4px' }}>{d.day}</span>
               </div>
             ))}
           </div>
+          )}
         </div>
       </div>
 

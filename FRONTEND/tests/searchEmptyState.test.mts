@@ -56,6 +56,15 @@ test('Non-matching query returns false', () => {
   assert.equal(noteMatchesSearch('algebra', n), false);
 });
 
+test('Search matches the note subject when passed', () => {
+  const n = note('Chapter 5', 'Some content here', ['misc']);
+  assert.equal(noteMatchesSearch('physics', n, 'Physics'), true);
+  assert.equal(noteMatchesSearch('PHYS', n, 'Physics'), true);
+  assert.equal(noteMatchesSearch('physics', n, 'Chemistry'), false);
+  // Omitted subject keeps the old behavior — never crashes, never matches.
+  assert.equal(noteMatchesSearch('physics', n), false);
+});
+
 test('The query is trimmed before matching', () => {
   const n = note('Osmosis', 'Water movement', ['bio']);
   assert.equal(noteMatchesSearch('  osmosis  ', n), true);

@@ -4,17 +4,6 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { Sparkles, Play } from 'lucide-react';
 
-const AI_CHIPS = [
-  { emoji: '📝', label: 'Summaries' },
-  { emoji: '❓', label: 'MCQs' },
-  { emoji: '🧠', label: 'Flashcards' },
-  { emoji: '🧩', label: 'Quiz' },
-  { emoji: '🗺', label: 'Mind Maps' },
-  { emoji: '🌍', label: 'Translate' },
-  { emoji: '💡', label: 'Explain' },
-  { emoji: '📄', label: 'PDF AI' },
-];
-
 function AIIllustration() {
   return (
     <svg viewBox="0 0 320 280" fill="none" xmlns="http://www.w3.org/2000/svg" className="hero-ai-illustration">
@@ -116,22 +105,16 @@ export default function HeroAI({ onNavigate }: HeroAIProps) {
             Your Personal AI<br />Learning Companion
           </motion.h2>
 
+          {/* One line: what it does + why it matters. The full capability
+              list lives in the AI tools section below — no duplication. */}
           <motion.p
             className="hero-ai-subtitle"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.3, duration: 0.4 }}
           >
-            Generate Summaries · MCQs · Flashcards · Mind Maps · Quizzes · Translation · PDF AI
-          </motion.p>
-
-          <motion.p
-            className="hero-ai-desc"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.35, duration: 0.4 }}
-          >
-            Ask questions, simplify difficult topics, generate revision notes, create quizzes, and study smarter with AI.
+            Ask questions about your notes, simplify difficult topics, and
+            generate summaries, quizzes, and flashcards in one click.
           </motion.p>
 
           <motion.div
@@ -156,26 +139,6 @@ export default function HeroAI({ onNavigate }: HeroAIProps) {
             >
               <Play size={16} /> Explore AI Tools
             </motion.button>
-          </motion.div>
-
-          <motion.div
-            className="hero-ai-chips"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.5, staggerChildren: 0.04 }}
-          >
-            {AI_CHIPS.map((chip, i) => (
-              <motion.span
-                key={chip.label}
-                className="hero-ai-chip"
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.5 + i * 0.04, duration: 0.3 }}
-                whileHover={{ scale: 1.05, y: -2 }}
-              >
-                {chip.emoji} {chip.label}
-              </motion.span>
-            ))}
           </motion.div>
         </div>
 
