@@ -3501,11 +3501,17 @@ button.voice-sync-status.pending:hover {
   border-radius: 24px;
   padding: 2px 4px 2px 16px;
   border: 1.5px solid transparent;
-  transition: border-color var(--transition-fast);
+  outline: none !important;
+  box-shadow: none !important;
+  transition: background var(--transition-fast);
   min-width: 0;
 }
-.tutor-input-wrap:focus-within {
-  border-color: var(--primary);
+.tutor-input-wrap:focus,
+.tutor-input-wrap:focus-within,
+.tutor-input-wrap:focus-visible {
+  border-color: transparent !important;
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 .tutor-input-btn {
@@ -3533,8 +3539,9 @@ button.voice-sync-status.pending:hover {
 
 .tutor-input {
   flex: 1;
-  border: none;
-  outline: none;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
   background: transparent;
   color: var(--on-surface);
   font-size: 16px;
@@ -3542,13 +3549,18 @@ button.voice-sync-status.pending:hover {
   padding: 8px 0;
   min-width: 0;
   line-height: 20px;
+  -webkit-tap-highlight-color: transparent;
 }
 .tutor-input::placeholder {
   color: var(--outline);
   line-height: 20px;
 }
-.tutor-input:focus-visible {
-  outline: none;
+.tutor-input:focus,
+.tutor-input:focus-visible,
+.tutor-input:focus-within {
+  outline: none !important;
+  border: none !important;
+  box-shadow: none !important;
 }
 
 .tutor-send-btn {

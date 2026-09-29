@@ -311,7 +311,7 @@ export default function Page() {
           })}
         </nav>
         <div className="sidebar-footer">
-          <span className="sidebar-version">StudySnap v0.1</span>
+          <span className="sidebar-version">StudySnap V1.0</span>
         </div>
       </aside>
 
