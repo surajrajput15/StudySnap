@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
+import AutoEnter from "@/components/landing/AutoEnter";
 import "./marketing.css";
 import { AUTHOR_NAME, AUTHOR_JOB, SITE_URL } from "@/lib/marketing/constants";
 
@@ -184,6 +185,9 @@ export default function MarketingLanding() {
                 </li>
               ))}
             </ul>
+            {/* Controlled app entry: 4s countdown pill + scroll reveals.
+                Pure enhancement — landing stays fully usable without it. */}
+            <AutoEnter />
           </div>
 
           {/* Product preview — illustrative mockup of the real app UI.
@@ -236,6 +240,11 @@ export default function MarketingLanding() {
                     <span className="marketing-mock-tool" />
                     <span className="marketing-mock-tool" />
                   </div>
+                  <div className="marketing-mock-aicard">
+                    <span className="marketing-mock-aititle" />
+                    <span className="marketing-mock-line marketing-mock-line-w90" />
+                    <span className="marketing-mock-line marketing-mock-line-w70" />
+                  </div>
                 </div>
               </div>
             </div>
@@ -250,7 +259,7 @@ export default function MarketingLanding() {
       </section>
 
       {/* ── Features ───────────────────────────────────────── */}
-      <section id="features" className="marketing-features" aria-labelledby="features-heading">
+      <section id="features" className="marketing-features" data-reveal aria-labelledby="features-heading">
         <div className="marketing-features-inner">
           <p className="marketing-kicker">Features</p>
           <h2 id="features-heading" className="marketing-section-title">
@@ -274,7 +283,7 @@ export default function MarketingLanding() {
       </section>
 
       {/* ── How it works ───────────────────────────────────── */}
-      <section id="how" className="marketing-how" aria-labelledby="how-heading">
+      <section id="how" className="marketing-how" data-reveal aria-labelledby="how-heading">
         <div className="marketing-how-inner">
           <p className="marketing-kicker">How it works</p>
           <h2 id="how-heading" className="marketing-section-title">
@@ -293,7 +302,7 @@ export default function MarketingLanding() {
       </section>
 
       {/* ── AI section ─────────────────────────────────────── */}
-      <section id="ai" className="marketing-ai" aria-labelledby="ai-heading">
+      <section id="ai" className="marketing-ai" data-reveal aria-labelledby="ai-heading">
         <div className="marketing-ai-inner">
           <div className="marketing-ai-copy">
             <p className="marketing-kicker">StudySnap AI</p>
@@ -341,7 +350,7 @@ export default function MarketingLanding() {
       </section>
 
       {/* ── Offline philosophy ─────────────────────────────── */}
-      <section className="marketing-offline" aria-labelledby="offline-heading">
+      <section className="marketing-offline" data-reveal aria-labelledby="offline-heading">
         <div className="marketing-offline-inner">
           <Wifi size={28} aria-hidden="true" />
           <h2 id="offline-heading">Study when you need it.</h2>
@@ -354,7 +363,7 @@ export default function MarketingLanding() {
       </section>
 
       {/* ── Privacy ────────────────────────────────────────── */}
-      <section id="privacy-teaser" className="marketing-trust" aria-labelledby="trust-heading">
+      <section id="privacy-teaser" className="marketing-trust" data-reveal aria-labelledby="trust-heading">
         <div className="marketing-trust-inner">
           <Shield size={28} aria-hidden="true" />
           <h2 id="trust-heading">Built for privacy, designed for students</h2>
@@ -370,7 +379,7 @@ export default function MarketingLanding() {
       </section>
 
       {/* ── Final CTA ──────────────────────────────────────── */}
-      <section className="marketing-final" aria-labelledby="final-heading">
+      <section className="marketing-final" data-reveal aria-labelledby="final-heading">
         <div className="marketing-final-inner">
           <h2 id="final-heading">Ready to study smarter?</h2>
           <div className="marketing-hero-actions">
@@ -411,7 +420,6 @@ export default function MarketingLanding() {
             <Link href="/privacy">Privacy</Link>
             <Link href="/terms">Terms</Link>
             <a href="/sitemap.xml">Sitemap</a>
-            <a href="/llms.txt">llms.txt</a>
           </nav>
         </div>
         <div className="marketing-footer-base">

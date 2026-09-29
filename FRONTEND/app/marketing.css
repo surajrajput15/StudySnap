@@ -79,6 +79,10 @@
   background: var(--surface-variant);
 }
 
+.marketing-link:active {
+  background: var(--primary-container);
+}
+
 .marketing-cta-primary {
   display: inline-flex;
   align-items: center;
@@ -96,8 +100,13 @@
 }
 
 .marketing-cta-primary:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(0, 97, 164, 0.35);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 97, 164, 0.35);
+}
+
+.marketing-cta-primary:active {
+  transform: translateY(0) scale(0.98);
+  box-shadow: 0 2px 10px rgba(0, 97, 164, 0.25);
 }
 
 .marketing-cta-secondary {
@@ -111,21 +120,23 @@
   padding: 9px 18px;
   border-radius: 100px;
   border: 1.5px solid var(--primary);
-  transition: background var(--transition-fast);
+  transition: background var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .marketing-cta-secondary:hover {
   background: var(--primary-container);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(0, 97, 164, 0.18);
+}
+
+.marketing-cta-secondary:active {
+  transform: translateY(0) scale(0.98);
+  box-shadow: none;
 }
 
 .marketing-hero {
-  padding: 60px 20px 40px;
+  padding: 64px 20px 44px;
   text-align: center;
-}
-
-.marketing-hero-inner {
-  max-width: 760px;
-  margin: 0 auto;
 }
 
 .marketing-badge {
@@ -135,6 +146,7 @@
   padding: 6px 14px;
   border-radius: 100px;
   background: var(--primary-container);
+  border: 1px solid rgba(0, 97, 164, 0.14);
   color: var(--on-primary-container);
   font-size: 12px;
   font-weight: 600;
@@ -145,9 +157,9 @@
   font-family: var(--font-title);
   font-size: clamp(2.2rem, 5vw, 3.4rem);
   font-weight: 800;
-  line-height: 1.1;
+  line-height: 1.06;
   margin: 0 0 16px;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.025em;
 }
 
 .marketing-gradient {
@@ -204,8 +216,90 @@
   flex-shrink: 0;
 }
 
+/* Screen-reader-only text (landing loads only globals-base.css, which has
+   no .visually-hidden utility). */
+.marketing-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Controlled app entry: small unobtrusive countdown pill under the hero
+   value points. Never blocks the CTAs above it. */
+.marketing-autoenter {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin: 18px 0 0;
+  padding: 7px 14px;
+  font-size: 13px;
+  color: var(--on-surface-variant);
+  background: #f4f8fd;
+  border: 1px solid rgba(0, 97, 164, 0.12);
+  border-radius: 100px;
+}
+
+.marketing-autoenter strong {
+  color: var(--primary);
+  font-variant-numeric: tabular-nums;
+  min-width: 2ch;
+  display: inline-block;
+}
+
+.marketing-autoenter a {
+  color: var(--primary);
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.marketing-autoenter a:hover {
+  text-decoration: underline;
+}
+
+.marketing-autoenter-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--primary);
+  flex-shrink: 0;
+  animation: marketing-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes marketing-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+/* Smooth landing → app handoff: fade out before client-side navigation. */
+.marketing-root.is-leaving {
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+/* Scroll reveals: base state stays visible (no-JS safe). Once the
+   AutoEnter client component signals readiness, [data-reveal] sections
+   start hidden and transition in via IntersectionObserver. */
+html[data-reveal-ready] [data-reveal] {
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 0.55s ease, transform 0.55s ease;
+}
+
+html[data-reveal-ready] [data-reveal].is-in {
+  opacity: 1;
+  transform: none;
+}
+
 .marketing-features {
-  padding: 60px 20px;
+  padding: 56px 20px;
   background: #ffffff;
 }
 
@@ -225,7 +319,7 @@
 
 .marketing-feature-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: 20px;
 }
 
@@ -233,25 +327,26 @@
   background: var(--background);
   border: 1px solid rgba(0, 97, 164, 0.08);
   border-radius: 16px;
-  padding: 24px;
-  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+  padding: 28px;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast), border-color var(--transition-fast);
 }
 
 .marketing-feature-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 97, 164, 0.08);
+  transform: translateY(-3px);
+  border-color: rgba(0, 97, 164, 0.22);
+  box-shadow: 0 12px 32px rgba(0, 97, 164, 0.12);
 }
 
 .marketing-feature-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
   background: var(--primary-container);
   color: var(--primary);
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 
 .marketing-feature-card h3 {
@@ -345,25 +440,14 @@
   .marketing-nav-inner { padding: 12px 16px; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .marketing-cta-primary,
-  .marketing-feature-card {
-    transition: none;
-  }
-  .marketing-cta-primary:hover,
-  .marketing-feature-card:hover {
-    transform: none;
-  }
-}
-
 /* ═══════════ Hero split + product preview ═══════════ */
 
 .marketing-hero-split {
   max-width: 1180px;
   margin: 0 auto;
   display: grid;
-  grid-template-columns: 1fr 1.05fr;
-  gap: 56px;
+  grid-template-columns: 1fr 1.12fr;
+  gap: 64px;
   align-items: center;
   text-align: left;
 }
@@ -393,12 +477,31 @@
   position: relative;
 }
 
+/* Soft background glow behind the product preview — restrained, blue-only. */
+.marketing-preview::before {
+  content: "";
+  position: absolute;
+  inset: 12% -6% -8% 6%;
+  background: radial-gradient(closest-side, rgba(0, 97, 164, 0.12), transparent 72%);
+  pointer-events: none;
+}
+
 .marketing-browser {
+  position: relative;
   background: #ffffff;
-  border: 1px solid rgba(0, 97, 164, 0.12);
-  border-radius: 16px;
-  box-shadow: 0 24px 60px rgba(0, 97, 164, 0.14);
+  border: 1px solid rgba(0, 97, 164, 0.14);
+  border-radius: 18px;
+  box-shadow:
+    0 2px 6px rgba(0, 97, 164, 0.06),
+    0 28px 64px rgba(0, 97, 164, 0.16);
   overflow: hidden;
+  animation: marketing-float-y 7s ease-in-out infinite;
+}
+
+/* Extremely subtle float — ±5px over 7s. Disabled under reduced-motion. */
+@keyframes marketing-float-y {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
 }
 
 .marketing-browser-bar {
@@ -562,6 +665,28 @@
   border: 1px solid rgba(0, 97, 164, 0.1);
 }
 
+/* AI summary card inside the preview — illustrative bars only, no data. */
+.marketing-mock-aicard {
+  margin-top: 10px;
+  background: #f4f8fd;
+  border: 1px solid rgba(0, 97, 164, 0.12);
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.marketing-mock-aititle {
+  width: 96px;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--primary);
+  opacity: 0.55;
+}
+
+.marketing-mock-line-w90 { width: 90%; }
+
 .marketing-float {
   position: absolute;
   display: inline-flex;
@@ -644,9 +769,25 @@
   grid-template-columns: repeat(3, 1fr);
   gap: 20px;
   counter-reset: step;
+  position: relative;
+}
+
+/* Subtle progression line behind the numerals (desktop only — clarity,
+   not decoration). */
+@media (min-width: 901px) {
+  .marketing-steps::before {
+    content: "";
+    position: absolute;
+    top: 58px;
+    left: 14%;
+    right: 14%;
+    border-top: 2px dashed rgba(0, 97, 164, 0.18);
+    pointer-events: none;
+  }
 }
 
 .marketing-step {
+  position: relative;
   background: var(--background);
   border: 1px solid rgba(0, 97, 164, 0.08);
   border-radius: 16px;
@@ -654,16 +795,14 @@
 }
 
 .marketing-step-n {
-  display: inline-block;
+  display: block;
   font-family: var(--font-title);
-  font-size: 14px;
+  font-size: 2.1rem;
   font-weight: 800;
-  letter-spacing: 0.06em;
+  letter-spacing: -0.02em;
+  line-height: 1;
   color: var(--primary);
-  background: var(--primary-container);
-  border-radius: 100px;
-  padding: 5px 12px;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 .marketing-step h3 {
@@ -692,7 +831,7 @@
   margin: 0 auto;
   display: grid;
   grid-template-columns: 1.1fr 0.9fr;
-  gap: 56px;
+  gap: 48px;
   align-items: center;
 }
 
@@ -702,7 +841,7 @@
   margin: 0;
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 10px 20px;
+  gap: 12px 20px;
 }
 
 .marketing-ai-list li {
@@ -725,12 +864,14 @@
 
 .marketing-chat {
   width: 100%;
-  max-width: 360px;
+  max-width: 380px;
   background: #ffffff;
-  border: 1px solid rgba(0, 97, 164, 0.12);
+  border: 1px solid rgba(0, 97, 164, 0.14);
   border-radius: 20px;
-  box-shadow: 0 20px 48px rgba(0, 97, 164, 0.12);
-  padding: 20px;
+  box-shadow:
+    0 2px 6px rgba(0, 97, 164, 0.05),
+    0 22px 52px rgba(0, 97, 164, 0.13);
+  padding: 22px;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -830,9 +971,10 @@
 /* ═══════════ Final CTA ═══════════ */
 
 .marketing-final {
-  padding: 70px 20px;
+  padding: 76px 20px;
   text-align: center;
-  background: #ffffff;
+  background: linear-gradient(180deg, #ffffff 0%, #f2f7fd 100%);
+  border-top: 1px solid rgba(0, 97, 164, 0.08);
 }
 
 .marketing-final-inner {
@@ -885,6 +1027,17 @@
   flex-direction: column;
   gap: 10px;
   align-items: flex-start;
+}
+
+.marketing-footer-grid nav a {
+  color: var(--on-surface-variant);
+  text-decoration: none;
+  font-size: 14px;
+  transition: color var(--transition-fast);
+}
+
+.marketing-footer-grid nav a:hover {
+  color: var(--primary);
 }
 
 .marketing-footer-base {
@@ -1008,6 +1161,9 @@
     max-width: 560px;
     margin: 0 auto;
   }
+  .marketing-feature-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
   .marketing-footer-grid {
     grid-template-columns: 1fr 1fr;
   }
@@ -1048,6 +1204,9 @@
   .marketing-hero-actions .marketing-cta-secondary {
     justify-content: center;
   }
+  .marketing-feature-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 380px) {
@@ -1057,5 +1216,32 @@
   .marketing-footer-grid {
     grid-template-columns: 1fr;
     gap: 24px;
+  }
+}
+
+/* Placed at end of file to win cascade over all preceding animation definitions */
+@media (prefers-reduced-motion: reduce) {
+  .marketing-cta-primary,
+  .marketing-cta-secondary,
+  .marketing-feature-card,
+  .marketing-root.is-leaving,
+  html[data-reveal-ready] [data-reveal] {
+    transition: none;
+    animation: none;
+  }
+  .marketing-cta-primary:hover,
+  .marketing-cta-secondary:hover,
+  .marketing-feature-card:hover {
+    transform: none;
+  }
+  .marketing-browser {
+    animation: none;
+  }
+  .marketing-autoenter-dot {
+    animation: none;
+  }
+  html[data-reveal-ready] [data-reveal] {
+    opacity: 1;
+    transform: none;
   }
 }
