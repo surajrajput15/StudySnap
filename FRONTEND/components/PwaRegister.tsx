@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useStore } from '@/lib/store/useStore';
 
 export default function PwaRegister() {
   useEffect(() => {
@@ -66,20 +65,8 @@ export default function PwaRegister() {
       window.addEventListener('load', register);
     }
 
-    // Monitor online/offline status
-    const updateOnlineStatus = () => {
-      const isOffline = !navigator.onLine;
-      useStore.getState().setOfflineStatus(isOffline);
-    };
-
-    window.addEventListener('online', updateOnlineStatus);
-    window.addEventListener('offline', updateOnlineStatus);
-    updateOnlineStatus(); // Initial run
-
     return () => {
       window.removeEventListener('load', register);
-      window.removeEventListener('online', updateOnlineStatus);
-      window.removeEventListener('offline', updateOnlineStatus);
     };
   }, []);
 

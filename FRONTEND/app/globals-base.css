@@ -59,10 +59,10 @@
   --shadow-color-strong: rgba(0, 97, 164, 0.15);
 
   /* ═══ Typography ═══ */
-  --font-display: 'Outfit', 'Inter', -apple-system, sans-serif;
-  --font-title: 'Outfit', 'Inter', -apple-system, sans-serif;
-  --font-body: 'Inter', -apple-system, sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
+  --font-display: var(--font-hero, 'Outfit', 'Inter', -apple-system, sans-serif);
+  --font-title: var(--font-hero, 'Outfit', 'Inter', -apple-system, sans-serif);
+  --font-body: var(--font-sans, 'Inter', -apple-system, sans-serif);
+  --font-mono: var(--font-code, 'JetBrains Mono', monospace);
 
   --text-display: 2.25rem;
   --text-headline: 1.75rem;

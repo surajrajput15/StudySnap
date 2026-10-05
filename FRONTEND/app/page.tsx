@@ -184,6 +184,7 @@ const steps = [
 export default function MarketingLanding() {
   return (
     <main className="marketing-root" aria-label="StudySnap — AI-powered study companion">
+      <AutoEnter />
       {/* ── Background Aurora Lights ────────────────────────── */}
       <div className="marketing-aurora" aria-hidden="true">
         <div className="aurora-blob aurora-blob-1" />
@@ -196,7 +197,7 @@ export default function MarketingLanding() {
         <div className="marketing-nav-inner">
           <Link href="/" className="marketing-brand" aria-label="StudySnap home">
             <div className="brand-logo-badge">
-              <Image src="/window.svg" alt="" width={24} height={24} priority />
+              <Image src="/window.svg" alt="" width={24} height={24} />
             </div>
             <span className="brand-title">
               Study<span className="brand-accent">Snap</span>
@@ -256,9 +257,6 @@ export default function MarketingLanding() {
                 </li>
               ))}
             </ul>
-
-            {/* Controlled app entry pill (unobtrusive 4s countdown) */}
-            <AutoEnter />
           </div>
 
           {/* ── High-Fidelity Realistic Product Preview ───────── */}

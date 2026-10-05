@@ -127,7 +127,7 @@ export default function MobileDrawer({ open, onClose, activeTab, onNavigate }: M
       >
         <div className="drawer-header">
           <div className="drawer-header-top">
-            <img src="/window.svg" alt="StudySnap" className="drawer-logo" width={32} height={32} />
+            <Image src="/window.svg" alt="StudySnap" className="drawer-logo" width={32} height={32} />
             <button className="drawer-close" onClick={onClose} aria-label="Close menu">
               <X size={20} />
             </button>

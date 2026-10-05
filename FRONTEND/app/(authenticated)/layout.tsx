@@ -1,6 +1,7 @@
 import { ClerkProvider } from "@clerk/nextjs";
 import SessionExpiredModal from "@/components/SessionExpiredModal";
 import ErrorToast from "@/components/ErrorToast";
+import ThemeSync from "@/components/ThemeSync";
 import "../globals.css";
 
 // Authenticated route group — wraps /app, /sign-in, /sign-up with ClerkProvider
@@ -14,6 +15,7 @@ export default function AuthenticatedLayout({
 }) {
   return (
     <ClerkProvider>
+      <ThemeSync />
       <SessionExpiredModal />
       <ErrorToast />
       {children}

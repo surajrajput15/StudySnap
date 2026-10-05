@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
+import { Outfit, Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
 import PwaRegister from "@/components/PwaRegister";
-import ThemeSync from "@/components/ThemeSync";
 import "./globals-base.css";
 import {
   AUTHOR_NAME,
@@ -10,6 +10,27 @@ import {
   AUTHOR_PORTFOLIO,
   SITE_URL,
 } from "@/lib/marketing/constants";
+
+const outfit = Outfit({
+  subsets: ["latin"],
+  weight: ["500", "600", "700", "800", "900"],
+  variable: "--font-hero",
+  display: "swap",
+});
+
+const plusJakarta = Plus_Jakarta_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
+  variable: "--font-sans",
+  display: "swap",
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500"],
+  variable: "--font-code",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "StudySnap - Smart Study Companion",
@@ -114,7 +135,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${outfit.variable} ${plusJakarta.variable} ${jetbrainsMono.variable}`}>
       <head>
         {/* Phase B P2: pre-paint theme so dark users never flash light. Reads
             the guest-scope persisted theme (per-account keys are unknowable
@@ -126,21 +147,14 @@ export default function RootLayout({
           }}
         />
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-          <link rel="icon" href="/favicon.ico" sizes="any" />
-          <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-          <meta name="author" content={AUTHOR_FULL} />
-          <link rel="preconnect" href="https://clerk.accounts.dev" crossOrigin="anonymous" />
-          <link rel="preconnect" href={process.env.NEXT_PUBLIC_BACKEND_URL || "https://studysnap-backend.onrender.com"} crossOrigin="anonymous" />
-          {/* Phase B P2: avatar + voice-audio origins allowed by the CSP. */}
-          <link rel="preconnect" href="https://img.clerk.com" crossOrigin="anonymous" />
-          <link rel="preconnect" href="https://res.cloudinary.com" crossOrigin="anonymous" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+        <meta name="author" content={AUTHOR_FULL} />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
         />
       </head>
       <body>
-        <ThemeSync />
         <PwaRegister />
         {children}
       </body>

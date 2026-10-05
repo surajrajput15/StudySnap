@@ -4,8 +4,6 @@
    and responsive layout engineering.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Outfit:wght@500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap');
-
 :root {
   --m-primary: #0061A4;
   --m-primary-light: #258cfb;
@@ -19,9 +17,9 @@
   --m-border: rgba(0, 97, 164, 0.12);
   --m-border-subtle: rgba(226, 232, 240, 0.9);
   --m-card-bg: #ffffff;
-  --font-hero: 'Outfit', sans-serif;
-  --font-sans: 'Plus Jakarta Sans', -apple-system, sans-serif;
-  --font-code: 'JetBrains Mono', monospace;
+  --font-hero: var(--font-hero, 'Outfit', sans-serif);
+  --font-sans: var(--font-sans, 'Plus Jakarta Sans', -apple-system, sans-serif);
+  --font-code: var(--font-code, 'JetBrains Mono', monospace);
 }
 
 /* ── Base Container & Reset ──────────────────────────────── */
@@ -51,6 +49,7 @@
   overflow: hidden;
   pointer-events: none;
   z-index: 0;
+  contain: paint layout;
 }
 
 .aurora-blob {
@@ -59,6 +58,8 @@
   filter: blur(100px);
   opacity: 0.45;
   animation: aurora-float 14s ease-in-out infinite alternate;
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
 }
 
 .aurora-blob-1 {
@@ -299,11 +300,11 @@
 }
 
 .marketing-gradient {
+  color: var(--m-primary);
   background: linear-gradient(135deg, #005697 0%, #0077D4 50%, #00B4D8 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
-  color: transparent;
 }
 
 .marketing-subtitle {
@@ -403,11 +404,6 @@
   overflow: hidden;
   clip: rect(0, 0, 0, 0);
   border: 0;
-}
-
-.marketing-root.is-leaving {
-  opacity: 0;
-  transition: opacity 0.3s ease;
 }
 
 /* ── Hero High-Fidelity Product Preview ──────────────────── */
@@ -959,6 +955,17 @@
   width: 1px;
   height: 40px;
   background: #e2e8f0;
+}
+
+/* ── Below-The-Fold Performance Optimization ─────────────── */
+.marketing-features,
+.marketing-demo-section,
+.marketing-how,
+.marketing-offline,
+.marketing-final,
+.marketing-footer {
+  content-visibility: auto;
+  contain-intrinsic-size: 1px 650px;
 }
 
 /* ── Features Section ────────────────────────────────────── */
@@ -1996,7 +2003,8 @@
 html[data-reveal-ready] [data-reveal] {
   opacity: 0;
   transform: translateY(20px);
-  transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1), transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
 }
 
 html[data-reveal-ready] [data-reveal].is-in {
@@ -2088,6 +2096,36 @@ html[data-reveal-ready] [data-reveal].is-in {
     width: 100%;
     justify-content: center;
   }
+  .marketing-aurora {
+    height: 480px;
+    opacity: 0.55;
+  }
+  .aurora-blob {
+    animation: none !important;
+    filter: blur(40px);
+  }
+  .aurora-blob-1 {
+    width: 280px;
+    height: 280px;
+    top: -40px;
+    left: -20px;
+  }
+  .aurora-blob-2 {
+    width: 240px;
+    height: 240px;
+    top: 60px;
+    right: -20px;
+  }
+  .aurora-blob-3 {
+    display: none;
+  }
+  .marketing-nav {
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+  .marketing-browser-glow {
+    filter: blur(14px);
+  }
 }
 
 /* ── Accessibility: Reduced Motion Override ──────────────── */
@@ -2096,7 +2134,6 @@ html[data-reveal-ready] [data-reveal].is-in {
   .marketing-cta-secondary,
   .marketing-feature-card,
   .marketing-step,
-  .marketing-root.is-leaving,
   .marketing-browser,
   .aurora-blob,
   .marketing-autoenter-dot,

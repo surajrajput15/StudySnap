@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useLayoutEffect, useRef, useSyncExternalStore, useCallback } from 'react';
 import dynamic from 'next/dynamic';
+import Image from 'next/image';
 import { useStore, switchStoreScopeForUser, migrateGuestDataForUser } from '@/lib/store/useStore';
 import { syncNotesForUser } from '@/lib/sync/notesSync';
 import { syncVoiceNotesForUser } from '@/lib/sync/voiceNotesSync';
@@ -289,7 +290,7 @@ export default function Page() {
       {/* ─── Desktop Sidebar ─── */}
       <aside className="app-sidebar" aria-label="Primary">
         <div className="sidebar-brand" role="button" tabIndex={0} onClick={() => navigate('home')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate('home'); } }}>
-          <img src="/window.svg" alt="StudySnap" className="sidebar-logo" width={32} height={32} fetchPriority="high" />
+          <Image src="/window.svg" alt="StudySnap" className="sidebar-logo" width={32} height={32} priority />
           <span className="sidebar-name">StudySnap</span>
         </div>
         <nav className="sidebar-nav" aria-label="Study sections">
@@ -322,7 +323,7 @@ export default function Page() {
             <button className="header-hamburger" onClick={() => setDrawerOpen(true)} aria-label="Open menu" aria-expanded={drawerOpen} aria-controls="mobile-menu">
               <Menu size={22} />
             </button>            <span className="header-title" role="button" tabIndex={0} onClick={() => navigate('home')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate('home'); } }}>
-              <img src="/window.svg" alt="StudySnap" className="header-mobile-logo" width={32} height={32} fetchPriority="high" />
+              <Image src="/window.svg" alt="StudySnap" className="header-mobile-logo" width={32} height={32} priority />
               <span className="header-brand-text">StudySnap</span>
               <span className="header-tab-name">{navItems.find(t => t.id === activeTab)?.label}</span>
             </span>
