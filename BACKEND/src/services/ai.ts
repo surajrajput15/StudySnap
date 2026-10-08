@@ -272,6 +272,80 @@ export async function translateText(content: string, lang: 'hindi' | 'english') 
   }
 }
 
+export interface MindMapNode {
+  id: string;
+  label: string;
+  children?: MindMapNode[];
+}
+
+export interface QuizQuestion {
+  id: string;
+  question: string;
+  options: string[];
+  correctIndex: number;
+  explanation: string;
+}
+
+export async function generateMindMap(title: string, content: string): Promise<MindMapNode> {
+  ensureAIAllowed();
+  if (!groq) {
+    console.log('[ai] mock → generateMindMap', { title });
+    return mockMindMap(title);
+  }
+  try {
+    console.log('[ai] groq → generateMindMap', { title, contentLength: content.length });
+    const response = await withGroqTimeout(groq.chat.completions.create({
+      model: AI_MODEL,
+      messages: [
+        {
+          role: 'system',
+          content: `You are an expert study visualizer. Create a hierarchical Mind Map from the text in valid JSON format.
+Root must be: {"id": "root", "label": "${title || 'Main Topic'}", "children": [{"id": "node-1", "label": "Key Concept", "children": [...]}]}.
+Return ONLY valid JSON matching this tree shape. ${INJECTION_GUARD}`,
+        },
+        { role: 'user', content: `Topic: ${title}\nText:\n${delimitUserData(content)}` },
+      ],
+      temperature: 0.3,
+      max_tokens: 2048,
+    }));
+    return parseMindMapJson(response.choices[0]?.message?.content, title);
+  } catch (error) {
+    console.error('[ai] groq → generateMindMap ❌', getErrorMessage(error, 'Mind map generation failed'));
+    throw wrapAIError(error, 'Mind map generation failed');
+  }
+}
+
+export async function generateQuiz(title: string, content: string, count: number = 5): Promise<QuizQuestion[]> {
+  ensureAIAllowed();
+  if (!groq) {
+    console.log('[ai] mock → generateQuiz', { title, count });
+    return mockQuiz(count);
+  }
+  try {
+    console.log('[ai] groq → generateQuiz', { title, count, contentLength: content.length });
+    const response = await withGroqTimeout(groq.chat.completions.create({
+      model: AI_MODEL,
+      messages: [
+        {
+          role: 'system',
+          content: `Generate ${count} interactive quiz questions from the study material.
+Return ONLY a valid JSON array:
+[{"id": "q1", "question": "...", "options": ["A", "B", "C", "D"], "correctIndex": 0, "explanation": "..."}].
+Every option array must have 4 items. correctIndex must be 0, 1, 2, or 3. ${INJECTION_GUARD}`,
+        },
+        { role: 'user', content: `Topic: ${title}\nText:\n${delimitUserData(content)}` },
+      ],
+      temperature: 0.4,
+      max_tokens: 2048,
+    }));
+    return parseQuizJson(response.choices[0]?.message?.content);
+  } catch (error) {
+    console.error('[ai] groq → generateQuiz ❌', getErrorMessage(error, 'Quiz generation failed'));
+    throw wrapAIError(error, 'Quiz generation failed');
+  }
+}
+
+
 function isMcqShape(item: unknown): boolean {
   if (typeof item !== 'object' || item === null) return false;
   const m = item as Record<string, unknown>;
@@ -356,4 +430,112 @@ function mockTranslation(content: string, lang: string) {
     return `[हिंदी अनुवाद]\n\nयह आपके नोट्स का अनुवाद है। GROQ_API_KEY सेट करें वास्तविक अनुवाद के लिए।\n\nमूल: ${content.substring(0, 100)}...`;
   }
   return `[English Translation]\n\nThis is a translation of your notes. Set GROQ_API_KEY for real AI translation.\n\nOriginal: ${content.substring(0, 100)}...`;
+}
+
+function parseMindMapJson(raw: string | null | undefined, fallbackTitle: string): MindMapNode {
+  const match = (raw || '').match(/\{[\s\S]*\}/);
+  if (!match) throw new Error('Model returned no JSON tree for mind map');
+  try {
+    const parsed = JSON.parse(match[0]);
+    if (!parsed || typeof parsed !== 'object' || typeof parsed.label !== 'string') {
+      throw new Error('Invalid mind map structure');
+    }
+    return parsed as MindMapNode;
+  } catch {
+    return mockMindMap(fallbackTitle);
+  }
+}
+
+function parseQuizJson(raw: string | null | undefined): QuizQuestion[] {
+  const match = (raw || '').match(/\[\s*\{[\s\S]*\}\s*\]/);
+  if (!match) throw new Error('Model returned no JSON array for quiz');
+  try {
+    const parsed = JSON.parse(match[0]);
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      throw new Error('Empty quiz questions array');
+    }
+    return parsed.map((item, idx) => ({
+      id: item.id || `q${idx + 1}`,
+      question: String(item.question || 'Question'),
+      options: Array.isArray(item.options) ? item.options.map(String) : ['Option A', 'Option B', 'Option C', 'Option D'],
+      correctIndex: typeof item.correctIndex === 'number' ? item.correctIndex : 0,
+      explanation: String(item.explanation || ''),
+    }));
+  } catch {
+    return mockQuiz(3);
+  }
+}
+
+function mockMindMap(title: string): MindMapNode {
+  return {
+    id: 'root',
+    label: title || 'Core Concepts',
+    children: [
+      {
+        id: 'node-1',
+        label: 'Fundamentals',
+        children: [
+          { id: 'node-1-1', label: 'Key Definitions' },
+          { id: 'node-1-2', label: 'Core Principles' },
+        ],
+      },
+      {
+        id: 'node-2',
+        label: 'Practical Applications',
+        children: [
+          { id: 'node-2-1', label: 'Real-world Examples' },
+          { id: 'node-2-2', label: 'Practice Problems' },
+        ],
+      },
+      {
+        id: 'node-3',
+        label: 'Review & Retention',
+        children: [
+          { id: 'node-3-1', label: 'Active Recall' },
+          { id: 'node-3-2', label: 'Spaced Schedules' },
+        ],
+      },
+    ],
+  };
+}
+
+function mockQuiz(count: number = 3): QuizQuestion[] {
+  return [
+    {
+      id: 'q1',
+      question: 'What is the primary advantage of active recall over passive reading?',
+      options: [
+        'Faster reading speed',
+        'Strengthens neural retrieval pathways for long-term retention',
+        'Reduces need for note-taking',
+        'Eliminates need for sleep',
+      ],
+      correctIndex: 1,
+      explanation: 'Active retrieval forces the brain to reconstruct memory traces, significantly improving retention.',
+    },
+    {
+      id: 'q2',
+      question: 'When should spaced repetition intervals be scheduled?',
+      options: [
+        'Immediately before an exam only',
+        'Right at the point where forgetting is about to occur',
+        'Every hour continuously',
+        'Once every year',
+      ],
+      correctIndex: 1,
+      explanation: 'Spaced repetition models the Ebbinghaus forgetting curve, scheduling review sessions just before decay.',
+    },
+    {
+      id: 'q3',
+      question: 'How do visual mind maps support complex learning?',
+      options: [
+        'By replacing all written text',
+        'By revealing hierarchical relationships and conceptual links between ideas',
+        'By reducing study time to zero',
+        'By avoiding revision',
+      ],
+      correctIndex: 1,
+      explanation: 'Mind maps visualize conceptual hierarchies, facilitating associative memory and schema formation.',
+    },
+  ].slice(0, count);
 }

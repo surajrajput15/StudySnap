@@ -4,8 +4,11 @@ import React, { useState, useMemo } from 'react';
 import { useStore, getStoreScopeKey } from '@/lib/store/useStore';
 import {
   User, School, BookOpen, GraduationCap, Award, CheckCircle, FileText, Music, Sparkles,
-  TrendingUp, Clock, Target, Flame, Zap, Trophy, BarChart3, CalendarDays, Download
+  TrendingUp, Clock, Target, Flame, Zap, Trophy, BarChart3, CalendarDays, Download, Shield
 } from 'lucide-react';
+import { useUser } from '@clerk/nextjs';
+import Link from 'next/link';
+import { isSuperAdminEmail } from '@/lib/config';
 import { celebrate } from '@/lib/confetti';
 import { WEEKDAYS } from '@/lib/constants';
 import { getXpLevel, getMonthlyReport } from '@/lib/gamification';
@@ -31,6 +34,12 @@ export default function ProfileView() {
   const [semester, setSemester] = useState(user.semester);
   const [studyGoals, setStudyGoals] = useState(user.studyGoals);
   const [isEditing, setIsEditing] = useState(false);
+  const { user: clerkUser } = useUser();
+
+  const userEmail = clerkUser?.primaryEmailAddress?.emailAddress || clerkUser?.emailAddresses?.[0]?.emailAddress || '';
+  const userRole = (clerkUser?.publicMetadata?.role as string)?.toUpperCase();
+  const isSuperAdmin = isSuperAdminEmail(userEmail) || userRole === 'SUPER_ADMIN';
+  const isAdmin = isSuperAdmin || userRole === 'ADMIN';
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -362,6 +371,67 @@ export default function ProfileView() {
           </div>
         </div>
       </div>
+
+      {/* Admin Command Center Access - Only visible to surajdona2005@gmail.com or ADMIN / SUPER_ADMIN */}
+      {isAdmin && (
+        <div
+          style={{
+            marginTop: '32px',
+            padding: '24px',
+            borderRadius: '20px',
+            background: 'linear-gradient(135deg, rgba(0, 97, 164, 0.08), rgba(51, 153, 255, 0.12))',
+            border: '2px solid var(--primary)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Shield size={20} color="var(--primary)" />
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0, color: 'var(--on-surface)' }}>
+                Admin Command Center
+              </h3>
+            </div>
+            <span
+              style={{
+                padding: '3px 10px',
+                borderRadius: '999px',
+                background: isSuperAdmin ? '#fef3c7' : '#dbeafe',
+                color: isSuperAdmin ? '#92400e' : '#1e40af',
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                border: `1px solid ${isSuperAdmin ? '#fcd34d' : '#93c5fd'}`,
+              }}
+            >
+              {isSuperAdmin ? 'SUPER ADMIN PRIVILEGES' : 'ADMINISTRATOR'}
+            </span>
+          </div>
+          <p style={{ fontSize: '0.875rem', color: 'var(--on-surface-variant)', margin: 0, lineHeight: 1.5 }}>
+            Your account ({userEmail}) has administrative authority over the StudySnap platform. Access platform metrics, user directory moderation, AI feature kill-switches, and security audit logs.
+          </p>
+          <div style={{ marginTop: '8px' }}>
+            <Link
+              href="/admin"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '10px 20px',
+                borderRadius: '12px',
+                background: 'var(--primary)',
+                color: '#ffffff',
+                fontWeight: 600,
+                fontSize: '0.875rem',
+                textDecoration: 'none',
+              }}
+            >
+              <span>Launch Admin Command Center</span>
+              <span>→</span>
+            </Link>
+          </div>
+        </div>
+      )}
 
     </div>
   );

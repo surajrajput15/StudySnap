@@ -86,6 +86,18 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Never intercept admin portal, API endpoints, auth routes, or Next.js internals
+  const url = new URL(event.request.url);
+  if (
+    url.pathname.startsWith('/admin') ||
+    url.pathname.startsWith('/api') ||
+    url.pathname.startsWith('/sign-in') ||
+    url.pathname.startsWith('/sign-up') ||
+    url.pathname.startsWith('/_next')
+  ) {
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {

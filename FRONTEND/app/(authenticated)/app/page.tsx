@@ -30,12 +30,20 @@ const AiTutor = dynamic(() => import('@/components/AiTutor'), { ssr: false, load
 const RevisionCalendar = dynamic(() => import('@/components/RevisionCalendar'), { ssr: false, loading: () => <LoadingShell /> });
 const ProfileView = dynamic(() => import('@/components/ProfileView'), { ssr: false, loading: () => <LoadingShell /> });
 const GamificationHub = dynamic(() => import('@/components/GamificationHub'), { ssr: false, loading: () => <LoadingShell /> });
+const FlashcardViewer = dynamic(() => import('@/components/FlashcardViewer'), { ssr: false, loading: () => <LoadingShell /> });
+const QuizPlayer = dynamic(() => import('@/components/QuizPlayer'), { ssr: false, loading: () => <LoadingShell /> });
+const MindMapViewer = dynamic(() => import('@/components/MindMapViewer'), { ssr: false, loading: () => <LoadingShell /> });
+const PdfAiStudio = dynamic(() => import('@/components/PdfAiStudio'), { ssr: false, loading: () => <LoadingShell /> });
+const TranslationView = dynamic(() => import('@/components/TranslationView'), { ssr: false, loading: () => <LoadingShell /> });
+
 import {
   Home, FileText, Mic, Calendar, Sparkles, User, Sun, Moon,
-  ChevronRight, Trophy, Menu
+  ChevronRight, Trophy, Menu, Shield
 } from 'lucide-react';
+import Link from 'next/link';
 import { useAuth, useUser } from '@clerk/nextjs';
 import AuthButtons from '@/components/AuthButtons';
+import { isSuperAdminEmail } from '@/lib/config';
 
 export default function Page() {
   const theme = useStore((s) => s.theme);
@@ -45,6 +53,13 @@ export default function Page() {
   const syncProfileNameFromClerk = useStore((s) => s.syncProfileNameFromClerk);
   const { isSignedIn, isLoaded, getToken } = useAuth();
   const { user: clerkUser } = useUser();
+  const userEmail = clerkUser?.primaryEmailAddress?.emailAddress || clerkUser?.emailAddresses?.[0]?.emailAddress || '';
+  const userRole = (clerkUser?.publicMetadata?.role as string)?.toUpperCase();
+  const isSuperAdmin = isSuperAdminEmail(userEmail) || userRole === 'SUPER_ADMIN';
+  const isAdmin = isSuperAdmin || userRole === 'ADMIN';
+
+  const [activeSubTool, setActiveSubTool] = useState<'flashcards' | 'quiz' | 'mindmap' | 'pdf' | 'translate' | null>(null);
+
   const [activeTab, setActiveTab] = useState<string>(() => {
     if (typeof window === 'undefined') return 'home';
     const params = new URLSearchParams(window.location.search);
@@ -74,6 +89,7 @@ export default function Page() {
       const leave = window.confirm(RECORDING_NAV_CONFIRM_MESSAGE);
       if (!leave) return false;
     }
+    setActiveSubTool(null);
     setActiveTab(nextTab);
     return true;
   }, [activeTab, voiceRecording]);
@@ -312,6 +328,30 @@ export default function Page() {
           })}
         </nav>
         <div className="sidebar-footer">
+          {isAdmin && (
+            <Link
+              href="/admin"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '8px 12px',
+                marginBottom: '10px',
+                borderRadius: '8px',
+                background: 'var(--surface-variant)',
+                border: '1px solid var(--outline-variant)',
+                color: 'var(--on-surface)',
+                textDecoration: 'none',
+                fontSize: '0.8125rem',
+                fontWeight: 600,
+                transition: 'all 0.2s ease',
+              }}
+              title="Open Administrator Command Center"
+            >
+              <Shield size={16} color="var(--primary)" />
+              <span>Command Center</span>
+            </Link>
+          )}
           <span className="sidebar-version">StudySnap V1.0</span>
         </div>
       </aside>
@@ -325,7 +365,7 @@ export default function Page() {
             </button>            <span className="header-title" role="button" tabIndex={0} onClick={() => navigate('home')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate('home'); } }}>
               <Image src="/window.svg" alt="StudySnap" className="header-mobile-logo" width={32} height={32} priority />
               <span className="header-brand-text">StudySnap</span>
-              <span className="header-tab-name">{navItems.find(t => t.id === activeTab)?.label}</span>
+              <span className="header-tab-name">{activeSubTool ? activeSubTool.toUpperCase() : navItems.find(t => t.id === activeTab)?.label}</span>
             </span>
           </div>
           <div className="header-right">
@@ -340,33 +380,57 @@ export default function Page() {
 
       {/* ─── Main Content ─── */}
       <main className="app-main">
-        <h1 className="visually-hidden">{navItems.find(t => t.id === activeTab)?.label || 'StudySnap'}</h1>
+        <h1 className="visually-hidden">{activeSubTool || navItems.find(t => t.id === activeTab)?.label || 'StudySnap'}</h1>
         <div className="main-content">
-          <ErrorBoundary key={`tab-${activeTab}`} label="This tab">
-            {activeTab === 'home' && (
-              <HomeScreen 
-                onEditNote={handleEditNote} 
-                onCreateNote={handleCreateNote} 
-                onNavigate={(tab) => navigate(tab)}
+          <ErrorBoundary key={`tab-${activeSubTool || activeTab}`} label="This tab">
+            {activeSubTool === 'flashcards' && (
+              <FlashcardViewer onBack={() => setActiveSubTool(null)} />
+            )}
+            {activeSubTool === 'quiz' && (
+              <QuizPlayer onBack={() => setActiveSubTool(null)} />
+            )}
+            {activeSubTool === 'mindmap' && (
+              <MindMapViewer onBack={() => setActiveSubTool(null)} />
+            )}
+            {activeSubTool === 'pdf' && (
+              <PdfAiStudio
+                onBack={() => setActiveSubTool(null)}
+                onOpenTool={(tool) => setActiveSubTool(tool)}
               />
             )}
-            {activeTab === 'editor' && (
-              <NoteEditor 
-                noteId={activeNoteId} 
-                onBack={() => navigate('home')}
-              />
+            {activeSubTool === 'translate' && (
+              <TranslationView onBack={() => setActiveSubTool(null)} />
             )}
-            {activeTab === 'voice' && (
-              <VoiceNotes 
-                onBack={() => setActiveTab('home')}
-                onLinkToNote={handleLinkToNote}
-                onRecordingChange={setVoiceRecording}
-              />
+
+            {!activeSubTool && (
+              <>
+                {activeTab === 'home' && (
+                  <HomeScreen 
+                    onEditNote={handleEditNote} 
+                    onCreateNote={handleCreateNote} 
+                    onNavigate={(tab) => navigate(tab)}
+                    onOpenSubTool={(tool) => setActiveSubTool(tool)}
+                  />
+                )}
+                {activeTab === 'editor' && (
+                  <NoteEditor 
+                    noteId={activeNoteId} 
+                    onBack={() => navigate('home')}
+                  />
+                )}
+                {activeTab === 'voice' && (
+                  <VoiceNotes 
+                    onBack={() => setActiveTab('home')}
+                    onLinkToNote={handleLinkToNote}
+                    onRecordingChange={setVoiceRecording}
+                  />
+                )}
+                {activeTab === 'calendar' && <RevisionCalendar />}
+                {activeTab === 'ai' && <AiTutor onBack={() => navigate('home')} />}
+                {activeTab === 'gamification' && <GamificationHub />}
+                {activeTab === 'profile' && <ProfileView />}
+              </>
             )}
-            {activeTab === 'calendar' && <RevisionCalendar />}
-            {activeTab === 'ai' && <AiTutor onBack={() => navigate('home')} />}
-            {activeTab === 'gamification' && <GamificationHub />}
-            {activeTab === 'profile' && <ProfileView />}
           </ErrorBoundary>
         </div>
       </main>

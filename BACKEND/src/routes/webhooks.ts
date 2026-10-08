@@ -52,15 +52,23 @@ router.post('/clerk', webhookLimiter, raw({ type: 'application/json' }), async (
     console.log('[Webhook] Clerk event:', eventType);
 
     if (eventType === 'user.created') {
-      const userData = (event as { data?: unknown })?.data;
+      const userData = (event as { data?: any })?.data;
       const parsedUser = clerkUserCreatedDataSchema.safeParse(userData);
       if (parsedUser.success && parsedUser.data.id) {
         const { id, first_name, last_name } = parsedUser.data;
         const name = ([first_name, last_name].filter(Boolean).join(' ').trim().slice(0, 200) || 'Student');
+        const email = userData?.email_addresses?.[0]?.email_address;
+        const superAdminEmails = (env.SUPER_ADMIN_EMAILS || 'surajdona2005@gmail.com').split(',').map((e) => e.trim().toLowerCase());
+        const isSuperAdmin = (email && superAdminEmails.includes(email.toLowerCase())) || id === env.ADMIN_USER_IDS;
+        const role = isSuperAdmin ? 'SUPER_ADMIN' : 'USER';
+
         try {
           const db = getDb();
           if (db) {
-            await db.insert(users).values({ id, name }).onConflictDoNothing({ target: users.id });
+            await db.insert(users).values({ id, name, email: email || null, role }).onConflictDoUpdate({
+              target: users.id,
+              set: { name, email: email || null, role },
+            });
           }
         } catch (e) {
           console.error('[Webhook] user upsert failed:', e instanceof Error ? e.message : e);

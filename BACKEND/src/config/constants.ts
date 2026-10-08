@@ -51,3 +51,91 @@ export const DEFAULT_CATEGORIES = [
   { id: 'cat-biology', name: 'Biology', color: '#EC4899' },
   { id: 'cat-computer', name: 'Computer', color: '#8B5CF6' },
 ] as const;
+
+export type UserRole = 'USER' | 'ADMIN' | 'SUPER_ADMIN' | 'MODERATOR' | 'SUPPORT' | 'ANALYST';
+
+export const USER_ROLES: readonly UserRole[] = [
+  'USER',
+  'ADMIN',
+  'SUPER_ADMIN',
+  'MODERATOR',
+  'SUPPORT',
+  'ANALYST',
+] as const;
+
+export type Permission =
+  | 'users.view'
+  | 'users.manage'
+  | 'content.view'
+  | 'content.moderate'
+  | 'ai.analytics.view'
+  | 'ai.feature.manage'
+  | 'ai.provider.manage'
+  | 'analytics.view'
+  | 'security.view'
+  | 'audit.view'
+  | 'staff.manage'
+  | 'settings.manage';
+
+export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
+  USER: [],
+  ANALYST: ['ai.analytics.view', 'analytics.view'],
+  SUPPORT: ['users.view', 'content.view'],
+  MODERATOR: ['users.view', 'content.view', 'content.moderate', 'audit.view'],
+  ADMIN: [
+    'users.view',
+    'users.manage',
+    'content.view',
+    'content.moderate',
+    'ai.analytics.view',
+    'ai.feature.manage',
+    'ai.provider.manage',
+    'analytics.view',
+    'security.view',
+    'audit.view',
+    'settings.manage',
+  ],
+  SUPER_ADMIN: [
+    'users.view',
+    'users.manage',
+    'content.view',
+    'content.moderate',
+    'ai.analytics.view',
+    'ai.feature.manage',
+    'ai.provider.manage',
+    'analytics.view',
+    'security.view',
+    'audit.view',
+    'staff.manage',
+    'settings.manage',
+  ],
+};
+
+export const AI_FEATURE_KEYS = [
+  'ai_summary',
+  'ai_mcq',
+  'ai_flashcards',
+  'ai_mindmap',
+  'ai_quiz',
+  'ai_translate',
+  'ai_assistant',
+  'ai_pdf',
+  'voice_transcription',
+] as const;
+
+export type AiFeatureKey = (typeof AI_FEATURE_KEYS)[number];
+
+export const AUDIT_ACTIONS = [
+  'ADMIN_ACCESS',
+  'AUTH_LOGIN',
+  'USER_SUSPEND',
+  'USER_REACTIVATE',
+  'ROLE_CHANGE',
+  'FEATURE_FLAG_TOGGLE',
+  'AI_KILL_SWITCH_ALL',
+  'AI_RESTORE_ALL',
+  'DIAGNOSTIC_PROBE_RUN',
+] as const;
+
+export type AuditAction = (typeof AUDIT_ACTIONS)[number];
+

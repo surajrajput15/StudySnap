@@ -135,7 +135,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${outfit.variable} ${plusJakarta.variable} ${jetbrainsMono.variable}`}>
+    <html lang="en" suppressHydrationWarning className={`${outfit.variable} ${plusJakarta.variable} ${jetbrainsMono.variable}`}>
       <head>
         {/* Phase B P2: pre-paint theme so dark users never flash light. Reads
             the guest-scope persisted theme (per-account keys are unknowable
@@ -154,7 +154,7 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
         />
       </head>
-      <body>
+      <body suppressHydrationWarning>
         <PwaRegister />
         {children}
       </body>

@@ -3,6 +3,9 @@ import { pgTable, text, timestamp, boolean, integer, uuid, index } from 'drizzle
 export const users = pgTable('users', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
+  email: text('email'),
+  role: text('role').default('USER').notNull(),
+  isSuspended: boolean('is_suspended').default(false).notNull(),
   college: text('college'),
   semester: text('semester'),
   studyGoals: text('study_goals'),
@@ -82,3 +85,87 @@ export const revisionLogs = pgTable('revision_logs', {
   // Day 16 Task 2 — revision rows are queried/cleaned per note.
   index('revision_logs_note_idx').on(table.noteId),
 ]);
+
+export const auditLogs = pgTable('audit_logs', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  actorId: text('actor_id').notNull(),
+  actorEmail: text('actor_email'),
+  action: text('action').notNull(),
+  resourceType: text('resource_type').notNull(),
+  resourceId: text('resource_id'),
+  details: text('details'),
+  ipAddress: text('ip_address'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => [
+  index('audit_logs_actor_idx').on(table.actorId),
+  index('audit_logs_created_idx').on(table.createdAt),
+]);
+
+export const featureFlags = pgTable('feature_flags', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  featureKey: text('feature_key').unique().notNull(),
+  name: text('name').notNull(),
+  status: text('status').default('enabled').notNull(), // 'enabled' | 'maintenance' | 'disabled'
+  description: text('description'),
+  updatedBy: text('updated_by'),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const aiRequestLogs = pgTable('ai_request_logs', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: text('user_id'),
+  feature: text('feature').notNull(),
+  model: text('model').notNull(),
+  durationMs: integer('duration_ms').notNull(),
+  inputChars: integer('input_chars').default(0).notNull(),
+  outputChars: integer('output_chars').default(0).notNull(),
+  success: boolean('success').default(true).notNull(),
+  statusCode: integer('status_code').default(200).notNull(),
+  errorMessage: text('error_message'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => [
+  index('ai_request_logs_feature_idx').on(table.feature),
+  index('ai_request_logs_created_idx').on(table.createdAt),
+  index('ai_request_logs_user_idx').on(table.userId),
+]);
+
+export const quizzes = pgTable('quizzes', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: text('user_id').notNull(),
+  noteId: uuid('note_id').references(() => notes.id, { onDelete: 'set null' }),
+  title: text('title').notNull(),
+  questions: text('questions').notNull(), // JSON string
+  totalQuestions: integer('total_questions').notNull(),
+  bestScore: integer('best_score'),
+  lastAttemptAt: timestamp('last_attempt_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => [
+  index('quizzes_user_idx').on(table.userId),
+]);
+
+export const flashcardDecks = pgTable('flashcard_decks', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: text('user_id').notNull(),
+  noteId: uuid('note_id').references(() => notes.id, { onDelete: 'set null' }),
+  title: text('title').notNull(),
+  cards: text('cards').notNull(), // JSON string
+  cardCount: integer('card_count').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => [
+  index('flashcard_decks_user_idx').on(table.userId),
+]);
+
+export const mindMaps = pgTable('mind_maps', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: text('user_id').notNull(),
+  noteId: uuid('note_id').references(() => notes.id, { onDelete: 'set null' }),
+  title: text('title').notNull(),
+  data: text('data').notNull(), // JSON string
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => [
+  index('mind_maps_user_idx').on(table.userId),
+]);
+

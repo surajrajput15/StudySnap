@@ -49,6 +49,13 @@ export const aiContentSchema = z.object({
   type: z.enum(['mcq', 'flashcard']).optional(),
 }).strict();
 
+export const aiQuizSchema = z.object({
+  title: z.string().max(500).optional(),
+  content: z.string().min(1, 'Content required').max(200000),
+  questionCount: z.number().int().min(1).max(20).optional(),
+}).strict();
+
+
 export const translateSchema = z.object({
   content: z.string().min(1, 'Content required').max(20000),
   targetLanguage: z.enum(['hindi', 'english']).optional(),

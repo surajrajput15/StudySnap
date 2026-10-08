@@ -30,17 +30,41 @@ function detectBackendURL(): string {
 
 const BACKEND_URL = detectBackendURL();
 
+export const SUPER_ADMIN_EMAIL = process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAIL || 'surajdona2005@gmail.com';
+
+export function isSuperAdminEmail(email?: string | null): boolean {
+  if (!email) return false;
+  return email.trim().toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
+}
+
 export const API = {
   base: BACKEND_URL,
   health: `${BACKEND_URL}/api/health`,
   notes: `${BACKEND_URL}/api/notes`,
   categories: `${BACKEND_URL}/api/notes/categories`,
   voiceNotes: `${BACKEND_URL}/api/voice-notes`,
+  admin: {
+    overview: `${BACKEND_URL}/api/admin/overview`,
+    users: `${BACKEND_URL}/api/admin/users`,
+    aiAnalytics: `${BACKEND_URL}/api/admin/ai/analytics`,
+    aiFeatures: `${BACKEND_URL}/api/admin/ai/features`,
+    aiKillAll: `${BACKEND_URL}/api/admin/ai/kill-all`,
+    aiRestoreAll: `${BACKEND_URL}/api/admin/ai/restore-all`,
+    auditLogs: `${BACKEND_URL}/api/admin/audit-logs`,
+    health: `${BACKEND_URL}/api/admin/system/health`,
+  },
+  user: {
+    quizzes: `${BACKEND_URL}/api/user/quizzes`,
+    flashcards: `${BACKEND_URL}/api/user/flashcards`,
+    mindmaps: `${BACKEND_URL}/api/user/mindmaps`,
+  },
   ai: {
     chat: `${BACKEND_URL}/api/ai/chat`,
     summarize: `${BACKEND_URL}/api/ai/summarize`,
     mcqs: `${BACKEND_URL}/api/ai/mcqs`,
     translate: `${BACKEND_URL}/api/ai/translate`,
+    mindmap: `${BACKEND_URL}/api/ai/mindmap`,
+    quiz: `${BACKEND_URL}/api/ai/quiz`,
   },
 };
 

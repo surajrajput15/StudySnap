@@ -36,6 +36,7 @@ const productionCspHeader =
   process.env.NODE_ENV === "production" ? resolveProductionCspHeader() : null;
 
 const nextConfig: NextConfig = {
+  devIndicators: false,
   turbopack: { root: process.cwd() },
   // Next 16.3 + Vercel bug (vercel/next.js#96646): when an adapter is active
   // (Vercel injects one at build time), the whole-server trace file

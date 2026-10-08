@@ -21,6 +21,8 @@ try {
 import notesRouter from './routes/notes';
 import voiceNotesRouter from './routes/voice-notes';
 import aiRouter from './routes/ai';
+import adminRouter from './routes/admin';
+import userToolsRouter from './routes/user-tools';
 import webhooksRouter from './routes/webhooks';
 
 const app = express();
@@ -61,6 +63,8 @@ app.get('/api/health', (req, res) => {
 app.use('/api/notes', notesRouter);
 app.use('/api/voice-notes', voiceNotesRouter);
 app.use('/api/ai', aiRouter);
+app.use('/api/admin', adminRouter);
+app.use('/api/user', userToolsRouter);
 
 app.use((_req, res) => {
   res.status(404).json({ success: false, error: 'Route not found' });

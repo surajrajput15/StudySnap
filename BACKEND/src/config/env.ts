@@ -78,6 +78,10 @@ export const env = {
   BREVO_API_KEY: process.env.BREVO_API_KEY || '',
   BREVO_SENDER_EMAIL: process.env.BREVO_SENDER_EMAIL || 'study@notes.ai',
 
+  SUPER_ADMIN_EMAILS: process.env.SUPER_ADMIN_EMAILS || 'surajdona2005@gmail.com',
+  ADMIN_EMAILS: process.env.ADMIN_EMAILS || 'surajdona2005@gmail.com',
+  ADMIN_USER_IDS: process.env.ADMIN_USER_IDS || '',
+
   isDev: () => isDev,
   isProd: () => isProd,
 };

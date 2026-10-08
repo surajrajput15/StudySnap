@@ -4,10 +4,20 @@ import { useEffect } from 'react';
 
 export default function PwaRegister() {
   useEffect(() => {
-    // Register Service Worker for PWA offline support. Registration is cheap
-    // and idempotent; doing it before `load` when the document is already
-    // ready avoids the race where a fast cached load fires `window.load`
-    // before this effect runs and registration is silently skipped.
+    // In local development, unregister any existing service worker so it
+    // doesn't hijack Turbopack or dynamic route compilation with 503 errors.
+    if (process.env.NODE_ENV === 'development') {
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then((registrations) => {
+          for (const reg of registrations) {
+            reg.unregister();
+          }
+        });
+      }
+      return;
+    }
+
+    // Register Service Worker for PWA offline support in production.
     const register = () => {
       if (!('serviceWorker' in navigator)) return;
       navigator.serviceWorker.register('/sw.js').then(

@@ -66,7 +66,7 @@ function MiniCalendar({ month, year, revisionDates, onPrev, onNext }: {
         <button onClick={onNext} className="revision-cal-nav" aria-label="Next month"><ChevronRight size={14} /></button>
       </div>
       <div className="revision-cal-grid">
-        {DAYS_SHORT.map(d => <div key={d} className="revision-cal-day-header">{d}</div>)}
+        {DAYS_SHORT.map((d, index) => <div key={`day-hdr-${d}-${index}`} className="revision-cal-day-header">{d}</div>)}
         {cells.map((d, i) => {
           if (d === null) return <div key={`e-${i}`} className="revision-cal-cell empty" />;
           const dateStr = `${year}-${(month + 1).toString().padStart(2, '0')}-${d.toString().padStart(2, '0')}`;
@@ -275,8 +275,8 @@ export default function RevisionCalendar() {
             <span>Weekly Revision Trend</span>
           </div>
           <div className="revision-weekly-chart">
-            {weeklyData.map((d) => (
-              <div key={d.day} className="revision-weekly-bar-col">
+            {weeklyData.map((d, idx) => (
+              <div key={`weekly-${d.day}-${idx}`} className="revision-weekly-bar-col">
                 <div className="revision-weekly-bar-wrapper">
                   <div className="revision-weekly-bar" style={{
                     height: `${(d.count / weeklyMax) * 100}%`,

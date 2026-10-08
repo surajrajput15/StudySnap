@@ -31,6 +31,7 @@ interface HomeScreenProps {
   onEditNote: (noteId: string) => void;
   onCreateNote: () => void;
   onNavigate: (tab: string) => void;
+  onOpenSubTool?: (tool: 'flashcards' | 'quiz' | 'mindmap' | 'pdf' | 'translate') => void;
 }
 
 const QUOTES = [
@@ -59,7 +60,7 @@ function CircularProgress({ value, max, size = 80, strokeWidth = 6, color = 'var
   );
 }
 
-export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: HomeScreenProps) {
+export default function HomeScreen({ onEditNote, onCreateNote, onNavigate, onOpenSubTool }: HomeScreenProps) {
   const { getToken } = useAuth();
   const user = useStore((s) => s.user);
   const notes = useStore((s) => s.notes);
@@ -434,7 +435,14 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate }: Hom
             <button
               key={tool.id}
               className="ai-tool-card animate-fade-up"
-              onClick={() => { setActiveAiTool(tool.id); onNavigate('ai'); }}
+              onClick={() => {
+                if (onOpenSubTool && ['flashcards', 'quiz', 'mindmap', 'translate', 'pdf'].includes(tool.id)) {
+                  onOpenSubTool(tool.id as any);
+                } else {
+                  setActiveAiTool(tool.id);
+                  onNavigate('ai');
+                }
+              }}
               style={{ animationDelay: `${index * 0.05}s`, '--tool-gradient': tool.gradient } as React.CSSProperties}
             >
               <span className="ai-tool-emoji">{tool.emoji}</span>
