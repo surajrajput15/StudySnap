@@ -12,6 +12,8 @@ import { validate, noteSchema, verifyPinSchema } from '../middleware/validate';
 import { cacheGet, cacheSet, invalidateUserCache } from '../services/cache';
 import { CACHE_TTL_NOTES_SECONDS, DEFAULT_CATEGORIES } from '../config/constants';
 import { destroyVoiceAudio, isStorageConfigured, buildVoiceAudioPublicId } from '../services/storage';
+import { dispatchSecurityAlert, recordStudyToolAction } from '../services/alertDispatcher';
+import { maskUserRef } from '../services/telegram';
 
 const router = Router();
 
@@ -103,7 +105,17 @@ export function checkPinLocked(userId: string, noteId: string): boolean {
 export function recordPinFailure(userId: string, noteId: string): void {
   const key = pinLockKey(userId, noteId);
   const prev = pinFailures.get(key);
-  pinFailures.set(key, { count: (prev?.count ?? 0) + 1, resetAt: Date.now() + PIN_LOCKOUT_MS });
+  const newCount = (prev?.count ?? 0) + 1;
+  pinFailures.set(key, { count: newCount, resetAt: Date.now() + PIN_LOCKOUT_MS });
+  if (newCount >= PIN_MAX_ATTEMPTS) {
+    dispatchSecurityAlert({
+      issue: 'Note PIN brute-force lockout triggered',
+      userRef: maskUserRef(userId),
+      endpoint: '/api/notes/verify-pin',
+      action: 'Locked for 15 minutes',
+      details: `${newCount} consecutive failed PIN attempts`,
+    });
+  }
 }
 
 /** Exported for tests. Clears failures after a correct PIN (or test reset). */
@@ -289,6 +301,7 @@ router.post('/', validate(noteSchema), async (req: Request, res: Response) => {
         };
         mockNotes.push(result);
       }
+      recordStudyToolAction(existingIdx !== -1 ? 'note_updated' : 'note_created', userId);
       await invalidateUserCache(userId);
       res.json({ success: true, note: stripPinLock(result) });
       return;
@@ -326,6 +339,7 @@ router.post('/', validate(noteSchema), async (req: Request, res: Response) => {
       result = inserted[0];
     }
 
+    recordStudyToolAction(id ? 'note_updated' : 'note_created', userId);
     await invalidateUserCache(userId);
     res.json({ success: true, note: stripPinLock(result) });
   } catch {
@@ -420,6 +434,7 @@ router.delete('/', async (req: Request, res: Response) => {
 
     await cleanupAudio();
     await db.delete(notes).where(and(eq(notes.id, id), eq(notes.userId, userId)));
+    recordStudyToolAction('note_deleted', userId);
     await invalidateUserCache(userId);
     res.json({ success: true });
   } catch {

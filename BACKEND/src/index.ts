@@ -92,7 +92,12 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
   res.status(clientStatus).json({ success: false, error: message });
 });
 
+import { initAlertDispatcher } from './services/alertDispatcher';
+import { startHealthMonitor } from './services/healthMonitor';
+
 app.listen(env.PORT, () => {
+  initAlertDispatcher();
+  startHealthMonitor();
   console.log(`
 ╔════════════════════════════════════════════╗
 ║     StudySnap - Backend Server             ║
@@ -100,6 +105,7 @@ app.listen(env.PORT, () => {
 ║     Mode: ${env.NODE_ENV.padEnd(10)}                      ║
 ║     DB: ${env.DATABASE_URL ? 'Connected' : 'Mock Mode'.padEnd(13)}            ║
 ║     AI: ${env.GROQ_API_KEY ? 'Groq Ready' : 'Mock Mode'.padEnd(13)}            ║
+║     Alerts: ${env.TELEGRAM_ALERTS_ENABLED ? 'Telegram Ready' : 'Disabled'.padEnd(9)}          ║
 ╚════════════════════════════════════════════╝
   `);
 });

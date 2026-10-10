@@ -10,6 +10,8 @@ import {
   AiFeatureKey,
 } from '../config/constants';
 import { generateId } from '../utils/helpers';
+import { dispatchAiSuccessAlert, dispatchAiErrorAlert, dispatchSecurityAlert } from '../services/alertDispatcher';
+import { maskUserRef } from '../services/telegram';
 
 export interface AuditLogEntry {
   actorId: string;
@@ -31,6 +33,8 @@ export interface AiRequestLogEntry {
   success: boolean;
   statusCode?: number;
   errorMessage?: string;
+  isPdf?: boolean;
+  tokens?: number;
 }
 
 // In-memory fallback stores for test and development mode when DATABASE_URL is unset.
@@ -91,6 +95,13 @@ export function requireRole(...allowedRoles: UserRole[]): RequestHandler {
   return (req: Request, res: Response, next: NextFunction): void => {
     const role = req.userRole;
     if (!role || !hasRole(role, allowedRoles)) {
+      dispatchSecurityAlert({
+        issue: 'Unauthorized Admin route access attempt',
+        userRef: maskUserRef(req.userId),
+        endpoint: req.originalUrl,
+        action: 'Blocked (403 Forbidden)',
+        details: `Role '${role || 'NONE'}' denied access to [${allowedRoles.join(', ')}]`,
+      });
       res.status(403).json({
         success: false,
         error: 'Forbidden: You do not have permission to access this resource.',
@@ -224,6 +235,26 @@ export async function recordAiTelemetry(entry: AiRequestLogEntry): Promise<void>
     createdAt: now.toISOString(),
   });
   if (mockAiRequestLogs.length > 500) mockAiRequestLogs.length = 500;
+
+  // Telegram AI monitoring hook
+  if (entry.success) {
+    dispatchAiSuccessAlert({
+      feature: entry.feature,
+      durationMs: entry.durationMs,
+      model: entry.model,
+      userId: entry.userId,
+      isPdf: entry.isPdf,
+      tokens: entry.tokens,
+    });
+  } else {
+    dispatchAiErrorAlert({
+      feature: entry.feature,
+      error: entry.errorMessage || 'AI provider error',
+      statusCode: entry.statusCode || 500,
+      userId: entry.userId,
+      isPdf: entry.isPdf,
+    });
+  }
 }
 
 /** Get the status of an AI feature flag */

@@ -82,6 +82,12 @@ export const env = {
   ADMIN_EMAILS: process.env.ADMIN_EMAILS || 'surajdona2005@gmail.com',
   ADMIN_USER_IDS: process.env.ADMIN_USER_IDS || '',
 
+  TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || '8904396966:AAEB4vvPVWl64x2UBrLG5WIEJgMjNwmJYBQ',
+  TELEGRAM_CHAT_ID: process.env.TELEGRAM_CHAT_ID || '',
+  TELEGRAM_ALERTS_ENABLED: process.env.TELEGRAM_ALERTS_ENABLED !== 'false',
+  TELEGRAM_DIGEST_INTERVAL_MINUTES: parseInt(process.env.TELEGRAM_DIGEST_INTERVAL_MINUTES || '15', 10),
+
   isDev: () => isDev,
   isProd: () => isProd,
 };
+

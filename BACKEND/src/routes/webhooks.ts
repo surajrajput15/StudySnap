@@ -4,6 +4,7 @@ import { env } from '../config/env';
 import { getDb, users } from '../db';
 import { webhookLimiter } from '../middleware/rateLimiter';
 import { clerkEventSchema, clerkUserCreatedDataSchema } from '../middleware/validate';
+import { dispatchNewStudentAlert } from '../services/alertDispatcher';
 
 const router = Router();
 
@@ -70,6 +71,10 @@ router.post('/clerk', webhookLimiter, raw({ type: 'application/json' }), async (
               set: { name, email: email || null, role },
             });
           }
+          dispatchNewStudentAlert({
+            userId: id,
+            method: 'Clerk authentication',
+          });
         } catch (e) {
           console.error('[Webhook] user upsert failed:', e instanceof Error ? e.message : e);
         }

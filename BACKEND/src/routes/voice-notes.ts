@@ -18,6 +18,8 @@ import {
   destroyVoiceAudio,
   StorageConfigurationError,
 } from '../services/storage';
+import { dispatchSecurityAlert, recordStudyToolAction } from '../services/alertDispatcher';
+import { maskUserRef } from '../services/telegram';
 
 const router = Router();
 
@@ -244,14 +246,26 @@ async function handleVoiceNoteUpload(req: Request, res: Response): Promise<void>
     }
     const normalizedMime = normalizeAudioMimeType(file.mimetype);
     if (!ALLOWED_AUDIO_MIME_TYPES.has(normalizedMime)) {
-      // Phase 1 P1: generic message — the old code reflected the attacker-
-      // controlled mimetype string back in the 415 body.
+      dispatchSecurityAlert({
+        issue: 'Suspicious upload blocked (unsupported audio type)',
+        userRef: maskUserRef(userId),
+        endpoint: '/api/voice-notes/upload',
+        action: 'Rejected (HTTP 415)',
+        details: 'Attempted to upload file with disallowed MIME type',
+      });
       res.status(415).json({ success: false, error: 'Unsupported audio type' });
       return;
     }
     // Day 14 Task 5 — the declared MIME must match the file's actual bytes.
     // Disk-spooled: read just the header instead of holding file.buffer.
     if (!(await hasSpooledAudioSignature(tmpPath!, normalizedMime))) {
+      dispatchSecurityAlert({
+        issue: 'Suspicious upload blocked (magic bytes mismatch)',
+        userRef: maskUserRef(userId),
+        endpoint: '/api/voice-notes/upload',
+        action: 'Rejected (HTTP 415)',
+        details: 'File header magic bytes do not match declared audio container',
+      });
       res.status(415).json({ success: false, error: 'File content does not match the declared audio type' });
       return;
     }
@@ -374,6 +388,7 @@ async function handleVoiceNoteUpload(req: Request, res: Response): Promise<void>
       return;
     }
 
+    recordStudyToolAction('voice_uploaded', userId);
     res.json({ success: true, voiceNote: saved[0] });
   } catch (error) {
     console.error('[voice-notes] Unexpected error:', error);

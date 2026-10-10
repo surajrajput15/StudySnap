@@ -173,33 +173,81 @@ router.post('/summarize', validate(aiContentSchema), async (req, res) => {
     const duration = Date.now() - start;
     console.log(`[ai] ✓ /summarize ${duration}ms`);
 
+    const isPdf = Boolean((title && /\.pdf$/i.test(title)) || req.headers['x-source'] === 'pdf');
     void recordAiTelemetry({
       userId: req.userId,
-      feature: 'ai_summary',
+      feature: isPdf ? 'ai_pdf' : 'ai_summary',
       model: AI_MODEL,
       durationMs: duration,
       inputChars,
       outputChars: summary.length,
       success: true,
       statusCode: 200,
+      isPdf,
     });
 
     res.json({ success: true, summary });
   } catch (error) {
+    const isPdf = Boolean(req.headers['x-source'] === 'pdf');
     logAIError('summarize', req.userId, error);
     void recordAiTelemetry({
       userId: req.userId,
-      feature: 'ai_summary',
+      feature: isPdf ? 'ai_pdf' : 'ai_summary',
       model: AI_MODEL,
       durationMs: Date.now() - start,
       success: false,
       statusCode: (error as { status?: number })?.status || 500,
       errorMessage: error instanceof Error ? error.message : String(error),
+      isPdf,
     });
     const { status, body } = aiErrorBody(error, 'Summarization failed');
     res.status(status).json(body);
   }
 });
+
+router.post('/pdf', validate(aiContentSchema), async (req, res) => {
+  const start = Date.now();
+  if (!(await checkFeatureAvailability('ai_pdf', res))) return;
+
+  try {
+    const { title, content } = req.body as z.infer<typeof aiContentSchema>;
+    const inputChars = (title || '').length + content.length;
+    if (!(await checkAiQuota(req, res, inputChars))) return;
+    logAIRequest('pdf', req.userId, aiRequestLogMeta(req.body));
+    const summary = await summarizeNote(title || 'PDF Document', content);
+    const duration = Date.now() - start;
+    console.log(`[ai] ✓ /pdf ${duration}ms`);
+
+    void recordAiTelemetry({
+      userId: req.userId,
+      feature: 'ai_pdf',
+      model: AI_MODEL,
+      durationMs: duration,
+      inputChars,
+      outputChars: summary.length,
+      success: true,
+      statusCode: 200,
+      isPdf: true,
+    });
+
+    res.json({ success: true, summary });
+  } catch (error) {
+    logAIError('pdf', req.userId, error);
+    void recordAiTelemetry({
+      userId: req.userId,
+      feature: 'ai_pdf',
+      model: AI_MODEL,
+      durationMs: Date.now() - start,
+      success: false,
+      statusCode: (error as { status?: number })?.status || 500,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      isPdf: true,
+    });
+    const { status, body } = aiErrorBody(error, 'PDF summarization failed');
+    res.status(status).json(body);
+  }
+});
+
 
 router.post('/mcqs', validate(aiContentSchema), async (req, res) => {
   const start = Date.now();

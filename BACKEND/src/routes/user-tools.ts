@@ -2,8 +2,10 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { eq, and, desc } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/auth';
-import { getDb, quizzes, flashcardDecks, mindMaps } from '../db';
+import { getDb, quizzes, flashcardDecks, mindMaps, auditLogs } from '../db';
 import { generateId } from '../utils/helpers';
+import { recordAuditLog } from '../middleware/rbac';
+import { recordStudyToolAction } from '../services/alertDispatcher';
 
 const router = Router();
 router.use(authMiddleware);
@@ -166,6 +168,7 @@ router.post('/quizzes', async (req: Request, res: Response) => {
       mockUserQuizzes.unshift(item);
     }
 
+    recordStudyToolAction('quiz_completed', userId);
     res.json({ success: true, quiz: { id, title, totalQuestions: qs.length } });
   } catch {
     res.status(500).json({ success: false, error: 'Failed to save quiz' });
@@ -467,6 +470,35 @@ router.delete('/mindmaps/:id', async (req: Request, res: Response) => {
     res.json({ success: true, message: 'Mind map deleted' });
   } catch {
     res.status(500).json({ success: false, error: 'Failed to delete mind map' });
+  }
+});
+
+/**
+ * POST /api/user/logout
+ * Logs the student's logout event in the database audit log and tracking.
+ */
+router.post('/logout', async (req: Request, res: Response) => {
+  const userId = req.userId!;
+  const userEmail = req.userEmail;
+
+  try {
+    await recordAuditLog({
+      actorId: userId,
+      actorEmail: userEmail,
+      action: 'USER_LOGOUT',
+      resourceType: 'UserSession',
+      resourceId: userId,
+      details: {
+        ip: req.ip,
+        userAgent: req.headers['user-agent']?.slice(0, 200),
+        timestamp: new Date().toISOString(),
+      },
+    });
+
+    res.json({ success: true, message: 'Session logged out and recorded' });
+  } catch (error) {
+    console.error('[auth] Failed to log user logout:', error);
+    res.status(500).json({ success: false, error: 'Failed to record logout' });
   }
 });
 

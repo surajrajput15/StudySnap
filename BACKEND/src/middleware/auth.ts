@@ -5,6 +5,8 @@ import { env } from '../config/env';
 import { getDb, users } from '../db';
 import { UserRole, USER_ROLES, ROLE_PERMISSIONS } from '../config/constants';
 import { mockUserRoles } from './rbac';
+import { dispatchSecurityAlert } from '../services/alertDispatcher';
+import { maskUserRef } from '../services/telegram';
 
 export async function verifySession(token: string): Promise<{ userId: string; role?: UserRole; email?: string }> {
   if (!env.CLERK_SECRET_KEY) {
@@ -145,6 +147,12 @@ export const authMiddleware: RequestHandler = async (req, res, next) => {
     }
 
     if (isSuspended) {
+      dispatchSecurityAlert({
+        issue: 'Suspended account access attempted',
+        userRef: maskUserRef(userId),
+        endpoint: req.originalUrl,
+        action: 'Blocked (403 Forbidden)',
+      });
       res.status(403).json({
         success: false,
         error: 'Your account has been suspended. Please contact support.',
