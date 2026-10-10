@@ -9,9 +9,9 @@ import {
   AI_FEATURE_KEYS,
   AiFeatureKey,
 } from '../config/constants';
-import { generateId } from '../utils/helpers';
 import { dispatchAiSuccessAlert, dispatchAiErrorAlert, dispatchSecurityAlert } from '../services/alertDispatcher';
-import { maskUserRef } from '../services/telegram';
+import { maskUserRef, userEmailCache } from '../services/telegram';
+import { generateId } from '../utils/helpers';
 
 export interface AuditLogEntry {
   actorId: string;
@@ -25,6 +25,7 @@ export interface AuditLogEntry {
 
 export interface AiRequestLogEntry {
   userId?: string;
+  userEmail?: string;
   feature: string;
   model: string;
   durationMs: number;
@@ -98,6 +99,7 @@ export function requireRole(...allowedRoles: UserRole[]): RequestHandler {
       dispatchSecurityAlert({
         issue: 'Unauthorized Admin route access attempt',
         userRef: maskUserRef(req.userId),
+        userEmail: req.userEmail,
         endpoint: req.originalUrl,
         action: 'Blocked (403 Forbidden)',
         details: `Role '${role || 'NONE'}' denied access to [${allowedRoles.join(', ')}]`,
@@ -212,7 +214,6 @@ export async function recordAiTelemetry(entry: AiRequestLogEntry): Promise<void>
           createdAt: now,
         });
         dbHasAiRequestLogsTable = true;
-        return;
       }
     } catch (err) {
       if (isTableMissingError(err)) {
@@ -221,28 +222,32 @@ export async function recordAiTelemetry(entry: AiRequestLogEntry): Promise<void>
     }
   }
 
-  mockAiRequestLogs.unshift({
-    id: generateId(),
-    userId: entry.userId,
-    feature: entry.feature,
-    model: entry.model,
-    durationMs: entry.durationMs,
-    inputChars: entry.inputChars || 0,
-    outputChars: entry.outputChars || 0,
-    success: entry.success,
-    statusCode: entry.statusCode || (entry.success ? 200 : 500),
-    errorMessage: entry.errorMessage,
-    createdAt: now.toISOString(),
-  });
-  if (mockAiRequestLogs.length > 500) mockAiRequestLogs.length = 500;
+  if (!dbHasAiRequestLogsTable) {
+    mockAiRequestLogs.unshift({
+      id: generateId(),
+      userId: entry.userId,
+      feature: entry.feature,
+      model: entry.model,
+      durationMs: entry.durationMs,
+      inputChars: entry.inputChars || 0,
+      outputChars: entry.outputChars || 0,
+      success: entry.success,
+      statusCode: entry.statusCode || (entry.success ? 200 : 500),
+      errorMessage: entry.errorMessage,
+      createdAt: now.toISOString(),
+    });
+    if (mockAiRequestLogs.length > 500) mockAiRequestLogs.length = 500;
+  }
 
   // Telegram AI monitoring hook
+  const resolvedEmail = entry.userEmail || (entry.userId ? userEmailCache.get(entry.userId) : undefined);
   if (entry.success) {
     dispatchAiSuccessAlert({
       feature: entry.feature,
       durationMs: entry.durationMs,
       model: entry.model,
       userId: entry.userId,
+      userEmail: resolvedEmail,
       isPdf: entry.isPdf,
       tokens: entry.tokens,
     });
@@ -252,6 +257,7 @@ export async function recordAiTelemetry(entry: AiRequestLogEntry): Promise<void>
       error: entry.errorMessage || 'AI provider error',
       statusCode: entry.statusCode || 500,
       userId: entry.userId,
+      userEmail: resolvedEmail,
       isPdf: entry.isPdf,
     });
   }

@@ -4,7 +4,7 @@ import { env } from '../config/env';
 import { getDb, users } from '../db';
 import { webhookLimiter } from '../middleware/rateLimiter';
 import { clerkEventSchema, clerkUserCreatedDataSchema } from '../middleware/validate';
-import { dispatchNewStudentAlert } from '../services/alertDispatcher';
+import { dispatchNewStudentAlert, dispatchLoginAlert } from '../services/alertDispatcher';
 
 const router = Router();
 
@@ -73,11 +73,31 @@ router.post('/clerk', webhookLimiter, raw({ type: 'application/json' }), async (
           }
           dispatchNewStudentAlert({
             userId: id,
+            email: email || undefined,
             method: 'Clerk authentication',
           });
         } catch (e) {
           console.error('[Webhook] user upsert failed:', e instanceof Error ? e.message : e);
         }
+      }
+    } else if (eventType === 'session.created') {
+      const sessionData = (event as { data?: any })?.data;
+      const userId = sessionData?.user_id;
+      if (userId) {
+        void (async () => {
+          let email: string | undefined;
+          try {
+            const { resolveUserEmail } = await import('../middleware/auth');
+            email = await resolveUserEmail(userId);
+          } catch {
+            /* best effort */
+          }
+          dispatchLoginAlert({
+            userId,
+            email,
+            method: 'Clerk authentication',
+          });
+        })();
       }
     }
 

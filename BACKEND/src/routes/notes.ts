@@ -110,6 +110,7 @@ export function recordPinFailure(userId: string, noteId: string): void {
   if (newCount >= PIN_MAX_ATTEMPTS) {
     dispatchSecurityAlert({
       issue: 'Note PIN brute-force lockout triggered',
+      userId,
       userRef: maskUserRef(userId),
       endpoint: '/api/notes/verify-pin',
       action: 'Locked for 15 minutes',

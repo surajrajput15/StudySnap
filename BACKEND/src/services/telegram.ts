@@ -6,7 +6,7 @@ export interface AlertField {
 }
 
 export interface TelegramAlert {
-  badge: '🟢' | '🤖' | '🚨' | '🔴' | '🛡️' | '📊' | '⚡';
+  badge: '🟢' | '🤖' | '🚨' | '🔴' | '🛡️' | '📊' | '⚡' | '🔐' | '🚪';
   title: string;
   fields: AlertField[];
   footer?: string;
@@ -23,6 +23,8 @@ export function escapeHtml(text: string | number | undefined | null): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
 }
+
+export const userEmailCache = new Map<string, string>();
 
 /**
  * Creates an anonymized user reference from Clerk ID or other identifier.

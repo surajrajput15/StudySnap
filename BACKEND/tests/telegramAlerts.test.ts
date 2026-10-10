@@ -8,9 +8,11 @@ import {
   getTelegramQueueStatus,
   clearTelegramQueue,
   TelegramAlert,
+  userEmailCache,
 } from '../src/services/telegram';
 import {
   dispatchNewStudentAlert,
+  dispatchLoginAlert,
   dispatchAiSuccessAlert,
   dispatchAiErrorAlert,
   dispatchSecurityAlert,
@@ -52,6 +54,26 @@ test('formatAlertMessage formats NEW STUDENT template accurately', () => {
   const formatted = formatAlertMessage(alert);
   assert.match(formatted, /<b>🟢 NEW STUDENT<\/b>/);
   assert.match(formatted, /<b>Event:<\/b> <code>Registration successful<\/code>/);
+  assert.match(formatted, /<b>User reference:<\/b> <code>USR-8F21<\/code>/);
+  assert.match(formatted, /<b>Method:<\/b> <code>Clerk authentication<\/code>/);
+});
+
+test('formatAlertMessage formats STUDENT LOGIN template accurately with user email', () => {
+  const alert: TelegramAlert = {
+    badge: '🔐',
+    title: 'STUDENT LOGIN',
+    fields: [
+      { label: 'Event', value: 'Login successful' },
+      { label: 'User email', value: 'student@example.com' },
+      { label: 'User reference', value: 'USR-8F21' },
+      { label: 'Method', value: 'Clerk authentication' },
+    ],
+  };
+
+  const formatted = formatAlertMessage(alert);
+  assert.match(formatted, /<b>🔐 STUDENT LOGIN<\/b>/);
+  assert.match(formatted, /<b>Event:<\/b> <code>Login successful<\/code>/);
+  assert.match(formatted, /<b>User email:<\/b> <code>student@example\.com<\/code>/);
   assert.match(formatted, /<b>User reference:<\/b> <code>USR-8F21<\/code>/);
   assert.match(formatted, /<b>Method:<\/b> <code>Clerk authentication<\/code>/);
 });
@@ -170,4 +192,29 @@ test('runHealthProbe probes database, cache, and AI providers without crashing',
   assert.ok(result.status.cache === 'healthy' || result.status.cache === 'degraded' || result.status.cache === 'down');
   assert.ok(result.status.ai === 'healthy' || result.status.ai === 'degraded' || result.status.ai === 'down');
   assert.ok(result.details.database);
+});
+
+test('dispatchLoginAlert handles alerts and resolves user email from cache', () => {
+  userEmailCache.set('user_login_test', 'student123@gmail.com');
+  assert.doesNotThrow(() => {
+    dispatchLoginAlert({
+      userId: 'user_login_test',
+      force: true,
+    });
+  });
+});
+
+test('dispatchAiSuccessAlert and dispatchSecurityAlert resolve user email when present', () => {
+  userEmailCache.set('user_ai_test', 'researcher@gmail.com');
+  assert.doesNotThrow(() => {
+    dispatchAiSuccessAlert({
+      feature: 'ai_assistant',
+      durationMs: 800,
+      userId: 'user_ai_test',
+    });
+    dispatchSecurityAlert({
+      issue: 'Unauthorized access',
+      userId: 'user_ai_test',
+    });
+  });
 });

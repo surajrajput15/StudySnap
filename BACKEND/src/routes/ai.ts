@@ -134,6 +134,7 @@ router.post('/chat', validate(aiChatSchema), async (req, res) => {
 
     void recordAiTelemetry({
       userId: req.userId,
+      userEmail: req.userEmail,
       feature: 'ai_assistant',
       model: AI_MODEL,
       durationMs: duration,
@@ -148,6 +149,7 @@ router.post('/chat', validate(aiChatSchema), async (req, res) => {
     logAIError('chat', req.userId, error);
     void recordAiTelemetry({
       userId: req.userId,
+      userEmail: req.userEmail,
       feature: 'ai_assistant',
       model: AI_MODEL,
       durationMs: Date.now() - start,
@@ -176,6 +178,7 @@ router.post('/summarize', validate(aiContentSchema), async (req, res) => {
     const isPdf = Boolean((title && /\.pdf$/i.test(title)) || req.headers['x-source'] === 'pdf');
     void recordAiTelemetry({
       userId: req.userId,
+      userEmail: req.userEmail,
       feature: isPdf ? 'ai_pdf' : 'ai_summary',
       model: AI_MODEL,
       durationMs: duration,
@@ -192,6 +195,7 @@ router.post('/summarize', validate(aiContentSchema), async (req, res) => {
     logAIError('summarize', req.userId, error);
     void recordAiTelemetry({
       userId: req.userId,
+      userEmail: req.userEmail,
       feature: isPdf ? 'ai_pdf' : 'ai_summary',
       model: AI_MODEL,
       durationMs: Date.now() - start,
@@ -220,6 +224,7 @@ router.post('/pdf', validate(aiContentSchema), async (req, res) => {
 
     void recordAiTelemetry({
       userId: req.userId,
+      userEmail: req.userEmail,
       feature: 'ai_pdf',
       model: AI_MODEL,
       durationMs: duration,
@@ -235,6 +240,7 @@ router.post('/pdf', validate(aiContentSchema), async (req, res) => {
     logAIError('pdf', req.userId, error);
     void recordAiTelemetry({
       userId: req.userId,
+      userEmail: req.userEmail,
       feature: 'ai_pdf',
       model: AI_MODEL,
       durationMs: Date.now() - start,
@@ -267,6 +273,7 @@ router.post('/mcqs', validate(aiContentSchema), async (req, res) => {
 
       void recordAiTelemetry({
         userId: req.userId,
+        userEmail: req.userEmail,
         feature: 'ai_flashcards',
         model: AI_MODEL,
         durationMs: duration,
@@ -286,6 +293,7 @@ router.post('/mcqs', validate(aiContentSchema), async (req, res) => {
 
     void recordAiTelemetry({
       userId: req.userId,
+      userEmail: req.userEmail,
       feature: 'ai_mcq',
       model: AI_MODEL,
       durationMs: duration,
@@ -300,6 +308,7 @@ router.post('/mcqs', validate(aiContentSchema), async (req, res) => {
     logAIError('mcqs', req.userId, error);
     void recordAiTelemetry({
       userId: req.userId,
+      userEmail: req.userEmail,
       feature: featureKey,
       model: AI_MODEL,
       durationMs: Date.now() - start,
@@ -328,6 +337,7 @@ router.post('/mindmap', validate(aiContentSchema), async (req, res) => {
 
     void recordAiTelemetry({
       userId: req.userId,
+      userEmail: req.userEmail,
       feature: 'ai_mindmap',
       model: AI_MODEL,
       durationMs: duration,
@@ -342,6 +352,7 @@ router.post('/mindmap', validate(aiContentSchema), async (req, res) => {
     logAIError('mindmap', req.userId, error);
     void recordAiTelemetry({
       userId: req.userId,
+      userEmail: req.userEmail,
       feature: 'ai_mindmap',
       model: AI_MODEL,
       durationMs: Date.now() - start,
@@ -370,6 +381,7 @@ router.post('/quiz', validate(aiQuizSchema), async (req, res) => {
 
     void recordAiTelemetry({
       userId: req.userId,
+      userEmail: req.userEmail,
       feature: 'ai_quiz',
       model: AI_MODEL,
       durationMs: duration,
@@ -384,6 +396,7 @@ router.post('/quiz', validate(aiQuizSchema), async (req, res) => {
     logAIError('quiz', req.userId, error);
     void recordAiTelemetry({
       userId: req.userId,
+      userEmail: req.userEmail,
       feature: 'ai_quiz',
       model: AI_MODEL,
       durationMs: Date.now() - start,
@@ -411,6 +424,7 @@ router.post('/translate', validate(translateSchema), async (req, res) => {
 
     void recordAiTelemetry({
       userId: req.userId,
+      userEmail: req.userEmail,
       feature: 'ai_translate',
       model: AI_MODEL,
       durationMs: duration,
@@ -425,6 +439,7 @@ router.post('/translate', validate(translateSchema), async (req, res) => {
     logAIError('translate', req.userId, error);
     void recordAiTelemetry({
       userId: req.userId,
+      userEmail: req.userEmail,
       feature: 'ai_translate',
       model: AI_MODEL,
       durationMs: Date.now() - start,

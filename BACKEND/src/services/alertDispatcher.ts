@@ -1,4 +1,4 @@
-import { enqueueTelegramAlert, maskUserRef, TelegramAlert } from './telegram';
+import { enqueueTelegramAlert, maskUserRef, TelegramAlert, userEmailCache } from './telegram';
 import { env } from '../config/env';
 
 interface StudyActivityCounts {
@@ -24,6 +24,8 @@ let studyActivityBuffer: StudyActivityCounts = {
 };
 
 let digestTimer: ReturnType<typeof setInterval> | null = null;
+const recentLoginAlerts = new Map<string, number>();
+const LOGIN_ALERT_DEBOUNCE_MS = 5 * 60 * 1000; // 5 minutes
 
 /**
  * Initializes the study tools periodic aggregation timer.
@@ -57,21 +59,79 @@ export function stopAlertDispatcher(): void {
  */
 export function dispatchNewStudentAlert(params: {
   userId?: string;
+  email?: string;
   method?: string;
   emailDomain?: string;
 }): void {
   const userRef = maskUserRef(params.userId);
   const method = params.method || 'Clerk authentication';
+  const resolvedEmail = params.email || (params.userId ? userEmailCache.get(params.userId) : undefined);
+
+  const fields = [
+    { label: 'Event', value: 'Registration successful' },
+  ];
+
+  if (resolvedEmail) {
+    fields.push({ label: 'User email', value: resolvedEmail });
+  }
+
+  fields.push(
+    { label: 'User reference', value: userRef },
+    { label: 'Method', value: method },
+  );
 
   const alert: TelegramAlert = {
     badge: '🟢',
     title: 'NEW STUDENT',
     priority: 'high',
-    fields: [
-      { label: 'Event', value: 'Registration successful' },
-      { label: 'User reference', value: userRef },
-      { label: 'Method', value: method },
-    ],
+    fields,
+    footer: `Timestamp: ${new Date().toISOString()}`,
+  };
+
+  enqueueTelegramAlert(alert);
+}
+
+/**
+ * 🔐 STUDENT LOGIN Alert
+ */
+export function dispatchLoginAlert(params: {
+  userId?: string;
+  email?: string;
+  method?: string;
+  ip?: string;
+  force?: boolean;
+}): void {
+  if (params.userId && !params.force) {
+    const lastAlert = recentLoginAlerts.get(params.userId);
+    const now = Date.now();
+    if (lastAlert && now - lastAlert < LOGIN_ALERT_DEBOUNCE_MS) {
+      return;
+    }
+    recentLoginAlerts.set(params.userId, now);
+  }
+
+  const userRef = maskUserRef(params.userId);
+  const method = params.method || 'Clerk authentication';
+  const resolvedEmail = params.email || (params.userId ? userEmailCache.get(params.userId) : undefined);
+
+  const fields = [
+    { label: 'Event', value: 'Login successful' },
+  ];
+
+  if (resolvedEmail) {
+    fields.push({ label: 'User email', value: resolvedEmail });
+  }
+
+  fields.push(
+    { label: 'User reference', value: userRef },
+    { label: 'Method', value: method },
+  );
+
+  const alert: TelegramAlert = {
+    badge: '🔐',
+    title: 'STUDENT LOGIN',
+    priority: 'high',
+    fields,
     footer: `Timestamp: ${new Date().toISOString()}`,
   };
 
@@ -88,6 +148,7 @@ export function dispatchAiSuccessAlert(params: {
   model?: string;
   tokens?: number;
   userId?: string;
+  userEmail?: string;
   isPdf?: boolean;
 }): void {
   const durationSec = (params.durationMs / 1000).toFixed(1);
@@ -100,10 +161,18 @@ export function dispatchAiSuccessAlert(params: {
 
   const fields = [
     { label: 'Feature', value: featureTitle },
+  ];
+
+  const resolvedEmail = params.userEmail || (params.userId ? userEmailCache.get(params.userId) : undefined);
+  if (resolvedEmail) {
+    fields.push({ label: 'User email', value: resolvedEmail });
+  }
+
+  fields.push(
     { label: 'Result', value: 'Success' },
     { label: 'Duration', value: `${durationSec} seconds` },
     { label: 'Provider', value: `${provider} (${model})` },
-  ];
+  );
 
   if (params.tokens) {
     fields.push({ label: 'Tokens', value: String(params.tokens) });
@@ -128,21 +197,32 @@ export function dispatchAiErrorAlert(params: {
   action?: string;
   statusCode?: number;
   userId?: string;
+  userEmail?: string;
   isPdf?: boolean;
 }): void {
   const featureTitle = params.isPdf
     ? `PDF ${params.feature}`
     : params.feature.replace(/^ai_/, '').replace(/_/g, ' ');
 
+  const fields = [
+    { label: 'Feature', value: featureTitle },
+  ];
+
+  const resolvedEmail = params.userEmail || (params.userId ? userEmailCache.get(params.userId) : undefined);
+  if (resolvedEmail) {
+    fields.push({ label: 'User email', value: resolvedEmail });
+  }
+
+  fields.push(
+    { label: 'Error', value: params.error },
+    { label: 'Action', value: params.action || 'Retry with backoff' },
+  );
+
   const alert: TelegramAlert = {
     badge: '🚨',
     title: 'AI SERVICE ERROR',
     priority: 'high',
-    fields: [
-      { label: 'Feature', value: featureTitle },
-      { label: 'Error', value: params.error },
-      { label: 'Action', value: params.action || 'Retry with backoff' },
-    ],
+    fields,
     footer: `Status Code: ${params.statusCode || 500} | ${new Date().toISOString()}`,
   };
 
@@ -155,6 +235,8 @@ export function dispatchAiErrorAlert(params: {
 export function dispatchSecurityAlert(params: {
   issue: string;
   userRef?: string;
+  userId?: string;
+  userEmail?: string;
   endpoint?: string;
   action?: string;
   details?: string;
@@ -163,8 +245,13 @@ export function dispatchSecurityAlert(params: {
     { label: 'Issue', value: params.issue },
   ];
 
-  if (params.userRef) {
-    fields.push({ label: 'User reference', value: params.userRef });
+  const resolvedEmail = params.userEmail || (params.userId ? userEmailCache.get(params.userId) : undefined);
+  if (resolvedEmail) {
+    fields.push({ label: 'User email', value: resolvedEmail });
+  }
+  const userRef = params.userRef || (params.userId ? maskUserRef(params.userId) : undefined);
+  if (userRef) {
+    fields.push({ label: 'User reference', value: userRef });
   }
   if (params.endpoint) {
     fields.push({ label: 'Endpoint', value: params.endpoint });
@@ -186,6 +273,7 @@ export function dispatchSecurityAlert(params: {
 
   enqueueTelegramAlert(alert);
 }
+
 
 /**
  * 🔴 BACKEND HEALTH ALERT
@@ -285,22 +373,34 @@ export function flushStudyToolsDigest(): boolean {
   const durationMins = Math.round((Date.now() - studyActivityBuffer.windowStart) / (60 * 1000));
   const windowLabel = durationMins > 0 ? `Past ${durationMins} minutes` : 'Recent activity';
 
+  const fields = [
+    { label: 'Window', value: windowLabel },
+    {
+      label: 'Notes',
+      value: `${studyActivityBuffer.notesCreated} created, ${studyActivityBuffer.notesUpdated} updated, ${studyActivityBuffer.notesDeleted} deleted`,
+    },
+    { label: 'Voice Notes', value: `${studyActivityBuffer.voiceUploaded} uploaded` },
+    { label: 'Quizzes', value: `${studyActivityBuffer.quizzesCompleted} completed` },
+    { label: 'Revision Logs', value: `${studyActivityBuffer.revisionsLogged} recorded` },
+    { label: 'Active Students', value: String(studyActivityBuffer.uniqueUsers.size || 1) },
+  ];
+
+  const activeEmails: string[] = [];
+  for (const uid of studyActivityBuffer.uniqueUsers) {
+    const cached = userEmailCache.get(uid);
+    if (cached && !activeEmails.includes(cached)) activeEmails.push(cached);
+  }
+  if (activeEmails.length > 0) {
+    fields.push({ label: 'Student emails', value: activeEmails.slice(0, 5).join(', ') });
+  }
+
+  fields.push({ label: 'Total Actions', value: String(total) });
+
   const alert: TelegramAlert = {
     badge: '📊',
     title: 'STUDY TOOLS DIGEST',
     priority: 'low',
-    fields: [
-      { label: 'Window', value: windowLabel },
-      {
-        label: 'Notes',
-        value: `${studyActivityBuffer.notesCreated} created, ${studyActivityBuffer.notesUpdated} updated, ${studyActivityBuffer.notesDeleted} deleted`,
-      },
-      { label: 'Voice Notes', value: `${studyActivityBuffer.voiceUploaded} uploaded` },
-      { label: 'Quizzes', value: `${studyActivityBuffer.quizzesCompleted} completed` },
-      { label: 'Revision Logs', value: `${studyActivityBuffer.revisionsLogged} recorded` },
-      { label: 'Active Students', value: String(studyActivityBuffer.uniqueUsers.size || 1) },
-      { label: 'Total Actions', value: String(total) },
-    ],
+    fields,
   };
 
   // Reset buffer

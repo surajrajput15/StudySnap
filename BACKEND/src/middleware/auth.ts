@@ -5,8 +5,11 @@ import { env } from '../config/env';
 import { getDb, users } from '../db';
 import { UserRole, USER_ROLES, ROLE_PERMISSIONS } from '../config/constants';
 import { mockUserRoles } from './rbac';
-import { dispatchSecurityAlert } from '../services/alertDispatcher';
-import { maskUserRef } from '../services/telegram';
+import { dispatchSecurityAlert, dispatchLoginAlert } from '../services/alertDispatcher';
+import { maskUserRef, userEmailCache } from '../services/telegram';
+
+export { userEmailCache };
+export const recentLoginAlerts = new Map<string, number>();
 
 export async function verifySession(token: string): Promise<{ userId: string; role?: UserRole; email?: string }> {
   if (!env.CLERK_SECRET_KEY) {
@@ -22,8 +25,6 @@ export async function verifySession(token: string): Promise<{ userId: string; ro
   return { userId: claims.sub, role, email };
 }
 
-export const userEmailCache = new Map<string, string>();
-
 export async function resolveUserEmail(userId: string, claimEmail?: string): Promise<string | undefined> {
   if (claimEmail) {
     userEmailCache.set(userId, claimEmail);
@@ -32,15 +33,47 @@ export async function resolveUserEmail(userId: string, claimEmail?: string): Pro
   if (userEmailCache.has(userId)) {
     return userEmailCache.get(userId);
   }
+
+  // 1. Try Neon Database first
+  try {
+    const db = getDb();
+    if (db) {
+      const row = await db.select({ email: users.email }).from(users).where(eq(users.id, userId)).limit(1);
+      if (row[0]?.email) {
+        userEmailCache.set(userId, row[0].email);
+        return row[0].email;
+      }
+    }
+  } catch {
+    /* non-blocking */
+  }
+
+  // 2. Query Clerk SDK
   if (!env.CLERK_SECRET_KEY) return undefined;
 
   try {
     const { createClerkClient } = await import('@clerk/backend');
     const clerk = createClerkClient({ secretKey: env.CLERK_SECRET_KEY });
     const user = await clerk.users.getUser(userId);
-    const email = user.emailAddresses?.[0]?.emailAddress;
+    const email =
+      user.emailAddresses?.find((e: any) => e.id === user.primaryEmailAddressId)?.emailAddress ||
+      user.emailAddresses?.[0]?.emailAddress;
     if (email) {
       userEmailCache.set(userId, email);
+      try {
+        const db = getDb();
+        if (db) {
+          await db
+            .insert(users)
+            .values({ id: userId, name: 'Student', email })
+            .onConflictDoUpdate({
+              target: users.id,
+              set: { email },
+            });
+        }
+      } catch {
+        /* non-blocking */
+      }
       return email;
     }
   } catch {
@@ -83,8 +116,19 @@ export const authMiddleware: RequestHandler = async (req, res, next) => {
     }
 
     req.userId = userId;
-    const userEmail = await resolveUserEmail(userId, email);
+    const headerEmail = typeof req.headers['x-user-email'] === 'string' ? req.headers['x-user-email'].trim() : undefined;
+    const userEmail = await resolveUserEmail(userId, email || headerEmail);
     req.userEmail = userEmail;
+
+    // Dispatch login alert once per active user session (debounced in alertDispatcher)
+    if (!userId.startsWith('test_user_')) {
+      dispatchLoginAlert({
+        userId,
+        email: userEmail,
+        method: 'Clerk authentication',
+        ip: req.ip,
+      });
+    }
 
     // Resolve user role and check suspension
     let resolvedRole: UserRole = 'USER';
@@ -150,6 +194,7 @@ export const authMiddleware: RequestHandler = async (req, res, next) => {
       dispatchSecurityAlert({
         issue: 'Suspended account access attempted',
         userRef: maskUserRef(userId),
+        userEmail,
         endpoint: req.originalUrl,
         action: 'Blocked (403 Forbidden)',
       });
