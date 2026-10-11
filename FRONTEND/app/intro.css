@@ -1,0 +1,394 @@
+/* ═══════════════════════════════════════════════════════════
+   StudySnap — Ultra-Premium Cinematic Dark Intro Screen
+   Hardware-accelerated, zero-dependency, pure CSS luxury.
+   ═══════════════════════════════════════════════════════════ */
+
+.intro-root {
+  min-height: 100dvh;
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  position: relative;
+  overflow: hidden;
+  /* Deep obsidian midnight space canvas */
+  background: radial-gradient(ellipse at 50% 18%, #0b1528 0%, #060a14 45%, #020408 100%);
+  user-select: none;
+  font-family: var(--font-body, 'Plus Jakarta Sans', sans-serif);
+}
+
+/* Subtle futuristic cyber grid background */
+.intro-grid-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(rgba(56, 189, 248, 0.09) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: radial-gradient(ellipse at 50% 50%, black 25%, transparent 75%);
+  -webkit-mask-image: radial-gradient(ellipse at 50% 50%, black 25%, transparent 75%);
+  z-index: 0;
+}
+
+/* Cinematic glowing aurora blobs */
+.intro-glow-bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 0;
+}
+
+.intro-glow-blob-cyan {
+  position: absolute;
+  top: 15%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 580px;
+  height: 420px;
+  background: radial-gradient(circle, rgba(0, 114, 255, 0.28) 0%, rgba(56, 189, 248, 0.12) 45%, transparent 70%);
+  filter: blur(70px);
+  border-radius: 50%;
+  animation: auroraFloat 8s ease-in-out infinite alternate;
+}
+
+.intro-glow-blob-violet {
+  position: absolute;
+  bottom: 8%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 500px;
+  height: 320px;
+  background: radial-gradient(circle, rgba(124, 58, 237, 0.18) 0%, rgba(56, 189, 248, 0.08) 50%, transparent 68%);
+  filter: blur(65px);
+  border-radius: 50%;
+  animation: auroraFloat 10s ease-in-out infinite alternate-reverse;
+}
+
+/* Ultra-Luxury Dark Glass Card */
+.intro-card {
+  position: relative;
+  z-index: 1;
+  max-width: 540px;
+  width: 100%;
+  background: rgba(11, 18, 33, 0.78);
+  backdrop-filter: blur(30px) saturate(190%);
+  -webkit-backdrop-filter: blur(30px) saturate(190%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 0 0 1px rgba(56, 189, 248, 0.08),
+    0 28px 65px -12px rgba(0, 0, 0, 0.85),
+    0 0 60px -15px rgba(0, 114, 255, 0.25);
+  border-radius: 32px;
+  padding: 3rem 2.5rem 2.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  animation: introCardEntrance 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* Subtle luminous top rim highlight */
+.intro-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 12%;
+  right: 12%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(56, 189, 248, 0.6), rgba(167, 139, 250, 0.5), transparent);
+  pointer-events: none;
+}
+
+/* Brand Section */
+.intro-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.875rem;
+  margin-bottom: 1.5rem;
+}
+
+.intro-logo-wrap {
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.9) 0%, rgba(15, 23, 42, 0.95) 100%);
+  padding: 6px;
+  box-shadow:
+    0 8px 24px -4px rgba(0, 0, 0, 0.6),
+    0 0 20px rgba(56, 189, 248, 0.25);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  animation: logoPop 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.intro-logo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 8px rgba(0, 97, 164, 0.4));
+}
+
+.intro-brand-name {
+  font-family: var(--font-display, 'Outfit', sans-serif);
+  font-size: 1.55rem;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: -0.025em;
+  display: flex;
+  align-items: baseline;
+}
+
+.intro-brand-name .brand-accent {
+  background: linear-gradient(135deg, #38bdf8 0%, #60a5fa 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-left: 1px;
+  text-shadow: 0 0 20px rgba(56, 189, 248, 0.4);
+}
+
+/* Heading */
+.intro-heading {
+  font-family: var(--font-display, 'Outfit', sans-serif);
+  font-size: 2.25rem;
+  font-weight: 800;
+  line-height: 1.16;
+  letter-spacing: -0.035em;
+  color: #f8fafc;
+  margin-bottom: 0.875rem;
+}
+
+.intro-heading-accent {
+  background: linear-gradient(135deg, #38bdf8 0%, #60a5fa 40%, #a78bfa 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 25px rgba(56, 189, 248, 0.35));
+}
+
+/* Description */
+.intro-description {
+  font-family: var(--font-body, 'Plus Jakarta Sans', sans-serif);
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: #94a3b8;
+  max-width: 440px;
+  margin-bottom: 1.85rem;
+}
+
+/* Feature Labels / Chips */
+.intro-chips-container {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.625rem;
+  margin-bottom: 2.25rem;
+  width: 100%;
+}
+
+.intro-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 0.95rem;
+  border-radius: 9999px;
+  background: rgba(15, 23, 42, 0.7);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #e2e8f0;
+  font-family: var(--font-body, 'Plus Jakarta Sans', sans-serif);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.intro-chip:hover {
+  transform: translateY(-2px);
+  border-color: rgba(56, 189, 248, 0.35);
+  background: rgba(30, 41, 59, 0.85);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35), 0 0 15px rgba(56, 189, 248, 0.15);
+}
+
+/* Individual chip accents */
+.intro-chip--notes {
+  border-color: rgba(56, 189, 248, 0.2);
+}
+.intro-chip--notes .intro-chip-icon {
+  color: #38bdf8;
+}
+
+.intro-chip--ai {
+  border-color: rgba(168, 85, 247, 0.22);
+}
+.intro-chip--ai .intro-chip-icon {
+  color: #c084fc;
+}
+
+.intro-chip--planner {
+  border-color: rgba(96, 165, 250, 0.2);
+}
+.intro-chip--planner .intro-chip-icon {
+  color: #60a5fa;
+}
+
+.intro-chip-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+/* Progress & Status Section */
+.intro-progress-section {
+  width: 100%;
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.intro-progress-track {
+  width: 100%;
+  height: 5px;
+  background: rgba(30, 41, 59, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 9999px;
+  overflow: hidden;
+  position: relative;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+.intro-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #0284c7 0%, #38bdf8 50%, #a855f7 100%);
+  border-radius: 9999px;
+  width: 0%;
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.75);
+  animation: introProgressAnimation 2.8s cubic-bezier(0.25, 0.1, 0.25, 1) forwards;
+}
+
+.intro-status-text {
+  font-family: var(--font-body, 'Plus Jakarta Sans', sans-serif);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #94a3b8;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  letter-spacing: 0.015em;
+}
+
+/* Glowing breathing radar dot */
+.intro-pulse-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #38bdf8;
+  box-shadow: 0 0 10px #38bdf8;
+  animation: dotBlink 1.8s infinite ease-in-out;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+/* Keyframe Animations */
+@keyframes introCardEntrance {
+  0% {
+    opacity: 0;
+    transform: translateY(16px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes logoPop {
+  0% {
+    opacity: 0;
+    transform: scale(0.85) rotate(-4deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+@keyframes auroraFloat {
+  0% {
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+  100% {
+    transform: translateX(-48%) translateY(-15px) scale(1.06);
+  }
+}
+
+@keyframes introProgressAnimation {
+  0% {
+    width: 0%;
+  }
+  20% {
+    width: 25%;
+  }
+  50% {
+    width: 60%;
+  }
+  80% {
+    width: 88%;
+  }
+  100% {
+    width: 100%;
+  }
+}
+
+@keyframes dotBlink {
+  0%, 100% {
+    opacity: 0.5;
+    transform: scale(0.9);
+    box-shadow: 0 0 4px #38bdf8;
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+    box-shadow: 0 0 12px #38bdf8, 0 0 20px rgba(56, 189, 248, 0.4);
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 580px) {
+  .intro-root {
+    padding: 1rem;
+  }
+
+  .intro-card {
+    padding: 2.25rem 1.5rem 2rem;
+    border-radius: 26px;
+  }
+
+  .intro-heading {
+    font-size: 1.8rem;
+  }
+
+  .intro-description {
+    font-size: 0.875rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .intro-chips-container {
+    gap: 0.5rem;
+    margin-bottom: 2rem;
+  }
+
+  .intro-chip {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.75rem;
+  }
+
+  .intro-progress-section {
+    max-width: 260px;
+  }
+}
