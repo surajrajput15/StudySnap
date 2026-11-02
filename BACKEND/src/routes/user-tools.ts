@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { eq, and, desc } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/auth';
-import { getDb, quizzes, flashcardDecks, mindMaps, auditLogs } from '../db';
+import { getDb, quizzes, flashcardDecks, mindMaps } from '../db';
 import { generateId } from '../utils/helpers';
 import { recordAuditLog } from '../middleware/rbac';
 import { recordStudyToolAction } from '../services/alertDispatcher';
@@ -72,8 +72,8 @@ router.get('/quizzes', async (req: Request, res: Response) => {
           })),
         });
         return;
-      } catch {
-        /* fallback */
+      } catch (err) {
+        console.warn('[user-tools] Database query failed for quizzes, using fallback:', err instanceof Error ? err.message : err);
       }
     }
 
@@ -144,8 +144,8 @@ router.post('/quizzes', async (req: Request, res: Response) => {
         });
         res.json({ success: true, quiz: { id, title, totalQuestions: qs.length } });
         return;
-      } catch {
-        /* fallback */
+      } catch (err) {
+        console.warn('[user-tools] Database insert/update failed for quiz, using fallback:', err instanceof Error ? err.message : err);
       }
     }
 
@@ -185,8 +185,8 @@ router.delete('/quizzes/:id', async (req: Request, res: Response) => {
     if (db) {
       try {
         await db.delete(quizzes).where(and(eq(quizzes.id, id), eq(quizzes.userId, userId)));
-      } catch {
-        /* fallback */
+      } catch (err) {
+        console.warn('[user-tools] Database delete failed for quiz, using fallback:', err instanceof Error ? err.message : err);
       }
     }
 
@@ -222,8 +222,8 @@ router.get('/flashcards', async (req: Request, res: Response) => {
           })),
         });
         return;
-      } catch {
-        /* fallback */
+      } catch (err) {
+        console.warn('[user-tools] Database query failed for flashcards, using fallback:', err instanceof Error ? err.message : err);
       }
     }
 
@@ -288,8 +288,8 @@ router.post('/flashcards', async (req: Request, res: Response) => {
         });
         res.json({ success: true, deck: { id, title, cardCount: cards.length } });
         return;
-      } catch {
-        /* fallback */
+      } catch (err) {
+        console.warn('[user-tools] Database insert/update failed for flashcard deck, using fallback:', err instanceof Error ? err.message : err);
       }
     }
 
@@ -326,8 +326,8 @@ router.delete('/flashcards/:id', async (req: Request, res: Response) => {
     if (db) {
       try {
         await db.delete(flashcardDecks).where(and(eq(flashcardDecks.id, id), eq(flashcardDecks.userId, userId)));
-      } catch {
-        /* fallback */
+      } catch (err) {
+        console.warn('[user-tools] Database delete failed for flashcard deck, using fallback:', err instanceof Error ? err.message : err);
       }
     }
 
@@ -363,8 +363,8 @@ router.get('/mindmaps', async (req: Request, res: Response) => {
           })),
         });
         return;
-      } catch {
-        /* fallback */
+      } catch (err) {
+        console.warn('[user-tools] Database query failed for mind maps, using fallback:', err instanceof Error ? err.message : err);
       }
     }
 
@@ -422,8 +422,8 @@ router.post('/mindmaps', async (req: Request, res: Response) => {
         });
         res.json({ success: true, mindMap: { id, title } });
         return;
-      } catch {
-        /* fallback */
+      } catch (err) {
+        console.warn('[user-tools] Database insert/update failed for mind map, using fallback:', err instanceof Error ? err.message : err);
       }
     }
 
@@ -459,8 +459,8 @@ router.delete('/mindmaps/:id', async (req: Request, res: Response) => {
     if (db) {
       try {
         await db.delete(mindMaps).where(and(eq(mindMaps.id, id), eq(mindMaps.userId, userId)));
-      } catch {
-        /* fallback */
+      } catch (err) {
+        console.warn('[user-tools] Database delete failed for mind map, using fallback:', err instanceof Error ? err.message : err);
       }
     }
 

@@ -14,40 +14,55 @@ export default function AdminAuditPage() {
   // Filters
   const [search, setSearch] = useState('');
   const [actionFilter, setActionFilter] = useState('');
-
-  const loadLogs = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const token = await getToken();
-      if (!token) throw new Error('Not authenticated');
-
-      const res = await fetchAdminAuditLogs(token, {
-        search: search || undefined,
-        action: actionFilter || undefined,
-        limit: 50,
-      });
-
-      if (res && res.logs) {
-        setLogs(res.logs);
-        setTotalUnfiltered(res.totalUnfiltered ?? res.pagination?.total ?? 0);
-      } else {
-        throw new Error((res as any)?.error || 'Failed to fetch audit logs');
-      }
-    } catch (err: any) {
-      setError(err?.message || 'Error communicating with Audit API');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
-    loadLogs();
-  }, [actionFilter]);
+    let ignore = false;
+    async function run() {
+      try {
+        const token = await getToken();
+        if (!token) throw new Error('Not authenticated');
+
+        const res = await fetchAdminAuditLogs(token, {
+          search: search || undefined,
+          action: actionFilter || undefined,
+          limit: 50,
+        });
+
+        if (ignore) return;
+        if (res && res.logs) {
+          setLogs(res.logs);
+          setTotalUnfiltered(res.totalUnfiltered ?? res.pagination?.total ?? 0);
+        } else {
+          const apiErr = (res as { error?: string } | null)?.error;
+          throw new Error(apiErr || 'Failed to fetch audit logs');
+        }
+      } catch (err: unknown) {
+        if (!ignore) {
+          const msg = err instanceof Error ? err.message : 'Error communicating with Audit API';
+          setError(msg);
+        }
+      } finally {
+        if (!ignore) {
+          setLoading(false);
+        }
+      }
+    }
+    void run();
+    return () => {
+      ignore = true;
+    };
+  }, [actionFilter, getToken, reloadKey, search]);
+
+  const handleRefresh = () => {
+    setLoading(true);
+    setError(null);
+    setReloadKey((k) => k + 1);
+  };
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    loadLogs();
+    handleRefresh();
   };
 
   return (
@@ -93,7 +108,7 @@ export default function AdminAuditPage() {
           <option value="ADMIN_ACCESS">ADMIN_ACCESS</option>
         </select>
 
-        <button onClick={loadLogs} className="admin-btn admin-btn-outline" style={{ marginLeft: 'auto' }}>
+        <button onClick={handleRefresh} className="admin-btn admin-btn-outline" style={{ marginLeft: 'auto' }}>
           🔄 Refresh
         </button>
       </div>

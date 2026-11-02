@@ -1,6 +1,7 @@
 const CACHE_NAME = 'studysnap-v2';
 const ASSETS_TO_CACHE = [
   '/',
+  '/app',
   '/manifest.json',
   '/robots.txt',
   '/sitemap.xml',
@@ -104,8 +105,9 @@ self.addEventListener('fetch', (event) => {
         fetch(event.request)
           .then((response) => {
             if (response.status === 200) {
+              const responseClone = response.clone();
               caches.open(CACHE_NAME).then((cache) => {
-                cache.put(event.request, response);
+                cache.put(event.request, responseClone);
                 void trimRuntimeCache();
               });
             }

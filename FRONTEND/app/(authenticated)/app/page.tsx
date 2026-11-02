@@ -58,12 +58,21 @@ export default function Page() {
   const isSuperAdmin = isSuperAdminEmail(userEmail) || userRole === 'SUPER_ADMIN';
   const isAdmin = isSuperAdmin || userRole === 'ADMIN';
 
-  const [activeSubTool, setActiveSubTool] = useState<'flashcards' | 'quiz' | 'mindmap' | 'pdf' | 'translate' | null>(null);
+  const [activeSubTool, setActiveSubTool] = useState<'flashcards' | 'quiz' | 'mindmap' | 'pdf' | 'translate' | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const params = new URLSearchParams(window.location.search);
+    const sub = params.get('sub');
+    if (sub === 'flashcards' || sub === 'quiz' || sub === 'mindmap' || sub === 'pdf' || sub === 'translate') {
+      return sub;
+    }
+    return null;
+  });
 
   const [activeTab, setActiveTab] = useState<string>(() => {
     if (typeof window === 'undefined') return 'home';
     const params = new URLSearchParams(window.location.search);
-    return params.get('returnTo') === 'ai' ? 'ai' : 'home';
+    if (params.get('returnTo') === 'ai') return 'ai';
+    return params.get('tab') || 'home';
   });
   const [drawerOpen, setDrawerOpen] = useState(false);
   // Day 9 Task 4 — mirrors VoiceNotes' isRecording so navigation can guard
@@ -84,20 +93,64 @@ export default function Page() {
   // self-guard and calls setActiveTab directly to avoid a double confirmation.
   // Returns true only when the navigation actually happened, so callers (e.g.
   // the mobile drawer) know whether to close.
-  const navigate = useCallback((nextTab: string): boolean => {
+  const navigate = useCallback((nextTab: string, pushHistory = true): boolean => {
     if (shouldConfirmRecordingNav(activeTab, nextTab, voiceRecording)) {
       const leave = window.confirm(RECORDING_NAV_CONFIRM_MESSAGE);
       if (!leave) return false;
     }
     setActiveSubTool(null);
     setActiveTab(nextTab);
+    if (pushHistory && typeof window !== 'undefined') {
+      const url = nextTab === 'home' ? '/app' : `/app?tab=${encodeURIComponent(nextTab)}`;
+      window.history.pushState({ tab: nextTab, sub: null }, '', url);
+    }
     return true;
   }, [activeTab, voiceRecording]);
+
+  const handleOpenSubTool = useCallback((tool: 'flashcards' | 'quiz' | 'mindmap' | 'pdf' | 'translate' | null, pushHistory = true) => {
+    setActiveSubTool(tool);
+    if (pushHistory && typeof window !== 'undefined') {
+      const url = tool ? `/app?tab=${encodeURIComponent(activeTab)}&sub=${encodeURIComponent(tool)}` : (activeTab === 'home' ? '/app' : `/app?tab=${encodeURIComponent(activeTab)}`);
+      window.history.pushState({ tab: activeTab, sub: tool }, '', url);
+    }
+  }, [activeTab]);
+
+  const handleSubToolBack = useCallback(() => {
+    if (typeof window !== 'undefined' && window.history.state?.sub) {
+      window.history.back();
+    } else {
+      handleOpenSubTool(null);
+    }
+  }, [handleOpenSubTool]);
+
+  useEffect(() => {
+    const handlePopState = (e: PopStateEvent) => {
+      const state = e.state as { tab?: string; sub?: string } | null;
+      if (state) {
+        if (state.tab) setActiveTab(state.tab);
+        const sub = state.sub as 'flashcards' | 'quiz' | 'mindmap' | 'pdf' | 'translate' | null;
+        setActiveSubTool(sub || null);
+      } else {
+        const params = new URLSearchParams(window.location.search);
+        setActiveTab(params.get('tab') || 'home');
+        const sub = params.get('sub') as 'flashcards' | 'quiz' | 'mindmap' | 'pdf' | 'translate' | null;
+        setActiveSubTool(sub || null);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !window.history.state) {
+      window.history.replaceState({ tab: activeTab, sub: activeSubTool }, '', window.location.href);
+    }
+  }, [activeTab, activeSubTool]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('returnTo') === 'ai') {
-      window.history.replaceState({}, '', '/app');
+      window.history.replaceState({ tab: 'ai', sub: null }, '', '/app?tab=ai');
     }
   }, []);
 
@@ -384,22 +437,22 @@ export default function Page() {
         <div className="main-content">
           <ErrorBoundary key={`tab-${activeSubTool || activeTab}`} label="This tab">
             {activeSubTool === 'flashcards' && (
-              <FlashcardViewer onBack={() => setActiveSubTool(null)} />
+              <FlashcardViewer onBack={handleSubToolBack} />
             )}
             {activeSubTool === 'quiz' && (
-              <QuizPlayer onBack={() => setActiveSubTool(null)} />
+              <QuizPlayer onBack={handleSubToolBack} />
             )}
             {activeSubTool === 'mindmap' && (
-              <MindMapViewer onBack={() => setActiveSubTool(null)} />
+              <MindMapViewer onBack={handleSubToolBack} />
             )}
             {activeSubTool === 'pdf' && (
               <PdfAiStudio
-                onBack={() => setActiveSubTool(null)}
-                onOpenTool={(tool) => setActiveSubTool(tool)}
+                onBack={handleSubToolBack}
+                onOpenTool={(tool) => handleOpenSubTool(tool)}
               />
             )}
             {activeSubTool === 'translate' && (
-              <TranslationView onBack={() => setActiveSubTool(null)} />
+              <TranslationView onBack={handleSubToolBack} />
             )}
 
             {!activeSubTool && (
@@ -409,7 +462,7 @@ export default function Page() {
                     onEditNote={handleEditNote} 
                     onCreateNote={handleCreateNote} 
                     onNavigate={(tab) => navigate(tab)}
-                    onOpenSubTool={(tool) => setActiveSubTool(tool)}
+                    onOpenSubTool={(tool) => handleOpenSubTool(tool)}
                   />
                 )}
                 {activeTab === 'editor' && (

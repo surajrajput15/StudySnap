@@ -10,29 +10,44 @@ export default function AdminOverviewPage() {
   const [data, setData] = useState<AdminOverviewResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const token = await getToken();
-      if (!token) throw new Error('Not authenticated');
-      const res = await fetchAdminOverview(token);
-      if (res && res.metrics) {
-        setData(res);
-      } else {
-        throw new Error((res as any)?.error || 'Failed to load metrics');
-      }
-    } catch (err: any) {
-      setError(err?.message || 'Error communicating with Admin API');
-    } finally {
-      setLoading(false);
-    }
+  const handleRetry = () => {
+    setLoading(true);
+    setError(null);
+    setReloadKey((k) => k + 1);
   };
 
   useEffect(() => {
-    loadData();
-  }, []);
+    let ignore = false;
+    async function run() {
+      try {
+        const token = await getToken();
+        if (!token) throw new Error('Not authenticated');
+        const res = await fetchAdminOverview(token);
+        if (ignore) return;
+        if (res && res.metrics) {
+          setData(res);
+        } else {
+          const apiErr = (res as { error?: string } | null)?.error;
+          throw new Error(apiErr || 'Failed to load metrics');
+        }
+      } catch (err: unknown) {
+        if (!ignore) {
+          const msg = err instanceof Error ? err.message : 'Error communicating with Admin API';
+          setError(msg);
+        }
+      } finally {
+        if (!ignore) {
+          setLoading(false);
+        }
+      }
+    }
+    void run();
+    return () => {
+      ignore = true;
+    };
+  }, [getToken, reloadKey]);
 
   if (loading) {
     return (
@@ -48,7 +63,7 @@ export default function AdminOverviewPage() {
       <div className="admin-alert-banner admin-alert-critical">
         <span>⚠️</span>
         <div>{error}</div>
-        <button onClick={loadData} className="admin-btn admin-btn-outline" style={{ marginLeft: 'auto' }}>
+        <button onClick={handleRetry} className="admin-btn admin-btn-outline" style={{ marginLeft: 'auto' }}>
           Retry
         </button>
       </div>

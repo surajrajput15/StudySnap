@@ -41,6 +41,7 @@ export const API = {
   base: BACKEND_URL,
   health: `${BACKEND_URL}/api/health`,
   notes: `${BACKEND_URL}/api/notes`,
+  folders: `${BACKEND_URL}/api/notes/folders`,
   categories: `${BACKEND_URL}/api/notes/categories`,
   voiceNotes: `${BACKEND_URL}/api/voice-notes`,
   admin: {

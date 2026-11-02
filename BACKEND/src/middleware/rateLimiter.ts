@@ -1,4 +1,5 @@
-import rateLimit from 'express-rate-limit';
+import rateLimit, { type Options } from 'express-rate-limit';
+import type { Request, Response, NextFunction } from 'express';
 import { dispatchSecurityAlert } from '../services/alertDispatcher';
 import { maskUserRef } from '../services/telegram';
 
@@ -11,13 +12,18 @@ const limits = {
 } as const;
 
 function createRateLimitHandler(limiterName: string) {
-  return (req: any, res: any, _next: any, options: any) => {
+  return (req: Request, res: Response, _next: NextFunction, options: Options) => {
+    const errorDetails =
+      typeof options.message === 'object' && options.message !== null && 'error' in options.message
+        ? String((options.message as { error: unknown }).error)
+        : 'Rate limit exceeded';
+
     dispatchSecurityAlert({
       issue: `Rate limit triggered (${limiterName})`,
       userRef: maskUserRef(req.userId),
       endpoint: `${req.baseUrl || ''}${req.path || ''}` || req.originalUrl,
       action: 'Throttled (HTTP 429)',
-      details: typeof options.message === 'object' && options.message.error ? options.message.error : 'Rate limit exceeded',
+      details: errorDetails,
     });
     res.status(options.statusCode).json(options.message);
   };

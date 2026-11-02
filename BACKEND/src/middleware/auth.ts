@@ -56,7 +56,7 @@ export async function resolveUserEmail(userId: string, claimEmail?: string): Pro
     const clerk = createClerkClient({ secretKey: env.CLERK_SECRET_KEY });
     const user = await clerk.users.getUser(userId);
     const email =
-      user.emailAddresses?.find((e: any) => e.id === user.primaryEmailAddressId)?.emailAddress ||
+      user.emailAddresses?.find((e: { id?: string; emailAddress?: string }) => e.id === user.primaryEmailAddressId)?.emailAddress ||
       user.emailAddresses?.[0]?.emailAddress;
     if (email) {
       userEmailCache.set(userId, email);

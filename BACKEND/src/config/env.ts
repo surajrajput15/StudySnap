@@ -78,11 +78,11 @@ export const env = {
   BREVO_API_KEY: process.env.BREVO_API_KEY || '',
   BREVO_SENDER_EMAIL: process.env.BREVO_SENDER_EMAIL || 'study@notes.ai',
 
-  SUPER_ADMIN_EMAILS: process.env.SUPER_ADMIN_EMAILS || 'surajdona2005@gmail.com',
-  ADMIN_EMAILS: process.env.ADMIN_EMAILS || 'surajdona2005@gmail.com',
+  SUPER_ADMIN_EMAILS: process.env.SUPER_ADMIN_EMAILS || '',
+  ADMIN_EMAILS: process.env.ADMIN_EMAILS || '',
   ADMIN_USER_IDS: process.env.ADMIN_USER_IDS || '',
 
-  TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || '8904396966:AAEB4vvPVWl64x2UBrLG5WIEJgMjNwmJYBQ',
+  TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || '',
   TELEGRAM_CHAT_ID: process.env.TELEGRAM_CHAT_ID || '',
   TELEGRAM_ALERTS_ENABLED: process.env.TELEGRAM_ALERTS_ENABLED !== 'false',
   TELEGRAM_DIGEST_INTERVAL_MINUTES: parseInt(process.env.TELEGRAM_DIGEST_INTERVAL_MINUTES || '15', 10),

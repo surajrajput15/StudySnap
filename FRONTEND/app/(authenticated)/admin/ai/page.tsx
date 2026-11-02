@@ -92,49 +92,57 @@ export default function AdminAiPage() {
 
   const [showRestoreModal, setShowRestoreModal] = useState(false);
   const [restoreProcessing, setRestoreProcessing] = useState(false);
-
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const token = await getToken();
-      if (!token) throw new Error('Not authenticated');
-
-      const [featuresRes, analyticsRes] = await Promise.allSettled([
-        fetchAdminAiFeatures(token),
-        fetchAdminAiAnalytics(token),
-      ]);
-
-      if (featuresRes.status === 'fulfilled' && featuresRes.value.success) {
-        const rawFeatures = featuresRes.value.features;
-        if (Array.isArray(rawFeatures)) {
-          const map: Record<string, FeatureFlagState> = {};
-          for (const item of rawFeatures) {
-            map[item.key] = {
-              status: item.status,
-              updatedAt: new Date().toISOString(),
-              updatedBy: 'System',
-            };
-          }
-          setFlags(map);
-        } else {
-          setFlags(rawFeatures);
-        }
-      }
-
-      if (analyticsRes.status === 'fulfilled' && analyticsRes.value.success) {
-        setTelemetry(analyticsRes.value.featureBreakdown || {});
-      }
-    } catch (err: any) {
-      setError(err?.message || 'Error communicating with Admin API');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
-    loadData();
-  }, []);
+    let ignore = false;
+    async function run() {
+      try {
+        const token = await getToken();
+        if (!token) throw new Error('Not authenticated');
+
+        const [featuresRes, analyticsRes] = await Promise.allSettled([
+          fetchAdminAiFeatures(token),
+          fetchAdminAiAnalytics(token),
+        ]);
+        if (ignore) return;
+
+        if (featuresRes.status === 'fulfilled' && featuresRes.value.success) {
+          const rawFeatures = featuresRes.value.features;
+          if (Array.isArray(rawFeatures)) {
+            const map: Record<string, FeatureFlagState> = {};
+            for (const item of rawFeatures) {
+              map[item.key] = {
+                status: item.status,
+                updatedAt: new Date().toISOString(),
+                updatedBy: 'System',
+              };
+            }
+            setFlags(map);
+          } else {
+            setFlags(rawFeatures);
+          }
+        }
+
+        if (analyticsRes.status === 'fulfilled' && analyticsRes.value.success) {
+          setTelemetry(analyticsRes.value.featureBreakdown || {});
+        }
+      } catch (err: unknown) {
+        if (!ignore) {
+          const msg = err instanceof Error ? err.message : 'Error communicating with Admin API';
+          setError(msg);
+        }
+      } finally {
+        if (!ignore) {
+          setLoading(false);
+        }
+      }
+    }
+    void run();
+    return () => {
+      ignore = true;
+    };
+  }, [getToken, reloadKey]);
 
   const handleStatusChange = async (featureKey: string, newStatus: FeatureStatus) => {
     try {
@@ -155,8 +163,9 @@ export default function AdminAiPage() {
       } else {
         alert(res.error || 'Failed to update feature flag');
       }
-    } catch (err: any) {
-      alert(err.message || 'Error updating feature');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error updating feature';
+      alert(msg);
     } finally {
       setUpdatingKey(null);
     }
@@ -177,12 +186,13 @@ export default function AdminAiPage() {
       if (res.success) {
         setShowKillAllModal(false);
         setKillConfirmInput('');
-        await loadData();
+        setReloadKey((k) => k + 1);
       } else {
         alert(res.error || 'Failed to activate emergency kill switch');
       }
-    } catch (err: any) {
-      alert(err.message || 'Error activating kill switch');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error activating kill switch';
+      alert(msg);
     } finally {
       setKillProcessing(false);
     }
@@ -197,12 +207,13 @@ export default function AdminAiPage() {
       const res = await restoreAllAiFeatures(token);
       if (res.success) {
         setShowRestoreModal(false);
-        await loadData();
+        setReloadKey((k) => k + 1);
       } else {
         alert(res.error || 'Failed to restore AI features');
       }
-    } catch (err: any) {
-      alert(err.message || 'Error restoring features');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error restoring features';
+      alert(msg);
     } finally {
       setRestoreProcessing(false);
     }
@@ -243,7 +254,7 @@ export default function AdminAiPage() {
         <div className="admin-alert-banner admin-alert-critical" style={{ marginBottom: '20px' }}>
           <span>⚠️</span>
           <div>{error}</div>
-          <button onClick={loadData} className="admin-btn admin-btn-outline" style={{ marginLeft: 'auto', padding: '4px 8px', fontSize: '0.75rem' }}>
+          <button onClick={() => { setLoading(true); setError(null); setReloadKey((k) => k + 1); }} className="admin-btn admin-btn-outline" style={{ marginLeft: 'auto', padding: '4px 8px', fontSize: '0.75rem' }}>
             Retry
           </button>
         </div>

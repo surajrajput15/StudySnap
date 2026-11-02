@@ -1,13 +1,11 @@
 import { RequestHandler, Request, Response, NextFunction } from 'express';
-import { getDb, auditLogs, featureFlags, aiRequestLogs, users } from '../db';
+import { getDb, auditLogs, featureFlags, aiRequestLogs } from '../db';
 import { eq } from 'drizzle-orm';
 import {
   UserRole,
-  USER_ROLES,
   Permission,
   ROLE_PERMISSIONS,
   AI_FEATURE_KEYS,
-  AiFeatureKey,
 } from '../config/constants';
 import { dispatchAiSuccessAlert, dispatchAiErrorAlert, dispatchSecurityAlert } from '../services/alertDispatcher';
 import { maskUserRef, userEmailCache } from '../services/telegram';

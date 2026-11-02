@@ -28,6 +28,9 @@ export const noteSchema = z.object({
   pinLock: z.string().regex(PIN_PATTERN, PIN_PATTERN_MESSAGE).optional().nullable(),
   categoryId: z.string().uuid().optional().nullable(),
   folderId: z.string().uuid().optional().nullable(),
+  lastRevisedAt: z.string().datetime().optional().nullable(),
+  nextRevisionAt: z.string().datetime().optional().nullable(),
+  revisionStreak: z.number().int().min(0).max(100000).optional(),
 }).strict();
 
 export const aiChatSchema = z.object({
@@ -79,4 +82,15 @@ export const clerkUserCreatedDataSchema = z.object({
   id: z.string().min(1).max(200),
   first_name: z.string().max(200).optional(),
   last_name: z.string().max(200).optional(),
+}).strict();
+
+export const folderSchema = z.object({
+  id: z.string().uuid().optional(),
+  name: z.string().trim().min(1, 'Folder name required').max(100, 'Folder name too long'),
+}).strict();
+
+export const categorySchema = z.object({
+  id: z.string().uuid().optional(),
+  name: z.string().trim().min(1, 'Category name required').max(100, 'Category name too long'),
+  color: z.string().trim().max(50).optional().nullable(),
 }).strict();

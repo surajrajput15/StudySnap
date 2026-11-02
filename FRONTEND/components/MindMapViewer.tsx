@@ -2,9 +2,8 @@
 
 import React, { useState } from 'react';
 import { useAuth } from '@clerk/nextjs';
-import { useStore } from '@/lib/store/useStore';
 import { API, apiFetch } from '@/lib/config';
-import { MapPin, ZoomIn, ZoomOut, RotateCcw, ArrowLeft, Sparkles, ChevronRight } from 'lucide-react';
+import { ZoomIn, ZoomOut, RotateCcw, ArrowLeft, Sparkles } from 'lucide-react';
 
 export interface MindMapNode {
   id: string;
@@ -53,7 +52,6 @@ interface MindMapViewerProps {
 
 export default function MindMapViewer({ onBack, initialTopic }: MindMapViewerProps) {
   const { getToken } = useAuth();
-  const notes = useStore((s) => s.notes);
   const [mindMap, setMindMap] = useState<MindMapNode>(() => {
     if (initialTopic) {
       return {

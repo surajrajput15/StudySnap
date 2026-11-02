@@ -1,10 +1,9 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import { eq, desc, and, like, sql } from 'drizzle-orm';
+import { eq, desc, sql } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/auth';
 import {
   requireRole,
-  requirePermission,
   recordAuditLog,
   getFeatureFlagStatus,
   updateFeatureFlag,
@@ -17,11 +16,9 @@ import {
   UserRole,
   USER_ROLES,
   AI_FEATURE_KEYS,
-  AiFeatureKey,
 } from '../config/constants';
-import { getDb, users, notes, voiceNotes, auditLogs, featureFlags, aiRequestLogs } from '../db';
+import { getDb, users, notes, voiceNotes, auditLogs, aiRequestLogs } from '../db';
 import { env } from '../config/env';
-import Groq from 'groq-sdk';
 import { isStorageConfigured } from '../services/storage';
 
 const router = Router();
@@ -42,7 +39,7 @@ router.get('/overview', async (req: Request, res: Response) => {
     let totalUsers = mockUserRoles.size || 1;
     let studentUsers = 0;
     let adminUsers = 1;
-    let activeToday = 1;
+    const activeToday = 1;
     let totalNotes = 0;
     let totalVoiceNotes = 0;
     let suspendedUsers = 0;
@@ -88,7 +85,7 @@ router.get('/overview', async (req: Request, res: Response) => {
     let aiTotal = mockAiRequestLogs.length;
     let aiSuccess = mockAiRequestLogs.filter((r) => r.success).length;
     let aiErrors = aiTotal - aiSuccess;
-    let avgLatency = aiTotal > 0
+    const avgLatency = aiTotal > 0
       ? Math.round(mockAiRequestLogs.reduce((acc, r) => acc + r.durationMs, 0) / aiTotal)
       : 0;
 
@@ -236,7 +233,7 @@ router.get('/overview', async (req: Request, res: Response) => {
       recentAudit,
       recentAuditLogs: recentAudit,
     });
-  } catch (err) {
+  } catch {
     res.status(500).json({ success: false, error: 'Failed to generate admin overview' });
   }
 });
@@ -412,7 +409,7 @@ router.patch('/users/:id/status', async (req: Request, res: Response) => {
           return;
         }
         await db.update(users).set({ isSuspended }).where(eq(users.id, targetUserId));
-      } catch (dbErr) {
+      } catch {
         /* non-migrated column fallback */
       }
     }
@@ -532,7 +529,7 @@ router.patch('/users/:id/role', async (req: Request, res: Response) => {
     if (db) {
       try {
         await db.update(users).set({ role: newRole }).where(eq(users.id, targetUserId));
-      } catch (dbErr) {
+      } catch {
         /* non-migrated column fallback */
       }
     }
@@ -743,10 +740,9 @@ router.get('/audit-logs', async (req: Request, res: Response) => {
     const db = getDb();
     if (db) {
       try {
-        let baseQuery = db.select().from(auditLogs);
-        if (actionFilter) {
-          baseQuery = baseQuery.where(eq(auditLogs.action, actionFilter)) as any;
-        }
+        const baseQuery = actionFilter
+          ? db.select().from(auditLogs).where(eq(auditLogs.action, actionFilter))
+          : db.select().from(auditLogs);
 
         const rows = await baseQuery
           .orderBy(desc(auditLogs.createdAt))
@@ -857,7 +853,7 @@ router.get('/system/health', async (req: Request, res: Response) => {
         lastChecked: nowIso,
       };
     }
-  } catch (err) {
+  } catch {
     probes.database = {
       status: 'unavailable',
       message: 'Database query execution failed',

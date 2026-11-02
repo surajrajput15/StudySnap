@@ -8,7 +8,7 @@ import { generateId } from '../utils/helpers';
 import { hashPin, verifyPin } from '../utils/pin';
 import { checkNoteIdAvailability } from '../utils/noteOwnership';
 import { computeCursor, isUpdatedAfter } from '../utils/delta';
-import { validate, noteSchema, verifyPinSchema } from '../middleware/validate';
+import { validate, noteSchema, verifyPinSchema, folderSchema, categorySchema } from '../middleware/validate';
 import { cacheGet, cacheSet, invalidateUserCache } from '../services/cache';
 import { CACHE_TTL_NOTES_SECONDS, DEFAULT_CATEGORIES } from '../config/constants';
 import { destroyVoiceAudio, isStorageConfigured, buildVoiceAudioPublicId } from '../services/storage';
@@ -28,13 +28,39 @@ interface MockNote {
   pinLock?: string | null;
   categoryId?: string | null;
   folderId?: string | null;
+  lastRevisedAt?: Date | string | null;
+  nextRevisionAt?: Date | string | null;
+  revisionStreak?: number;
   createdAt: Date | string;
   updatedAt: Date | string;
 }
 
+interface MockFolder {
+  id: string;
+  userId: string;
+  name: string;
+  createdAt: Date;
+}
+
+interface MockCategory {
+  id: string;
+  userId: string;
+  name: string;
+  color?: string | null;
+  createdAt: Date;
+}
+
 type NoteWithoutPinLock = Omit<MockNote, 'pinLock'>;
 
-let mockNotes: MockNote[] = [];
+export let mockNotes: MockNote[] = [];
+export let mockFolders: MockFolder[] = [];
+export let mockCategories: MockCategory[] = [];
+
+export function resetMockNotesStores(): void {
+  mockNotes = [];
+  mockFolders = [];
+  mockCategories = [];
+}
 
 /**
  * Day 7 Task 2 — sticky delete guard.
@@ -232,7 +258,21 @@ router.get('/', async (req: Request, res: Response) => {
 router.post('/', validate(noteSchema), async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const { id, title, content, tags, isPinned, isFavorite, pinLock, categoryId, folderId, createdAt } = req.body;
+    const {
+      id,
+      title,
+      content,
+      tags,
+      isPinned,
+      isFavorite,
+      pinLock,
+      categoryId,
+      folderId,
+      createdAt,
+      lastRevisedAt,
+      nextRevisionAt,
+      revisionStreak,
+    } = req.body;
 
     // Reject a stale upsert-by-id for a note deleted within the sticky-guard
     // window so a late POST can never resurrect it after the DELETE.
@@ -282,6 +322,9 @@ router.post('/', validate(noteSchema), async (req: Request, res: Response) => {
       pinLock: pinLock ? hashPin(pinLock) : null,
       categoryId: categoryId || null,
       folderId: folderId || null,
+      lastRevisedAt: lastRevisedAt ? new Date(lastRevisedAt) : (lastRevisedAt === null ? null : undefined),
+      nextRevisionAt: nextRevisionAt ? new Date(nextRevisionAt) : (nextRevisionAt === null ? null : undefined),
+      revisionStreak: typeof revisionStreak === 'number' ? revisionStreak : undefined,
       updatedAt: new Date(),
     };
 
@@ -447,13 +490,129 @@ router.delete('/', async (req: Request, res: Response) => {
   }
 });
 
+// ══════════════════════════════════════════════════════════
+// Folders CRUD
+// ══════════════════════════════════════════════════════════
+
+router.get('/folders', async (req: Request, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const db = getDb();
+    if (!db) {
+      const userFolders = mockFolders
+        .filter((f) => f.userId === userId)
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      res.json({ success: true, folders: userFolders });
+      return;
+    }
+
+    const rows = await db
+      .select()
+      .from(folders)
+      .where(eq(folders.userId, userId))
+      .orderBy(desc(folders.createdAt));
+    res.json({ success: true, folders: rows });
+  } catch {
+    res.status(500).json({ success: false, error: 'Failed to fetch folders' });
+  }
+});
+
+router.post('/folders', validate(folderSchema), async (req: Request, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const { id: incomingId, name } = req.body;
+    const id = incomingId || generateId();
+    const now = new Date();
+
+    const db = getDb();
+    if (!db) {
+      const existingIdx = mockFolders.findIndex((f) => f.id === id && f.userId === userId);
+      const item: MockFolder = { id, userId, name, createdAt: now };
+      if (existingIdx >= 0) {
+        mockFolders[existingIdx].name = name;
+      } else {
+        mockFolders.unshift(item);
+      }
+      await invalidateUserCache(userId);
+      res.json({ success: true, folder: { id, name, createdAt: now } });
+      return;
+    }
+
+    await db
+      .insert(folders)
+      .values({ id, userId, name, createdAt: now })
+      .onConflictDoUpdate({
+        target: folders.id,
+        set: { name },
+        where: eq(folders.userId, userId),
+      });
+
+    await invalidateUserCache(userId);
+    res.json({ success: true, folder: { id, name, createdAt: now } });
+  } catch {
+    res.status(500).json({ success: false, error: 'Failed to save folder' });
+  }
+});
+
+router.delete('/folders/:id', async (req: Request, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const rawId = req.params.id;
+    const id = Array.isArray(rawId) ? rawId[0] : String(rawId);
+
+    if (!z.string().uuid().safeParse(id).success) {
+      res.status(400).json({ success: false, error: 'Invalid folder ID' });
+      return;
+    }
+
+    const db = getDb();
+    if (!db) {
+      const idx = mockFolders.findIndex((f) => f.id === id && f.userId === userId);
+      if (idx === -1) {
+        res.status(404).json({ success: false, error: 'Folder not found' });
+        return;
+      }
+      mockFolders.splice(idx, 1);
+      // Cascade delete notes inside folder in mock store to match schema onDelete: cascade
+      mockNotes = mockNotes.filter((n) => !(n.folderId === id && n.userId === userId));
+      await invalidateUserCache(userId);
+      res.json({ success: true, message: 'Folder deleted' });
+      return;
+    }
+
+    // Verify ownership
+    const existing = await db
+      .select({ id: folders.id })
+      .from(folders)
+      .where(and(eq(folders.id, id), eq(folders.userId, userId)))
+      .limit(1);
+
+    if (existing.length === 0) {
+      res.status(404).json({ success: false, error: 'Folder not found' });
+      return;
+    }
+
+    // Notes table has onDelete: cascade on folderId, so db.delete(folders) automatically cascades
+    await db.delete(folders).where(and(eq(folders.id, id), eq(folders.userId, userId)));
+    await invalidateUserCache(userId);
+    res.json({ success: true, message: 'Folder deleted' });
+  } catch {
+    res.status(500).json({ success: false, error: 'Failed to delete folder' });
+  }
+});
+
+// ══════════════════════════════════════════════════════════
+// Categories CRUD
+// ══════════════════════════════════════════════════════════
+
 router.get('/categories', async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
 
     const db = getDb();
     if (!db) {
-      res.json({ success: true, categories: DEFAULT_CATEGORIES });
+      const userCustom = mockCategories.filter((c) => c.userId === userId);
+      res.json({ success: true, categories: [...DEFAULT_CATEGORIES, ...userCustom] });
       return;
     }
 
@@ -461,6 +620,94 @@ router.get('/categories', async (req: Request, res: Response) => {
     res.json({ success: true, categories: [...DEFAULT_CATEGORIES, ...dbCategories] });
   } catch {
     res.status(500).json({ success: false, error: 'Failed to fetch categories' });
+  }
+});
+
+router.post('/categories', validate(categorySchema), async (req: Request, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const { id: incomingId, name, color } = req.body;
+    const id = incomingId || generateId();
+    const now = new Date();
+
+    const db = getDb();
+    if (!db) {
+      const existingIdx = mockCategories.findIndex((c) => c.id === id && c.userId === userId);
+      const item: MockCategory = { id, userId, name, color: color || null, createdAt: now };
+      if (existingIdx >= 0) {
+        mockCategories[existingIdx].name = name;
+        mockCategories[existingIdx].color = color || null;
+      } else {
+        mockCategories.push(item);
+      }
+      await invalidateUserCache(userId);
+      res.json({ success: true, category: { id, name, color: color || null, createdAt: now } });
+      return;
+    }
+
+    await db
+      .insert(categories)
+      .values({ id, userId, name, color: color || null, createdAt: now })
+      .onConflictDoUpdate({
+        target: categories.id,
+        set: { name, color: color || null },
+        where: eq(categories.userId, userId),
+      });
+
+    await invalidateUserCache(userId);
+    res.json({ success: true, category: { id, name, color: color || null, createdAt: now } });
+  } catch {
+    res.status(500).json({ success: false, error: 'Failed to save category' });
+  }
+});
+
+router.delete('/categories/:id', async (req: Request, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const rawId = req.params.id;
+    const id = Array.isArray(rawId) ? rawId[0] : String(rawId);
+
+    if (DEFAULT_CATEGORIES.some((c) => c.id === id)) {
+      res.status(400).json({ success: false, error: 'Cannot delete default system category' });
+      return;
+    }
+
+    if (!z.string().uuid().safeParse(id).success) {
+      res.status(400).json({ success: false, error: 'Invalid category ID' });
+      return;
+    }
+
+    const db = getDb();
+    if (!db) {
+      const idx = mockCategories.findIndex((c) => c.id === id && c.userId === userId);
+      if (idx === -1) {
+        res.status(404).json({ success: false, error: 'Category not found' });
+        return;
+      }
+      mockCategories.splice(idx, 1);
+      // In mock, set categoryId to null on affected notes to mirror onDelete: set null
+      mockNotes = mockNotes.map((n) => (n.categoryId === id && n.userId === userId ? { ...n, categoryId: null } : n));
+      await invalidateUserCache(userId);
+      res.json({ success: true, message: 'Category deleted' });
+      return;
+    }
+
+    const existing = await db
+      .select({ id: categories.id })
+      .from(categories)
+      .where(and(eq(categories.id, id), eq(categories.userId, userId)))
+      .limit(1);
+
+    if (existing.length === 0) {
+      res.status(404).json({ success: false, error: 'Category not found' });
+      return;
+    }
+
+    await db.delete(categories).where(and(eq(categories.id, id), eq(categories.userId, userId)));
+    await invalidateUserCache(userId);
+    res.json({ success: true, message: 'Category deleted' });
+  } catch {
+    res.status(500).json({ success: false, error: 'Failed to delete category' });
   }
 });
 

@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { celebrate } from '@/lib/confetti';
-import { HelpCircle, CheckCircle, XCircle, ArrowLeft, RotateCcw, Clock, Award } from 'lucide-react';
+import { HelpCircle, CheckCircle, XCircle, ArrowLeft, RotateCcw } from 'lucide-react';
 
 export interface QuizQuestion {
   question: string;
@@ -60,7 +60,6 @@ export default function QuizPlayer({ onBack, questions: initialQuestions, topicT
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [isAnswered, setIsAnswered] = useState(false);
   const [score, setScore] = useState(0);
-  const [userAnswers, setUserAnswers] = useState<Array<{ selected: number; correct: boolean }>>([]);
   const [isFinished, setIsFinished] = useState(false);
 
   const currentQ = questions[currentIndex];
@@ -74,8 +73,6 @@ export default function QuizPlayer({ onBack, questions: initialQuestions, topicT
     if (isCorrect) {
       setScore((prev) => prev + 1);
     }
-
-    setUserAnswers((prev) => [...prev, { selected: index, correct: isCorrect }]);
   };
 
   const handleNext = () => {
@@ -94,7 +91,6 @@ export default function QuizPlayer({ onBack, questions: initialQuestions, topicT
     setSelectedOption(null);
     setIsAnswered(false);
     setScore(0);
-    setUserAnswers([]);
     setIsFinished(false);
   };
 
@@ -181,13 +177,13 @@ export default function QuizPlayer({ onBack, questions: initialQuestions, topicT
 
               if (isAnswered) {
                 if (isCorrect) {
-                  border = '2px solid #059669';
-                  bg = '#ecfdf5';
-                  color = '#065f46';
+                  border = '2px solid var(--primary, #059669)';
+                  bg = 'var(--primary-container)';
+                  color = 'var(--on-primary-container, var(--primary))';
                 } else if (isSelected && !isCorrect) {
-                  border = '2px solid #dc2626';
-                  bg = '#fef2f2';
-                  color = '#991b1b';
+                  border = '2px solid var(--error, #dc2626)';
+                  bg = 'var(--error-container)';
+                  color = 'var(--on-error-container, var(--error))';
                 }
               }
 
@@ -247,14 +243,14 @@ export default function QuizPlayer({ onBack, questions: initialQuestions, topicT
               style={{
                 padding: '14px 16px',
                 borderRadius: '12px',
-                background: selectedOption === currentQ.correctAnswer ? '#ecfdf5' : '#fffbeb',
-                border: `1px solid ${selectedOption === currentQ.correctAnswer ? '#a7f3d0' : '#fde68a'}`,
+                background: selectedOption === currentQ.correctAnswer ? 'var(--primary-container)' : 'var(--surface-variant)',
+                border: '1px solid var(--outline-variant)',
                 marginBottom: '20px',
                 fontSize: '0.875rem',
                 lineHeight: 1.5,
               }}
             >
-              <div style={{ fontWeight: 700, marginBottom: '4px', color: selectedOption === currentQ.correctAnswer ? '#065f46' : '#92400e' }}>
+              <div style={{ fontWeight: 700, marginBottom: '4px', color: selectedOption === currentQ.correctAnswer ? 'var(--primary)' : 'var(--on-surface)' }}>
                 {selectedOption === currentQ.correctAnswer ? '✓ Correct Answer!' : 'Explanation:'}
               </div>
               <div style={{ color: 'var(--on-surface)' }}>{currentQ.explanation}</div>
@@ -302,13 +298,13 @@ export default function QuizPlayer({ onBack, questions: initialQuestions, topicT
           </p>
 
           <div style={{ display: 'flex', gap: '16px', justifyContent: 'center', marginBottom: '28px' }}>
-            <div style={{ background: '#ecfdf5', padding: '16px 24px', borderRadius: '12px', border: '1px solid #a7f3d0' }}>
-              <div style={{ fontSize: '1.75rem', fontWeight: 700, color: '#065f46' }}>{score}</div>
-              <div style={{ fontSize: '0.75rem', color: '#047857' }}>Correct</div>
+            <div style={{ background: 'var(--primary-container)', padding: '16px 24px', borderRadius: '12px', border: '1px solid var(--outline-variant)' }}>
+              <div style={{ fontSize: '1.75rem', fontWeight: 700, color: 'var(--primary)' }}>{score}</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--secondary)' }}>Correct</div>
             </div>
-            <div style={{ background: '#fef2f2', padding: '16px 24px', borderRadius: '12px', border: '1px solid #fca5a5' }}>
-              <div style={{ fontSize: '1.75rem', fontWeight: 700, color: '#991b1b' }}>{questions.length - score}</div>
-              <div style={{ fontSize: '0.75rem', color: '#b91c1c' }}>Missed</div>
+            <div style={{ background: 'var(--error-container)', padding: '16px 24px', borderRadius: '12px', border: '1px solid var(--outline-variant)' }}>
+              <div style={{ fontSize: '1.75rem', fontWeight: 700, color: 'var(--error, #ba1a1a)' }}>{questions.length - score}</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--secondary)' }}>Missed</div>
             </div>
           </div>
 

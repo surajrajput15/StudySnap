@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useStore } from '@/lib/store/useStore';
 import { celebrate } from '@/lib/confetti';
-import { LayoutGrid, RotateCw, CheckCircle, ThumbsUp, AlertCircle, RefreshCw, ArrowLeft, Plus } from 'lucide-react';
+import { LayoutGrid, RotateCw, CheckCircle, ThumbsUp, AlertCircle, RefreshCw, ArrowLeft } from 'lucide-react';
 
 export interface Flashcard {
   id: string;
@@ -47,7 +47,7 @@ interface FlashcardViewerProps {
 
 export default function FlashcardViewer({ onBack, cards: customCards }: FlashcardViewerProps) {
   const notes = useStore((s) => s.notes);
-  const [deck, setDeck] = useState<Flashcard[]>(() => {
+  const [deck] = useState<Flashcard[]>(() => {
     if (customCards && customCards.length > 0) return customCards;
     // Build from existing user notes if available
     if (notes && notes.length > 0) {
@@ -155,6 +155,15 @@ export default function FlashcardViewer({ onBack, cards: customCards }: Flashcar
         <div>
           <div
             onClick={handleFlip}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                handleFlip();
+              }
+            }}
+            aria-label={`Flashcard: ${isFlipped ? currentCard?.back : currentCard?.front}. Press Enter or Space to flip.`}
             style={{
               minHeight: '260px',
               background: 'var(--surface)',
@@ -169,6 +178,7 @@ export default function FlashcardViewer({ onBack, cards: customCards }: Flashcar
               transition: 'transform 0.2s ease, border-color 0.2s ease',
               position: 'relative',
               userSelect: 'none',
+              outline: 'none',
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -194,7 +204,7 @@ export default function FlashcardViewer({ onBack, cards: customCards }: Flashcar
                   fontSize: '1.25rem',
                   fontWeight: 600,
                   lineHeight: 1.5,
-                  color: isFlipped ? 'var(--primary-dark)' : 'var(--on-surface)',
+                  color: isFlipped ? 'var(--primary)' : 'var(--on-surface)',
                 }}
               >
                 {isFlipped ? currentCard?.back : currentCard?.front}
@@ -214,9 +224,9 @@ export default function FlashcardViewer({ onBack, cards: customCards }: Flashcar
                 flex: 1,
                 padding: '12px',
                 borderRadius: '12px',
-                border: '1px solid #fca5a5',
-                background: '#fef2f2',
-                color: '#991b1b',
+                border: '1px solid var(--outline-variant)',
+                background: 'var(--error-container)',
+                color: 'var(--error, #ba1a1a)',
                 fontWeight: 600,
                 fontSize: '0.875rem',
                 cursor: 'pointer',
@@ -235,9 +245,9 @@ export default function FlashcardViewer({ onBack, cards: customCards }: Flashcar
                 flex: 1,
                 padding: '12px',
                 borderRadius: '12px',
-                border: '1px solid #bfdbfe',
-                background: '#eff6ff',
-                color: '#1e40af',
+                border: '1px solid var(--outline-variant)',
+                background: 'var(--primary-container)',
+                color: 'var(--primary)',
                 fontWeight: 600,
                 fontSize: '0.875rem',
                 cursor: 'pointer',
@@ -256,9 +266,9 @@ export default function FlashcardViewer({ onBack, cards: customCards }: Flashcar
                 flex: 1,
                 padding: '12px',
                 borderRadius: '12px',
-                border: '1px solid #a7f3d0',
-                background: '#ecfdf5',
-                color: '#065f46',
+                border: '1px solid var(--outline-variant)',
+                background: 'var(--surface-variant)',
+                color: 'var(--on-surface)',
                 fontWeight: 600,
                 fontSize: '0.875rem',
                 cursor: 'pointer',
@@ -291,17 +301,17 @@ export default function FlashcardViewer({ onBack, cards: customCards }: Flashcar
           </p>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '28px' }}>
-            <div style={{ background: '#ecfdf5', padding: '16px', borderRadius: '12px', border: '1px solid #a7f3d0' }}>
-              <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#065f46' }}>{results.easy}</div>
-              <div style={{ fontSize: '0.75rem', color: '#047857' }}>Easy</div>
+            <div style={{ background: 'var(--surface-variant)', padding: '16px', borderRadius: '12px', border: '1px solid var(--outline-variant)' }}>
+              <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--on-surface)' }}>{results.easy}</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--secondary)' }}>Easy</div>
             </div>
-            <div style={{ background: '#eff6ff', padding: '16px', borderRadius: '12px', border: '1px solid #bfdbfe' }}>
-              <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#1e40af' }}>{results.good}</div>
-              <div style={{ fontSize: '0.75rem', color: '#1d4ed8' }}>Good</div>
+            <div style={{ background: 'var(--primary-container)', padding: '16px', borderRadius: '12px', border: '1px solid var(--outline-variant)' }}>
+              <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--primary)' }}>{results.good}</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--primary)' }}>Good</div>
             </div>
-            <div style={{ background: '#fef2f2', padding: '16px', borderRadius: '12px', border: '1px solid #fca5a5' }}>
-              <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#991b1b' }}>{results.hard}</div>
-              <div style={{ fontSize: '0.75rem', color: '#b91c1c' }}>Hard</div>
+            <div style={{ background: 'var(--error-container)', padding: '16px', borderRadius: '12px', border: '1px solid var(--outline-variant)' }}>
+              <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--error, #ba1a1a)' }}>{results.hard}</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--error, #ba1a1a)' }}>Hard</div>
             </div>
           </div>
 

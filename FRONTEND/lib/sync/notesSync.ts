@@ -280,9 +280,7 @@ function deserializeTags(tags: string | null | undefined): string[] {
     .filter(Boolean);
 }
 
-/** Server row → local Note. Server notes carry no pinLock, and this phase
- *  intentionally leaves categoryId/folderId null (server categories/folders
- *  are not modeled client-side yet). */
+/** Server row → local Note. Server notes carry no pinLock. */
 function toLocalNote(server: ServerNoteRow): Note {
   return {
     id: server.id,
@@ -292,8 +290,8 @@ function toLocalNote(server: ServerNoteRow): Note {
     isPinned: !!server.isPinned,
     isFavorite: !!server.isFavorite,
     pinLock: null,
-    categoryId: null,
-    folderId: null,
+    categoryId: server.categoryId ?? null,
+    folderId: server.folderId ?? null,
     lastRevisedAt: server.lastRevisedAt ?? null,
     nextRevisionAt: server.nextRevisionAt ?? null,
     revisionStreak: typeof server.revisionStreak === 'number' ? server.revisionStreak : 0,
@@ -309,13 +307,15 @@ export interface RemoteNotePayload {
   tags: string[];
   isPinned: boolean;
   isFavorite: boolean;
-  categoryId: null;
-  folderId: null;
+  categoryId: string | null;
+  folderId: string | null;
+  lastRevisedAt?: string | null;
+  nextRevisionAt?: string | null;
+  revisionStreak?: number;
   createdAt: string;
 }
 
-/** Local Note → safe server payload. pinLock, userId and local-only
- *  categoryId/folderId are intentionally omitted. */
+/** Local Note → safe server payload. */
 export function toRemotePayload(note: Note): RemoteNotePayload {
   return {
     id: note.id,
@@ -324,14 +324,17 @@ export function toRemotePayload(note: Note): RemoteNotePayload {
     tags: note.tags,
     isPinned: note.isPinned,
     isFavorite: note.isFavorite,
-    categoryId: null,
-    folderId: null,
+    categoryId: note.categoryId || null,
+    folderId: note.folderId || null,
+    lastRevisedAt: note.lastRevisedAt || null,
+    nextRevisionAt: note.nextRevisionAt || null,
+    revisionStreak: typeof note.revisionStreak === 'number' ? note.revisionStreak : 0,
     createdAt: note.createdAt,
   };
 }
 
 /** Newest updatedAt wins; on equal timestamps the server version wins. Local
- *  PIN/category/folder values always remain local-owned. */
+ *  PIN values always remain local-owned. */
 function pickWinner(local: Note, server: ServerNoteRow): Note {
   const localTime = new Date(local.updatedAt).getTime();
   const serverTime = new Date(server.updatedAt).getTime();
@@ -340,8 +343,11 @@ function pickWinner(local: Note, server: ServerNoteRow): Note {
   return {
     ...toLocalNote(server),
     pinLock: local.pinLock,
-    categoryId: local.categoryId,
-    folderId: local.folderId,
+    categoryId: server.categoryId ?? local.categoryId,
+    folderId: server.folderId ?? local.folderId,
+    lastRevisedAt: server.lastRevisedAt ?? local.lastRevisedAt,
+    nextRevisionAt: server.nextRevisionAt ?? local.nextRevisionAt,
+    revisionStreak: typeof server.revisionStreak === 'number' ? server.revisionStreak : local.revisionStreak,
   };
 }
 
@@ -371,6 +377,10 @@ function syncedPayloadDiffers(local: Note, server: ServerNoteRow): boolean {
     local.content !== remote.content ||
     local.isPinned !== remote.isPinned ||
     local.isFavorite !== remote.isFavorite ||
+    local.folderId !== remote.folderId ||
+    local.categoryId !== remote.categoryId ||
+    local.revisionStreak !== remote.revisionStreak ||
+    local.lastRevisedAt !== remote.lastRevisedAt ||
     JSON.stringify(local.tags) !== JSON.stringify(remote.tags)
   );
 }
@@ -878,4 +888,77 @@ export function deleteFolderWithNotes(folderId: string, getToken: TokenFn): Note
   }
   state.deleteFolder(folderId);
   return affected;
+}
+
+export async function deleteRemoteFolder(
+  folderId: string,
+  getToken: TokenFn
+): Promise<void> {
+  if (typeof window === 'undefined' || !isOnline()) return;
+  try {
+    const token = await getToken();
+    if (!token) return;
+    await apiFetch(`${API.folders}/${encodeURIComponent(folderId)}`, {
+      method: 'DELETE',
+      token,
+    });
+  } catch (err) {
+    console.warn('[sync] Failed to delete remote folder:', err);
+  }
+}
+
+export async function upsertRemoteFolder(
+  folder: { id?: string; name: string },
+  getToken: TokenFn
+): Promise<void> {
+  if (typeof window === 'undefined' || !isOnline()) return;
+  try {
+    const token = await getToken();
+    if (!token) return;
+    await apiFetch(API.folders, {
+      method: 'POST',
+      body: JSON.stringify(folder),
+      token,
+    });
+  } catch (err) {
+    console.warn('[sync] Failed to sync folder:', err);
+  }
+}
+
+export async function syncFoldersForUser(
+  clerkUserId: string,
+  getToken: TokenFn
+): Promise<void> {
+  if (!clerkUserId || typeof window === 'undefined' || !isOnline()) return;
+  try {
+    const token = await getToken();
+    if (!token) return;
+
+    const foldersRes = await apiFetch<{
+      success?: boolean;
+      folders?: Array<{ id: string; name: string; createdAt: string }>;
+    }>(API.folders, { token });
+
+    if (foldersRes && foldersRes.success && Array.isArray(foldersRes.folders)) {
+      const localFolders = useStore.getState().folders;
+      const serverFolderMap = new Map(foldersRes.folders.map((f) => [f.id, f]));
+      const mergedFolders = [...localFolders];
+
+      for (const sf of foldersRes.folders) {
+        if (!mergedFolders.some((lf) => lf.id === sf.id)) {
+          mergedFolders.push(sf);
+        }
+      }
+
+      for (const lf of localFolders) {
+        if (!serverFolderMap.has(lf.id)) {
+          void upsertRemoteFolder(lf, getToken);
+        }
+      }
+
+      useStore.setState({ folders: mergedFolders });
+    }
+  } catch (err) {
+    console.warn('[sync] Failed to sync folders:', err);
+  }
 }

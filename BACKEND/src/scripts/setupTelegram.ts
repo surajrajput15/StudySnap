@@ -2,12 +2,17 @@ import 'dotenv/config';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8904396966:AAEB4vvPVWl64x2UBrLG5WIEJgMjNwmJYBQ';
+const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 
 async function main() {
   console.log('\n╔════════════════════════════════════════════════════════╗');
   console.log('║       StudySnap — Telegram Monitoring Setup            ║');
   console.log('╚════════════════════════════════════════════════════════╝\n');
+
+  if (!BOT_TOKEN) {
+    console.error('❌ TELEGRAM_BOT_TOKEN is not configured in .env. Please set it first.');
+    process.exit(1);
+  }
 
   console.log(`[setup] 🔍 Verifying Bot Token: ${BOT_TOKEN.slice(0, 10)}...`);
 

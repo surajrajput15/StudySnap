@@ -53,13 +53,17 @@ router.post('/clerk', webhookLimiter, raw({ type: 'application/json' }), async (
     console.log('[Webhook] Clerk event:', eventType);
 
     if (eventType === 'user.created') {
-      const userData = (event as { data?: any })?.data;
+      const userData = (event as { data?: Record<string, unknown> })?.data;
       const parsedUser = clerkUserCreatedDataSchema.safeParse(userData);
       if (parsedUser.success && parsedUser.data.id) {
         const { id, first_name, last_name } = parsedUser.data;
         const name = ([first_name, last_name].filter(Boolean).join(' ').trim().slice(0, 200) || 'Student');
-        const email = userData?.email_addresses?.[0]?.email_address;
-        const superAdminEmails = (env.SUPER_ADMIN_EMAILS || 'surajdona2005@gmail.com').split(',').map((e) => e.trim().toLowerCase());
+        const emailAddresses = (userData as { email_addresses?: Array<{ email_address?: string }> })?.email_addresses;
+        const email = emailAddresses?.[0]?.email_address;
+        const superAdminEmails = (env.SUPER_ADMIN_EMAILS || '')
+          .split(',')
+          .map((e) => e.trim().toLowerCase())
+          .filter(Boolean);
         const isSuperAdmin = (email && superAdminEmails.includes(email.toLowerCase())) || id === env.ADMIN_USER_IDS;
         const role = isSuperAdmin ? 'SUPER_ADMIN' : 'USER';
 
@@ -81,8 +85,8 @@ router.post('/clerk', webhookLimiter, raw({ type: 'application/json' }), async (
         }
       }
     } else if (eventType === 'session.created') {
-      const sessionData = (event as { data?: any })?.data;
-      const userId = sessionData?.user_id;
+      const sessionData = (event as { data?: Record<string, unknown> })?.data;
+      const userId = typeof sessionData?.user_id === 'string' ? sessionData.user_id : undefined;
       if (userId) {
         void (async () => {
           let email: string | undefined;

@@ -10,31 +10,46 @@ export default function AdminSystemPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastCheck, setLastCheck] = useState<string>('');
+  const [reloadKey, setReloadKey] = useState(0);
 
-  const runProbe = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const token = await getToken();
-      if (!token) throw new Error('Not authenticated');
-
-      const res = await fetchAdminHealth(token);
-      if (res && res.health) {
-        setData(res);
-        setLastCheck(new Date().toLocaleTimeString());
-      } else {
-        throw new Error((res as any)?.error || 'Failed to ping infrastructure');
-      }
-    } catch (err: any) {
-      setError(err?.message || 'Error executing health probes');
-    } finally {
-      setLoading(false);
-    }
+  const handleRunProbe = () => {
+    setLoading(true);
+    setError(null);
+    setReloadKey((k) => k + 1);
   };
 
   useEffect(() => {
-    runProbe();
-  }, []);
+    let ignore = false;
+    async function run() {
+      try {
+        const token = await getToken();
+        if (!token) throw new Error('Not authenticated');
+
+        const res = await fetchAdminHealth(token);
+        if (ignore) return;
+        if (res && res.health) {
+          setData(res);
+          setLastCheck(new Date().toLocaleTimeString());
+        } else {
+          const apiErr = (res as { error?: string } | null)?.error;
+          throw new Error(apiErr || 'Failed to ping infrastructure');
+        }
+      } catch (err: unknown) {
+        if (!ignore) {
+          const msg = err instanceof Error ? err.message : 'Error executing health probes';
+          setError(msg);
+        }
+      } finally {
+        if (!ignore) {
+          setLoading(false);
+        }
+      }
+    }
+    void run();
+    return () => {
+      ignore = true;
+    };
+  }, [getToken, reloadKey]);
 
   const health = data?.health;
 
@@ -49,7 +64,7 @@ export default function AdminSystemPage() {
         </div>
 
         <button
-          onClick={runProbe}
+          onClick={handleRunProbe}
           disabled={loading}
           className="admin-btn admin-btn-primary"
           style={{ fontSize: '0.8125rem' }}
@@ -88,7 +103,7 @@ export default function AdminSystemPage() {
         <div className="admin-alert-banner admin-alert-critical" style={{ marginBottom: '20px' }}>
           <span>⚠️</span>
           <div>{error}</div>
-          <button onClick={runProbe} className="admin-btn admin-btn-outline" style={{ marginLeft: 'auto', padding: '4px 8px', fontSize: '0.75rem' }}>
+          <button onClick={handleRunProbe} className="admin-btn admin-btn-outline" style={{ marginLeft: 'auto', padding: '4px 8px', fontSize: '0.75rem' }}>
             Retry Probe
           </button>
         </div>
@@ -120,12 +135,12 @@ export default function AdminSystemPage() {
               <div style={{ fontSize: '1.1rem', fontWeight: 700 }}>Groq LPU Engine</div>
               <div style={{ fontSize: '0.75rem', color: 'var(--secondary)' }}>High-speed AI inference</div>
             </div>
-            {renderStatusBadge(health?.groq?.status || (health as any)?.aiProvider?.status)}
+            {renderStatusBadge(health?.groq?.status || health?.aiProvider?.status)}
           </div>
 
           <div style={{ fontSize: '0.8125rem', display: 'flex', flexDirection: 'column', gap: '6px', color: 'var(--on-surface-variant)' }}>
-            <div>Latency: <strong>{(health?.groq?.latencyMs ?? (health as any)?.aiProvider?.latencyMs) != null ? `${health?.groq?.latencyMs ?? (health as any)?.aiProvider?.latencyMs} ms` : '—'}</strong></div>
-            <div>Status Detail: <strong>{health?.groq?.message || (health as any)?.aiProvider?.message || 'Groq inference active'}</strong></div>
+            <div>Latency: <strong>{(health?.groq?.latencyMs ?? health?.aiProvider?.latencyMs) != null ? `${health?.groq?.latencyMs ?? health?.aiProvider?.latencyMs} ms` : '—'}</strong></div>
+            <div>Status Detail: <strong>{health?.groq?.message || health?.aiProvider?.message || 'Groq inference active'}</strong></div>
             <div>Last Checked: <strong>{lastCheck || 'Just now'}</strong></div>
           </div>
         </div>
@@ -137,12 +152,12 @@ export default function AdminSystemPage() {
               <div style={{ fontSize: '1.1rem', fontWeight: 700 }}>Cloudinary Storage</div>
               <div style={{ fontSize: '0.75rem', color: 'var(--secondary)' }}>Voice memos & media assets</div>
             </div>
-            {renderStatusBadge(health?.cloudinary?.status || (health as any)?.storage?.status)}
+            {renderStatusBadge(health?.cloudinary?.status || health?.storage?.status)}
           </div>
 
           <div style={{ fontSize: '0.8125rem', display: 'flex', flexDirection: 'column', gap: '6px', color: 'var(--on-surface-variant)' }}>
-            <div>Latency: <strong>{(health?.cloudinary?.latencyMs ?? (health as any)?.storage?.latencyMs) != null ? `${health?.cloudinary?.latencyMs ?? (health as any)?.storage?.latencyMs} ms` : '—'}</strong></div>
-            <div>Status Detail: <strong>{health?.cloudinary?.message || (health as any)?.storage?.message || 'Media storage connected'}</strong></div>
+            <div>Latency: <strong>{(health?.cloudinary?.latencyMs ?? health?.storage?.latencyMs) != null ? `${health?.cloudinary?.latencyMs ?? health?.storage?.latencyMs} ms` : '—'}</strong></div>
+            <div>Status Detail: <strong>{health?.cloudinary?.message || health?.storage?.message || 'Media storage connected'}</strong></div>
             <div>Last Checked: <strong>{lastCheck || 'Just now'}</strong></div>
           </div>
         </div>
@@ -154,12 +169,12 @@ export default function AdminSystemPage() {
               <div style={{ fontSize: '1.1rem', fontWeight: 700 }}>Upstash Redis</div>
               <div style={{ fontSize: '0.75rem', color: 'var(--secondary)' }}>Distributed rate limiting & cache</div>
             </div>
-            {renderStatusBadge(health?.redis?.status || (health as any)?.cache?.status)}
+            {renderStatusBadge(health?.redis?.status || health?.cache?.status)}
           </div>
 
           <div style={{ fontSize: '0.8125rem', display: 'flex', flexDirection: 'column', gap: '6px', color: 'var(--on-surface-variant)' }}>
-            <div>Latency: <strong>{(health?.redis?.latencyMs ?? (health as any)?.cache?.latencyMs) != null ? `${health?.redis?.latencyMs ?? (health as any)?.cache?.latencyMs} ms` : '—'}</strong></div>
-            <div>Status Detail: <strong>{health?.redis?.message || (health as any)?.cache?.message || 'Sliding window cache'}</strong></div>
+            <div>Latency: <strong>{(health?.redis?.latencyMs ?? health?.cache?.latencyMs) != null ? `${health?.redis?.latencyMs ?? health?.cache?.latencyMs} ms` : '—'}</strong></div>
+            <div>Status Detail: <strong>{health?.redis?.message || health?.cache?.message || 'Sliding window cache'}</strong></div>
             <div>Last Checked: <strong>{lastCheck || 'Just now'}</strong></div>
           </div>
         </div>

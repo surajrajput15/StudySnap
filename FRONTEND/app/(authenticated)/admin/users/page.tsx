@@ -31,42 +31,58 @@ export default function AdminUsersPage() {
   // Selected user for detailed inspector modal/drawer
   const [inspectUser, setInspectUser] = useState<AdminUserItem | null>(null);
 
+  const [reloadKey, setReloadKey] = useState(0);
+
   const currentUserEmail =
     currentUser?.primaryEmailAddress?.emailAddress || currentUser?.emailAddresses?.[0]?.emailAddress || '';
   const isSuperAdmin = isSuperAdminEmail(currentUserEmail) || (currentUser?.publicMetadata?.role as string) === 'SUPER_ADMIN';
 
-  const loadUsers = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const token = await getToken();
-      if (!token) throw new Error('Not authenticated');
-
-      const res = await fetchAdminUsers(token, {
-        search: search || undefined,
-        role: roleFilter || undefined,
-        status: statusFilter || undefined,
-      });
-
-      if (res && res.users) {
-        setUsers(res.users);
-      } else {
-        throw new Error((res as any)?.error || 'Failed to fetch users');
-      }
-    } catch (err: any) {
-      setError(err?.message || 'Error communicating with Admin API');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    loadUsers();
-  }, [roleFilter, statusFilter]);
+    let ignore = false;
+    async function run() {
+      try {
+        const token = await getToken();
+        if (!token) throw new Error('Not authenticated');
+
+        const res = await fetchAdminUsers(token, {
+          search: search || undefined,
+          role: roleFilter || undefined,
+          status: statusFilter || undefined,
+        });
+
+        if (ignore) return;
+        if (res && res.users) {
+          setUsers(res.users);
+        } else {
+          const apiErr = (res as { error?: string } | null)?.error;
+          throw new Error(apiErr || 'Failed to fetch users');
+        }
+      } catch (err: unknown) {
+        if (!ignore) {
+          const msg = err instanceof Error ? err.message : 'Error communicating with Admin API';
+          setError(msg);
+        }
+      } finally {
+        if (!ignore) {
+          setLoading(false);
+        }
+      }
+    }
+    void run();
+    return () => {
+      ignore = true;
+    };
+  }, [getToken, reloadKey, roleFilter, search, statusFilter]);
+
+  const handleRefreshUsers = () => {
+    setLoading(true);
+    setError(null);
+    setReloadKey((k) => k + 1);
+  };
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    loadUsers();
+    handleRefreshUsers();
   };
 
   const handleToggleSuspend = async (user: AdminUserItem) => {
@@ -102,8 +118,9 @@ export default function AdminUsersPage() {
       } else {
         alert(res.error || `Failed to ${action} user`);
       }
-    } catch (err: any) {
-      alert(err.message || 'Error updating status');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error updating status';
+      alert(msg);
     }
   };
 
@@ -126,8 +143,9 @@ export default function AdminUsersPage() {
       } else {
         alert(res.error || 'Failed to update role');
       }
-    } catch (err: any) {
-      alert(err.message || 'Error saving role');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error saving role';
+      alert(msg);
     } finally {
       setRoleUpdating(false);
     }
@@ -184,7 +202,7 @@ export default function AdminUsersPage() {
           <option value="suspended">Suspended Only</option>
         </select>
 
-        <button onClick={loadUsers} className="admin-btn admin-btn-outline" style={{ marginLeft: 'auto' }}>
+        <button onClick={handleRefreshUsers} className="admin-btn admin-btn-outline" style={{ marginLeft: 'auto' }}>
           🔄 Refresh
         </button>
       </div>

@@ -436,8 +436,8 @@ export default function HomeScreen({ onEditNote, onCreateNote, onNavigate, onOpe
               key={tool.id}
               className="ai-tool-card animate-fade-up"
               onClick={() => {
-                if (onOpenSubTool && ['flashcards', 'quiz', 'mindmap', 'translate', 'pdf'].includes(tool.id)) {
-                  onOpenSubTool(tool.id as any);
+                if (onOpenSubTool && (tool.id === 'flashcards' || tool.id === 'quiz' || tool.id === 'mindmap' || tool.id === 'translate' || tool.id === 'pdf')) {
+                  onOpenSubTool(tool.id);
                 } else {
                   setActiveAiTool(tool.id);
                   onNavigate('ai');

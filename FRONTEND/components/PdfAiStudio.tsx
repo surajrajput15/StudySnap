@@ -4,12 +4,13 @@ import React, { useState } from 'react';
 import { useAuth } from '@clerk/nextjs';
 import { useStore } from '@/lib/store/useStore';
 import { API, apiFetch } from '@/lib/config';
-import { FileUp, FileText, Sparkles, LayoutGrid, HelpCircle, Check, ArrowLeft, Loader2 } from 'lucide-react';
+import { FileUp, FileText, Sparkles, LayoutGrid, HelpCircle, Check, ArrowLeft, Loader2, AlertCircle } from 'lucide-react';
 import { celebrate } from '@/lib/confetti';
+import { extractTextFromPdf } from '@/lib/pdf';
 
 interface PdfAiStudioProps {
   onBack?: () => void;
-  onOpenTool?: (tool: 'flashcards' | 'quiz' | 'mindmap', data?: any) => void;
+  onOpenTool?: (tool: 'flashcards' | 'quiz' | 'mindmap', data?: unknown) => void;
 }
 
 export default function PdfAiStudio({ onBack, onOpenTool }: PdfAiStudioProps) {
@@ -18,24 +19,47 @@ export default function PdfAiStudio({ onBack, onOpenTool }: PdfAiStudioProps) {
   const [docTitle, setDocTitle] = useState('');
   const [docContent, setDocContent] = useState('');
   const [processing, setProcessing] = useState(false);
+  const [extracting, setExtracting] = useState(false);
+  const [extractError, setExtractError] = useState<string | null>(null);
   const [outputSummary, setOutputSummary] = useState<string | null>(null);
   const [savedNote, setSavedNote] = useState(false);
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setDocTitle(file.name.replace(/\.[^/.]+$/, ''));
+    const baseName = file.name.replace(/\.[^/.]+$/, '');
+    setDocTitle(baseName);
+    setExtractError(null);
 
-    // Read text content
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const text = event.target?.result as string;
-      if (text) {
-        setDocContent(text.slice(0, 50000));
+    const isPdf = file.name.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf';
+
+    if (isPdf) {
+      try {
+        setExtracting(true);
+        const extracted = await extractTextFromPdf(file);
+        if (!extracted.trim()) {
+          setExtractError('No readable text found in this PDF. It may contain scanned images without OCR.');
+        } else {
+          setDocContent(extracted.slice(0, 50000));
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Failed to extract text from PDF';
+        setExtractError(msg);
+      } finally {
+        setExtracting(false);
+        e.target.value = '';
       }
-    };
-    reader.readAsText(file);
+    } else {
+      try {
+        const text = await file.text();
+        setDocContent(text.slice(0, 50000));
+      } catch {
+        setExtractError('Failed to read text file.');
+      } finally {
+        e.target.value = '';
+      }
+    }
   };
 
   const handleSummarize = async () => {
@@ -144,21 +168,48 @@ export default function PdfAiStudio({ onBack, onOpenTool }: PdfAiStudioProps) {
           Supports .txt, .md, .pdf lecture notes and study guides
         </p>
 
-        <label
-          style={{
-            padding: '8px 16px',
-            borderRadius: '8px',
-            background: 'var(--primary)',
-            color: '#ffffff',
-            fontWeight: 600,
-            fontSize: '0.875rem',
-            cursor: 'pointer',
-            display: 'inline-block',
-          }}
-        >
-          Select File
-          <input type="file" accept=".txt,.md,.pdf" onChange={handleFileUpload} style={{ display: 'none' }} />
-        </label>
+        {extracting ? (
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', color: 'var(--primary)', fontWeight: 600, fontSize: '0.875rem' }}>
+            <Loader2 size={18} className="animate-spin" />
+            <span>Extracting PDF content with pdf.js...</span>
+          </div>
+        ) : (
+          <label
+            style={{
+              padding: '8px 16px',
+              borderRadius: '8px',
+              background: 'var(--primary)',
+              color: '#ffffff',
+              fontWeight: 600,
+              fontSize: '0.875rem',
+              cursor: 'pointer',
+              display: 'inline-block',
+            }}
+          >
+            Select File
+            <input type="file" accept=".txt,.md,.pdf" onChange={handleFileUpload} style={{ display: 'none' }} />
+          </label>
+        )}
+
+        {extractError && (
+          <div
+            style={{
+              marginTop: '16px',
+              padding: '10px 14px',
+              borderRadius: '8px',
+              background: 'var(--error-container)',
+              color: 'var(--on-error-container, #ba1a1a)',
+              fontSize: '0.8125rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+            }}
+          >
+            <AlertCircle size={16} />
+            <span>{extractError}</span>
+          </div>
+        )}
       </div>
 
       {/* Or Paste Content */}
